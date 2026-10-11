@@ -9,14 +9,6 @@
 
 include(GoogleTest)
 
-if(HYBRIDRT_BUILD_TOOLS)
-    add_test(NAME HrtCompressTest.ExtractsOnlySafeNames
-        COMMAND ${CMAKE_COMMAND}
-            -DHRT_COMPRESS=$<TARGET_FILE:hrt_compress>
-            -DTEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/hrt_compress_test
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/tools/hrt_compress_test.cmake)
-endif()
-
 function(hybridrt_add_unit_test name)
     cmake_parse_arguments(ARG "" "" "SOURCES;DEPENDS" ${ARGN})
 
@@ -27,6 +19,31 @@ function(hybridrt_add_unit_test name)
     hybridrt_apply_warnings(${test_name})
     gtest_discover_tests(${test_name})
 endfunction()
+
+# hybridrt_add_program_test(name PROGRAM <target> DEFINE <macro> SOURCES ... [DEPENDS ...])
+#
+# A black-box test of a command-line program: <macro> holds the path of the
+# built <target>, which is built before the test.
+function(hybridrt_add_program_test name)
+    cmake_parse_arguments(ARG "" "PROGRAM;DEFINE" "SOURCES;DEPENDS" ${ARGN})
+
+    hybridrt_add_unit_test(${name} SOURCES ${ARG_SOURCES} DEPENDS kitzoo::os ${ARG_DEPENDS})
+    target_compile_definitions(hybridrt_test_${name} PRIVATE ${ARG_DEFINE}="$<TARGET_FILE:${ARG_PROGRAM}>")
+    add_dependencies(hybridrt_test_${name} ${ARG_PROGRAM})
+endfunction()
+
+if(TARGET hrt_compress)
+    hybridrt_add_program_test(hrt_compress PROGRAM hrt_compress DEFINE HRT_COMPRESS
+        SOURCES tools/hrt_compress_test.cpp DEPENDS hrt::hrtc)
+endif()
+if(TARGET hrt_model_bench AND HRT_USE_ORT)
+    hybridrt_add_program_test(hrt_model_bench PROGRAM hrt_model_bench DEFINE HRT_MODEL_BENCH
+        SOURCES tools/hrt_model_bench_test.cpp DEPENDS hrt::hrtc)
+endif()
+if(TARGET hybridrt_example_image_model AND HRT_USE_ORT)
+    hybridrt_add_program_test(example_image_model PROGRAM hybridrt_example_image_model
+        DEFINE HRT_EXAMPLE_IMAGE_MODEL SOURCES examples/image_model_test.cpp DEPENDS hrt::hrtc opencv_imgcodecs)
+endif()
 
 hybridrt_add_unit_test(hrtc SOURCES hrtc/hrtc_test.cpp DEPENDS hrt::hrtc kitzoo::os)
 hybridrt_add_unit_test(memory SOURCES core/memory_test.cpp DEPENDS hrt::hybridrt)

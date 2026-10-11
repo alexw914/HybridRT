@@ -108,7 +108,9 @@
 - 示例 `examples/<name>.cpp` 对应 `hybridrt_example_<name>`，展示典型用法；资源通过命令行参数
   传入，用 OpenCV imgcodecs 读写图片。
 - 测试放 `tests/<module>/<源文件>_test.cpp`（根目录只留构建入口），同一源文件的场景合并到一个
-  测试文件；用例组以源文件大驼峰名加 `Test` 命名，目标为 `hybridrt_test_<源文件>`。前后处理用构造的小数据验证；依赖真实模型或 SDK 的测试在缺失时
+  测试文件；用例组以源文件大驼峰名加 `Test` 命名，目标为 `hybridrt_test_<源文件>`（重名时加目录前缀，如
+  `hybridrt_test_example_image_model`）。命令行程序和示例用黑盒测试：运行构建出的程序，检查退出码、
+  输出和生成的文件（`tests/tools/run_tool.hpp`）。前后处理用构造的小数据验证；依赖真实模型或 SDK 的测试在缺失时
   `GTEST_SKIP()`。
 - 新增、合并或删除示例和测试时同步更新 CMake 与文档。
 
