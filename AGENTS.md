@@ -103,8 +103,8 @@
 
 ## README、示例与测试
 
-- README 用英文、保持简略，只保留项目介绍、`Modules`、`Backends`、`Build and test`、
-  `Use in another CMake project` 和 `Reference`；表格只列现有内容，变化时同步更新。
+- README 用英文、保持简略，依次只保留项目介绍、`Build and test`、`Use in another CMake project`、
+  `Modules`、`Backends` 和 `Reference`；表格只列现有内容，变化时同步更新。
 - 示例 `examples/<name>.cpp` 对应 `hybridrt_example_<name>`，展示典型用法；资源通过命令行参数
   传入，用 OpenCV imgcodecs 读写图片。
 - 测试放 `tests/<module>/<源文件>_test.cpp`（根目录只留构建入口），同一源文件的场景合并到一个

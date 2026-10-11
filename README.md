@@ -6,45 +6,6 @@ models and their configs from a single `.hrtc` package. Operators are provided
 by a separate library; foundation utilities come from
 [kitzoo](https://github.com/alexw914/kitzoo).
 
-## Modules
-
-| Target | Functionality |
-| --- | --- |
-| `hrt::hrtc` | The `.hrtc` model package: algorithms, configs, and per-backend model files. |
-| `hrt::hybridrt` | Model execution with memory, contexts, engines, image preprocessing, task postprocessing, and OpenCV result drawing in `core/view`. |
-
-`tools/hrt-compress` packs a JSON manifest (every field: `assets/template/hrtc_template.json`) into a
-`.hrtc` file, prints or extracts existing packages, and checks their configs:
-
-```sh
-hrt-compress -j manifest.json -o model.hrtc
-hrt-compress -i model.hrtc -x extracted/
-hrt-compress -c -j manifest.json
-```
-
-`tools/hrt-model-bench` times engine inference alone, on generated inputs, for every algo and
-backend of a package or manifest, using each engine's config:
-
-```sh
-hrt-model-bench -m model.hrtc|manifest.json [-a algo] [-e ort] [-n 100] [-w 10]
-```
-
-## Backends
-
-A backend is enabled by pointing CMake at its SDK.
-
-| Backend | Engine type | Image operators | CMake |
-| --- | --- | --- | --- |
-| ONNX Runtime | `ort` | CPU | `-DORT_ROOT=<sdk>` |
-| ncnn | `ncnn` | CPU | `-Dncnn_ROOT=<sdk>` |
-| MNN | `mnn` | CPU | `-DMNN_ROOT=<sdk>` |
-| TensorRT | `trt` | CUDA (NPP) | `-DTensorRT_ROOT=<sdk>` |
-| RKNN | `rknn` | RGA | `-DRKNN_ROOT=<sdk> -DRGA_ROOT=<sdk>` |
-| CANN | `cann` | DVPP | `-DCANN_ROOT=<sdk>` |
-
-`-DHYBRIDRT_WITH_CUDA=ON` enables CUDA memory and image operators without
-TensorRT.
-
 ## Build and test
 
 Requirements: CMake 3.25+, Ninja, Git, a C++20 compiler, and OpenCV (core,
@@ -94,6 +55,42 @@ FetchContent_MakeAvailable(hybridrt)
 
 target_link_libraries(app PRIVATE hrt::hybridrt)
 ```
+
+## Modules
+
+| Target | Functionality |
+| --- | --- |
+| `hrt::hrtc` | The `.hrtc` model package: algorithms, configs, and per-backend model files. |
+| `hrt::hybridrt` | Model execution with memory, contexts, engines, image preprocessing, task postprocessing, and OpenCV result drawing in `core/view`. |
+
+`tools/hrt-compress` packs a JSON manifest (every field: `assets/template/hrtc_template.json`) into a
+`.hrtc` file, prints or extracts existing packages, and checks their configs:
+
+```sh
+hrt-compress -j manifest.json -o model.hrtc
+hrt-compress -i model.hrtc -x extracted/
+hrt-compress -c -j manifest.json
+```
+
+`tools/hrt-model-bench` times engine inference alone, on generated inputs, for every algo and
+backend of a package or manifest, using each engine's config:
+
+```sh
+hrt-model-bench -m model.hrtc|manifest.json [-a algo] [-e ort] [-n 100] [-w 10]
+```
+
+## Backends
+
+A backend is enabled by pointing CMake at its SDK.
+
+| Backend | Engine type | Image operators | CMake |
+| --- | --- | --- | --- |
+| ONNX Runtime | `ort` | CPU | `-DORT_ROOT=<sdk>` |
+| ncnn | `ncnn` | CPU | `-Dncnn_ROOT=<sdk>` |
+| MNN | `mnn` | CPU | `-DMNN_ROOT=<sdk>` |
+| TensorRT | `trt` | CUDA (NPP) | `-DTensorRT_ROOT=<sdk>` |
+| RKNN | `rknn` | RGA | `-DRKNN_ROOT=<sdk> -DRGA_ROOT=<sdk>` |
+| CANN | `cann` | DVPP | `-DCANN_ROOT=<sdk>` |
 
 ## Reference
 
