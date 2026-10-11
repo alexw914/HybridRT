@@ -1,8 +1,34 @@
 name: Build
 
+# Only changes to code, build files, the hrtc schema or the manifest the
+# tests read start a build; documentation and other files do not.
 on:
   push:
+    paths:
+      - "include/**"
+      - "source/**"
+      - "tools/**"
+      - "examples/**"
+      - "tests/**"
+      - "benchmarks/**"
+      - "cmake/**"
+      - "**/CMakeLists.txt"
+      - "fbs/**"
+      - "assets/template/hrtc_template.json"
+      - ".github/workflows/build.yml"
   pull_request:
+    paths:
+      - "include/**"
+      - "source/**"
+      - "tools/**"
+      - "examples/**"
+      - "tests/**"
+      - "benchmarks/**"
+      - "cmake/**"
+      - "**/CMakeLists.txt"
+      - "fbs/**"
+      - "assets/template/hrtc_template.json"
+      - ".github/workflows/build.yml"
   workflow_dispatch:
 
 permissions:
