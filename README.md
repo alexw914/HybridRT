@@ -2,9 +2,10 @@
 
 HybridRT is a C++20 model inference framework. It runs the preprocess, infer
 and postprocess steps of a model across CPU, GPU and NPU backends, loading
-models and their configs from a single `.hrtc` package. Operators are provided
-by a separate library; foundation utilities come from
-[kitzoo](https://github.com/alexw914/kitzoo).
+models and their configs from a single `.hrtc` package. It has no inference
+engine of its own: inference runs on the integrated frameworks listed under
+Backends. Operators are provided by a separate library; foundation utilities
+come from [kitzoo](https://github.com/alexw914/kitzoo).
 
 ## Build and test
 
