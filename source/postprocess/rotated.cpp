@@ -10,7 +10,13 @@
 #include <kitzoo/log/logger.hpp>
 
 #include <algorithm>
+
+// OpenCV 5 moved rotatedRectangleIntersection and contourArea to geometry.
+#if __has_include(<opencv2/geometry.hpp>)
+#include <opencv2/geometry.hpp>
+#else
 #include <opencv2/imgproc.hpp>
+#endif
 
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/params.hpp"

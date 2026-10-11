@@ -59,7 +59,7 @@ add_library(hybridrt STATIC
 hybridrt_configure_target(hybridrt)
 target_link_libraries(hybridrt
     PUBLIC hrt::hrtc kitzoo::core kitzoo::json kitzoo::memory kitzoo::thread opencv_core
-    PRIVATE kitzoo::log kitzoo::utilities opencv_imgproc)
+    PRIVATE kitzoo::log kitzoo::utilities opencv_imgproc $<TARGET_NAME_IF_EXISTS:opencv_geometry>)
 
 # -- Engines -------------------------------------------------------------------
 if(HRT_USE_ORT)
