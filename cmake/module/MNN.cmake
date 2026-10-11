@@ -1,0 +1,45 @@
+message(STATUS "--------------MNN--------------")
+
+if (NOT DEFINED MNN_ROOT)
+  message(FATAL_ERROR "Please set MNN_ROOT")
+endif ()
+
+if (NOT EXISTS ${MNN_ROOT})
+  message(FATAL_ERROR "Cannot found directory ${MNN_ROOT}")
+endif ()
+if (NOT EXISTS ${MNN_ROOT}/include)
+  message(FATAL_ERROR "Cannot found directory ${MNN_ROOT}/include")
+endif ()
+
+if (NOT EXISTS ${MNN_ROOT}/include/MNN/MNNDefine.h)
+  message(FATAL_ERROR "Cannot found file ${MNN_ROOT}/include/MNN/MNNDefine.h")
+endif ()
+
+file(READ ${MNN_ROOT}/include/MNN/MNNDefine.h MNN_DEFINE_H_CONTENTS)
+string(REGEX MATCH "MNN_VERSION_MAJOR ([0-9]+)" MNN_VERSION_MAJOR ${MNN_DEFINE_H_CONTENTS})
+string(REGEX REPLACE "MNN_VERSION_MAJOR ([0-9]+)" "\\1" MNN_VERSION_MAJOR ${MNN_VERSION_MAJOR})
+string(REGEX MATCH "MNN_VERSION_MINOR ([0-9]+)" MNN_VERSION_MINOR ${MNN_DEFINE_H_CONTENTS})
+string(REGEX REPLACE "MNN_VERSION_MINOR ([0-9]+)" "\\1" MNN_VERSION_MINOR ${MNN_VERSION_MINOR})
+string(REGEX MATCH "MNN_VERSION_PATCH ([0-9]+)" MNN_VERSION_PATCH ${MNN_DEFINE_H_CONTENTS})
+string(REGEX REPLACE "MNN_VERSION_PATCH ([0-9]+)" "\\1" MNN_VERSION_PATCH ${MNN_VERSION_PATCH})
+if (NOT MNN_VERSION_MAJOR)
+  set(MNN_VERSION "unknown")
+else ()
+  set(MNN_VERSION "${MNN_VERSION_MAJOR}.${MNN_VERSION_MINOR}.${MNN_VERSION_PATCH}")
+endif ()
+
+find_library(MNN_LIBRARY NAMES MNN HINTS ${MNN_ROOT} PATH_SUFFIXES lib NO_DEFAULT_PATH)
+if (NOT MNN_LIBRARY)
+  message(FATAL_ERROR "Cannot found MNN library in ${MNN_ROOT}/lib")
+endif ()
+
+add_library(MNN UNKNOWN IMPORTED GLOBAL)
+
+set_target_properties(MNN PROPERTIES
+    IMPORTED_LOCATION ${MNN_LIBRARY}
+    INTERFACE_INCLUDE_DIRECTORIES ${MNN_ROOT}/include
+    )
+
+message(STATUS "Found MNN Version ${MNN_VERSION} in ${MNN_ROOT}")
+
+set(MNN_FOUND ON)

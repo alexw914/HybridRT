@@ -1,0 +1,99 @@
+// -----------------------------------------------------------------------------
+// HybridRT | C++20 Model Inference Framework
+// File: source/postprocess/rotated/yolov5_rotated.cpp
+// Description: Implements YOLOv5 oriented-box decoding.
+// -----------------------------------------------------------------------------
+
+#include <kitzoo/core/macro.hpp>
+
+#include <algorithm>
+
+#include "include/postprocess/common.hpp"
+#include "include/postprocess/params.hpp"
+
+namespace hrt::postprocess {
+
+namespace {
+
+// Channels per anchor: x, y, w, h, theta, objectness, classes.
+class YoloV5Rotated final : public RotatedPostprocessor {
+public:
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    return check_section<YoloV5Param>(config);
+  }
+
+  auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    param_ = config.get<YoloV5Param>();
+    if (!check_yolov5(param_, engine, 1))
+      return false;
+    const auto min_threshold =
+        *std::min_element(param_.confidence_threshold.begin(), param_.confidence_threshold.end());
+    min_objectness_logit_ = logit(min_threshold);
+    layout_ = engine.proto().output_layout;
+    return true;
+  }
+
+protected:
+  auto decode(RotatedResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
+      -> bool override {
+    if (outputs.size() != param_.head_num)
+      return false;
+    for (std::size_t head = 0; head < outputs.size(); ++head) {
+      const auto ok =
+          visit_head(*outputs[head], layout_, [&](const auto& grid) -> void { decode_head(result, grid, head); });
+      if (!ok)
+        return false;
+    }
+    return finish_rotated(result, param_.iou_threshold, transform);
+  }
+
+private:
+  template <typename Grid>
+  auto decode_head(RotatedResultMap& result, const Grid& grid, std::size_t head) const -> void {
+    const auto stride = param_.strides_per_head[head];
+    const auto& anchors = param_.anchors[head];
+    const auto min_objectness = grid.raw_bound(min_objectness_logit_);
+    const auto channels = param_.class_num + 6;
+    for (std::int64_t y = 0; y < grid.rows(); ++y) {
+      for (std::int64_t x = 0; x < grid.cols(); ++x) {
+        for (std::size_t anchor = 0; anchor < anchors.size() / 2; ++anchor) {
+          const auto base = channels * anchor;
+          if (grid.raw(y, x, base + 5) < min_objectness)
+            continue;
+          const auto objectness = sigmoid(grid.at(y, x, base + 5));
+          bool decoded = false;
+          core::RotatedRect rect;
+          for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
+            const auto threshold = param_.confidence_threshold[cls];
+            if (objectness < threshold)
+              continue;
+            const auto score = sigmoid(grid.at(y, x, base + 6 + cls)) * objectness;
+            if (score <= threshold)
+              continue;
+            if (!decoded) {
+              rect.center = {(sigmoid(grid.at(y, x, base)) * 2.0F - 0.5F + static_cast<float>(x)) * stride,
+                             (sigmoid(grid.at(y, x, base + 1)) * 2.0F - 0.5F + static_cast<float>(y)) * stride};
+              rect.size = {std::pow(sigmoid(grid.at(y, x, base + 2)) * 2.0F, 2.0F) * anchors[anchor * 2],
+                           std::pow(sigmoid(grid.at(y, x, base + 3)) * 2.0F, 2.0F) * anchors[anchor * 2 + 1]};
+              rect.angle = -(sigmoid(grid.at(y, x, base + 4)) - 0.5F) * 180.0F;
+              decoded = true;
+            }
+            result[cls].push_back({rect, score, static_cast<std::int64_t>(cls)});
+          }
+        }
+      }
+    }
+  }
+
+  YoloV5Param param_;
+  float min_objectness_logit_ = 0.0F;
+  engine::DataLayout layout_ = engine::DataLayout::Nchw;
+};
+
+} // namespace
+
+auto make_yolov5_rotated() -> UniquePtr<RotatedPostprocessor> {
+  return std::make_unique<YoloV5Rotated>();
+}
+
+} // namespace hrt::postprocess

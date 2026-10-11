@@ -1,0 +1,190 @@
+{
+  "name": "reference",
+  "version": "1.0.0",
+  "description": "Every manifest field; see README.md next to this file for allowed values.",
+  "algos": [
+    {
+      "name": "yolov8_detect",
+      "config": {
+        "preprocess": {
+          "device": "auto",
+          "interpolation_mode": "linear",
+          "resize_type": "letter_box",
+          "dst_image_format": "planar_rgb",
+          "normalize_type": "full",
+          "mean": [0, 0, 0],
+          "std": [255, 255, 255],
+          "default_color": [114, 114, 114],
+          "resize_short_size": -1,
+          "pad_scale": 1.0
+        },
+        "engine": {
+          "backends": [
+            {
+              "engine_type": "trt",
+              "config": {"plugin_libraries": []},
+              "data": "models/yolov8_detect.engine"
+            },
+            {
+              "engine_type": "rknn",
+              "config": {"image_input": true, "core_mask": "RKNN_NPU_CORE_AUTO", "custom_op_libraries": []},
+              "data": "models/yolov8_detect.rknn"
+            },
+            {
+              "engine_type": "cann",
+              "data": "models/yolov8_detect.om"
+            },
+            {
+              "engine_type": "mnn",
+              "config": {"forward_type": "cpu", "num_thread": 4, "cache_file": "", "cache_dir": ""},
+              "data": "models/yolov8_detect.mnn"
+            },
+            {
+              "engine_type": "ncnn",
+              "config": {"num_threads": 4},
+              "proto": "models/yolov8_detect.param",
+              "data": "models/yolov8_detect.bin"
+            },
+            {
+              "engine_type": "ort",
+              "config": {
+                "intra_op_num_threads": 0,
+                "inter_op_num_threads": 0,
+                "execution_provider": "cpu",
+                "provider_options": {},
+                "custom_op_libraries": []
+              },
+              "data": "models/yolov8_detect.onnx"
+            }
+          ]
+        },
+        "postprocess": {
+          "type": "YoloV8Detect",
+          "class_num": 80,
+          "strides": [8, 16, 32],
+          "reg_max": 16,
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
+      "name": "yolov5_detect",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "models/yolov5_detect.onnx"}]},
+        "postprocess": {
+          "type": "YoloV5Detect",
+          "class_num": 80,
+          "head_num": 3,
+          "anchors_per_head": [3, 3, 3],
+          "strides_per_head": [8, 16, 32],
+          "anchors": [[10, 13, 16, 30, 33, 23], [30, 61, 62, 45, 59, 119], [116, 90, 156, 198, 373, 326]],
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
+      "name": "general_detect",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "models/general_detect.onnx"}]},
+        "postprocess": {"type": "GeneralDetect", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
+      }
+    },
+    {
+      "name": "yolov8_rotated",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "models/yolov8_rotated.onnx"}]},
+        "postprocess": {
+          "type": "YoloV8Rotated",
+          "class_num": 15,
+          "strides": [8, 16, 32],
+          "reg_max": 16,
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
+      "name": "yolov5_rotated",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "models/yolov5_rotated.onnx"}]},
+        "postprocess": {
+          "type": "YoloV5Rotated",
+          "class_num": 15,
+          "head_num": 3,
+          "anchors_per_head": [3, 3, 3],
+          "strides_per_head": [8, 16, 32],
+          "anchors": [[10, 13, 16, 30, 33, 23], [30, 61, 62, 45, 59, 119], [116, 90, 156, 198, 373, 326]],
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
+      "name": "general_rotated",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "models/general_rotated.onnx"}]},
+        "postprocess": {"type": "GeneralRotated", "class_num": 15, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
+      }
+    },
+    {
+      "name": "general_classify",
+      "config": {
+        "preprocess": {"resize_type": "center_crop", "resize_short_size": 256, "mean": [123.675, 116.28, 103.53], "std": [58.395, 57.12, 57.375]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "models/general_classify.onnx"}]},
+        "postprocess": {"type": "GeneralClassify", "classify_postprocess_type": "none"}
+      }
+    },
+    {
+      "name": "yolo_keypoint",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "models/yolo_keypoint.onnx"}]},
+        "postprocess": {
+          "type": "YoloKeypoint",
+          "class_num": 1,
+          "keypoint_num": 17,
+          "keypoint_threshold": 0.5,
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
+      "name": "general_keypoint",
+      "config": {
+        "preprocess": {"resize_type": "keep_ratio", "std": [255, 255, 255]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "models/general_keypoint.onnx"}]},
+        "postprocess": {"type": "GeneralKeypoint", "general_keypoint_type": "heatmap"}
+      }
+    },
+    {
+      "name": "instance_segment",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "models/instance_segment.onnx"}]},
+        "postprocess": {
+          "type": "InstanceSegment",
+          "class_num": 80,
+          "mask_threshold": 0.5,
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
+      "name": "semantic_segment",
+      "config": {
+        "preprocess": {"std": [255, 255, 255]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "models/semantic_segment.onnx"}]},
+        "postprocess": {"type": "SemanticSegment"}
+      }
+    }
+  ]
+}

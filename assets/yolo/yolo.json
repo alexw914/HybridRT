@@ -1,0 +1,47 @@
+{
+  "name": "yolov8_tasks",
+  "version": "1.0.0",
+  "description": "YOLOv8 nano ONNX models for detection, instance segmentation, pose, OBB and classification; batch 1, static shapes, no embedded NMS; ONNX Runtime CPU provider.",
+  "algos": [
+    {
+      "name": "detect",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n.onnx"}]},
+        "postprocess": {"type": "GeneralDetect", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
+      }
+    },
+    {
+      "name": "segment",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-seg.onnx"}]},
+        "postprocess": {"type": "InstanceSegment", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
+      }
+    },
+    {
+      "name": "pose",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-pose.onnx"}]},
+        "postprocess": {"type": "YoloKeypoint", "class_num": 1, "keypoint_num": 17, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
+      }
+    },
+    {
+      "name": "obb",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-obb.onnx"}]},
+        "postprocess": {"type": "GeneralRotated", "class_num": 15, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
+      }
+    },
+    {
+      "name": "classify",
+      "config": {
+        "preprocess": {"std": [255, 255, 255]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-cls.onnx"}]},
+        "postprocess": {"type": "GeneralClassify"}
+      }
+    }
+  ]
+}

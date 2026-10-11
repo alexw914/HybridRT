@@ -1,0 +1,31 @@
+BasedOnStyle: LLVM
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+LineEnding: LF
+ColumnLimit: 120
+AccessModifierOffset: -2
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+MaxEmptyLinesToKeep: 1
+AlwaysBreakTemplateDeclarations: Yes
+BreakBeforeBraces: Attach
+PointerAlignment: Left
+ReferenceAlignment: Left
+QualifierAlignment: Left
+DerivePointerAlignment: false
+SortIncludes: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^<hrt/'
+    Priority: 1
+  - Regex: '^<kitzoo/'
+    Priority: 2
+  - Regex: '^<'
+    Priority: 3
+  - Regex: '^"'
+    Priority: 4
+ReflowComments: true
+SeparateDefinitionBlocks: Always

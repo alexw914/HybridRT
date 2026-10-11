@@ -1,0 +1,43 @@
+# Build artifacts
+build/
+build-*/
+cmake-build-*/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.xcodeproj
+*.xcworkspace
+
+# Dependencies fetched by CMake or scripts
+_deps/
+/external/
+
+# Install
+install/
+
+# Models and test resources
+/resource/
+/assets/yolo/result/
+*.onnx
+*.mnn
+*.ncnn.param
+*.ncnn.bin
+*.rknn
+*.dlc
+*.om
+*.engine
+*.trt
+*.tflite
+*.hrtc
+
+# Misc
+.DS_Store
+*.swp
+*.swo
+*.pyc
+
+# Local documentation
+/docs/
+/.cache/

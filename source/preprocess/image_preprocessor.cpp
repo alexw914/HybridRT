@@ -1,0 +1,302 @@
+// -----------------------------------------------------------------------------
+// HybridRT | C++20 Model Inference Framework
+// File: source/preprocess/image_preprocessor.cpp
+// Description: Implements resize geometry, preprocessor creation and the
+//              shared preprocessing flow.
+// -----------------------------------------------------------------------------
+
+#include <hrt/preprocess/image_preprocessor.hpp>
+
+#include <kitzoo/log/logger.hpp>
+
+#include <algorithm>
+#include <cmath>
+
+#include "include/preprocess/cpu_image_preprocessor.hpp"
+
+#ifdef HRT_USE_CUDA
+#include "include/preprocess/cuda_image_preprocessor.hpp"
+#endif
+#ifdef HRT_USE_RKNN
+#include "include/preprocess/rga_image_preprocessor.hpp"
+#endif
+#ifdef HRT_USE_CANN
+#include "include/preprocess/dvpp_image_preprocessor.hpp"
+#endif
+
+namespace hrt::preprocess {
+
+namespace {
+
+auto device_of(core::MemoryType type) -> ImagePreprocessorType {
+  switch (type) {
+  case core::MemoryType::Cuda:
+    return ImagePreprocessorType::Cuda;
+  case core::MemoryType::RkVa:
+  case core::MemoryType::RkFd:
+    return ImagePreprocessorType::Rga;
+  case core::MemoryType::Acl:
+  case core::MemoryType::Dvpp:
+    return ImagePreprocessorType::Dvpp;
+  default:
+    return ImagePreprocessorType::Cpu;
+  }
+}
+
+// Formats resize can produce from each other.
+auto same_layout(core::ImageFormat a, core::ImageFormat b) -> bool {
+  auto family = [](core::ImageFormat format) -> int {
+    switch (format) {
+    case core::ImageFormat::InterBgr:
+    case core::ImageFormat::InterRgb:
+      return 1;
+    case core::ImageFormat::PlanarBgr:
+    case core::ImageFormat::PlanarRgb:
+      return 2;
+    default:
+      return 10 + static_cast<int>(format);
+    }
+  };
+  return family(a) == family(b);
+}
+
+auto is_identity(const Array<float, 3>& mean, const Array<float, 3>& stddev) -> bool {
+  return std::all_of(mean.begin(), mean.end(), [](float v) -> bool { return v == 0.0F; }) &&
+         std::all_of(stddev.begin(), stddev.end(), [](float v) -> bool { return v == 1.0F; });
+}
+
+auto scaled(core::Size size, double scale) -> core::Size {
+  return {static_cast<int>(size.width * scale), static_cast<int>(size.height * scale)};
+}
+
+auto pad_to_aspect(const core::Rect& rect, core::Size target, float scale) -> core::Rect {
+  const auto aspect = static_cast<double>(target.width) / target.height;
+  double width = rect.width;
+  double height = rect.height;
+  if (width > aspect * height)
+    height = width / aspect;
+  else
+    width = height * aspect;
+  width *= static_cast<double>(scale);
+  height *= static_cast<double>(scale);
+  const auto cx = rect.x + rect.width / 2.0;
+  const auto cy = rect.y + rect.height / 2.0;
+  return {static_cast<int>(std::lround(cx - width / 2)), static_cast<int>(std::lround(cy - height / 2)),
+          static_cast<int>(std::lround(width)), static_cast<int>(std::lround(height))};
+}
+
+} // namespace
+
+auto calc_resize_position(core::Rect& dst_roi, core::Rect& src_roi, const core::Rect& dst_rect,
+                          const core::Rect& src_rect, core::Size src_size, const ImagePreprocessorParam& param)
+    -> bool {
+  if (dst_rect.empty() || src_rect.empty())
+    return false;
+  const auto ratio = std::min(static_cast<double>(dst_rect.width) / src_rect.width,
+                              static_cast<double>(dst_rect.height) / src_rect.height);
+  switch (param.resize_type) {
+  case ResizeType::Normal:
+    dst_roi = dst_rect;
+    src_roi = src_rect;
+    return true;
+  case ResizeType::KeepRatio: {
+    const auto size = scaled(src_rect.size(), ratio);
+    dst_roi = core::intersect({dst_rect.x, dst_rect.y, size.width, size.height}, dst_rect);
+    src_roi = src_rect;
+    return true;
+  }
+  case ResizeType::LetterBox: {
+    const auto size = scaled(src_rect.size(), ratio);
+    dst_roi = core::intersect({dst_rect.x + (dst_rect.width - size.width) / 2,
+                               dst_rect.y + (dst_rect.height - size.height) / 2, size.width, size.height},
+                              dst_rect);
+    src_roi = src_rect;
+    return true;
+  }
+  case ResizeType::CenterCrop: {
+    if (dst_rect.width != dst_rect.height || param.resize_short_size <= 0) {
+      KZ_LOG_ERROR("center_crop needs a square input and resize_short_size > 0");
+      return false;
+    }
+    dst_roi = dst_rect;
+    const auto side = std::min(src_rect.width, src_rect.height) * dst_rect.width / param.resize_short_size;
+    src_roi = {src_rect.x + std::max(0, (src_rect.width - side) / 2),
+               src_rect.y + std::max(0, (src_rect.height - side) / 2), side, side};
+    return true;
+  }
+  case ResizeType::PadOutside: {
+    // Map the padded source rect onto the full input, then cut both sides
+    // where the padded rect leaves the image.
+    const auto padded = pad_to_aspect(src_rect, dst_rect.size(), param.pad_scale);
+    const auto scale_x = static_cast<double>(dst_rect.width) / padded.width;
+    const auto scale_y = static_cast<double>(dst_rect.height) / padded.height;
+    src_roi = core::intersect(padded, {0, 0, src_size.width, src_size.height});
+    if (src_roi.empty())
+      return false;
+    const auto x1 = dst_rect.x + static_cast<int>((src_roi.x - padded.x) * scale_x);
+    const auto y1 = dst_rect.y + static_cast<int>((src_roi.y - padded.y) * scale_y);
+    const auto x2 = dst_rect.x + static_cast<int>((src_roi.x + src_roi.width - padded.x) * scale_x);
+    const auto y2 = dst_rect.y + static_cast<int>((src_roi.y + src_roi.height - padded.y) * scale_y);
+    dst_roi = core::intersect({x1, y1, x2 - x1, y2 - y1}, dst_rect);
+    return true;
+  }
+  }
+  return false;
+}
+
+ImagePreprocessor::ImagePreprocessor() = default;
+
+ImagePreprocessor::~ImagePreprocessor() = default;
+
+auto ImagePreprocessor::create(ImagePreprocessorType type, core::MemoryType target) -> UniquePtr<ImagePreprocessor> {
+  if (type == ImagePreprocessorType::Auto) {
+    auto preprocessor = create(device_of(target));
+    return preprocessor != nullptr ? std::move(preprocessor) : create(ImagePreprocessorType::Cpu);
+  }
+  switch (type) {
+  case ImagePreprocessorType::Cpu:
+    return std::make_unique<CpuImagePreprocessor>();
+#ifdef HRT_USE_CUDA
+  case ImagePreprocessorType::Cuda:
+    return std::make_unique<CudaImagePreprocessor>();
+#endif
+#ifdef HRT_USE_RKNN
+  case ImagePreprocessorType::Rga:
+    return std::make_unique<RgaImagePreprocessor>();
+#endif
+#ifdef HRT_USE_CANN
+  case ImagePreprocessorType::Dvpp:
+    return std::make_unique<DvppImagePreprocessor>();
+#endif
+  default:
+    return nullptr;
+  }
+}
+
+auto ImagePreprocessor::adjust_roi(core::Rect& /*dst_roi*/, core::Rect& /*src_roi*/) const -> void {}
+
+auto ImagePreprocessor::fused(core::Image& /*dst*/, const ImageTransform& /*transform*/, const core::Image& /*src*/,
+                              const ImagePreprocessorParam& /*param*/, core::Stream* /*stream*/) -> bool {
+  return false;
+}
+
+auto ImagePreprocessor::cpu() -> ImagePreprocessor* {
+  if (type() == ImagePreprocessorType::Cpu)
+    return this;
+  if (cpu_ == nullptr)
+    cpu_ = create(ImagePreprocessorType::Cpu);
+  return cpu_.get();
+}
+
+auto ImagePreprocessor::scratch(UniquePtr<core::Image>& slot, core::MemoryType memory_type, core::ImageFormat format,
+                                core::DataType data_type, core::Size size) -> core::Image* {
+  if (slot == nullptr || slot->memory()->memory_type() != memory_type)
+    slot = std::make_unique<core::Image>(memory_type, format, data_type, size);
+  else if (!slot->reshape(format, size, data_type))
+    return nullptr;
+  return slot->valid() ? slot.get() : nullptr;
+}
+
+auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const core::Rect& src_rect,
+                                const ImagePreprocessorParam& param, core::Stream* stream)
+    -> std::optional<ImageTransform> {
+  ImageTransform transform{.dst_roi = {}, .src_roi = {}, .input_size = dst.size()};
+  const auto rect = src_rect.empty() ? src.rect() : src_rect;
+  if (!calc_resize_position(transform.dst_roi, transform.src_roi, dst.rect(), rect, src.size(), param))
+    return std::nullopt;
+  adjust_roi(transform.dst_roi, transform.src_roi);
+
+  // ponytail: stages the whole source; upload only src_roi when cascaded crops make bandwidth matter.
+  const core::Image* input = &src;
+  if (!accepts(src.memory()->memory_type())) {
+    auto* staged = scratch(staged_src_, memory_type(), src.format(), src.data_type(), src.size());
+    if (staged == nullptr ||
+        !core::Buffer::copy(*staged->buffer(), *src.buffer(), core::CopyPolicy::AutoDstStride, stream))
+      return std::nullopt;
+    input = staged;
+  }
+
+  core::Image* output = &dst;
+  const auto direct = accepts(dst.memory()->memory_type());
+  if (!direct) {
+    output = scratch(staged_dst_, memory_type(), dst.format(), dst.data_type(), dst.size());
+    if (output == nullptr)
+      return std::nullopt;
+  }
+
+  if (!run(*output, *input, transform, param, stream))
+    return std::nullopt;
+  if (!direct && !core::Buffer::copy(*dst.buffer(), *output->buffer(), core::CopyPolicy::DirectCopy, stream))
+    return std::nullopt;
+  return transform;
+}
+
+auto ImagePreprocessor::run(core::Image& dst, const core::Image& src, const ImageTransform& transform,
+                            const ImagePreprocessorParam& param, core::Stream* stream) -> bool {
+  if (supports(ImageOperation::Fused, dst, src))
+    return fused(dst, transform, src, param, stream);
+
+  auto* fallback = cpu();
+  auto pick = [&](ImageOperation op, const core::Image& to, const core::Image& from) -> ImagePreprocessor* {
+    if (supports(op, to, from))
+      return this;
+    if (fallback != nullptr && fallback->supports(op, to, from))
+      return fallback;
+    KZ_LOG_ERROR("image_preprocessor: no operator for step {} ({} <- {})", static_cast<int>(op),
+                 kitzoo::json::Json(to.format()).dump(), kitzoo::json::Json(from.format()).dump());
+    return nullptr;
+  };
+
+  // Formats resize cannot handle (YUV, RGBA) are converted first, at source
+  // size and in the source data type.
+  const core::Image* source = &src;
+  const auto resizable = [&](const core::Image& image) -> bool {
+    return supports(ImageOperation::Resize, image, image) ||
+           (fallback != nullptr && fallback->supports(ImageOperation::Resize, image, image));
+  };
+  if (!resizable(src)) {
+    auto* converted = scratch(converted_, memory_type(), dst.format(), src.data_type(), src.size());
+    if (converted == nullptr)
+      return false;
+    auto* op = pick(ImageOperation::Convert, *converted, src);
+    if (op == nullptr || !op->convert(*converted, src, stream))
+      return false;
+    source = converted;
+  }
+
+  // Resize in the source data type, then convert, unless resize can produce
+  // the input format directly.
+  core::Image* resized = &dst;
+  if (source->data_type() != dst.data_type() || !same_layout(dst.format(), source->format())) {
+    const auto format = same_layout(dst.format(), source->format()) ? dst.format() : source->format();
+    resized = scratch(resized_, memory_type(), format, source->data_type(), dst.size());
+    if (resized == nullptr)
+      return false;
+  }
+  if (transform.dst_roi != dst.rect()) {
+    auto* op = pick(ImageOperation::Fill, *resized, *resized);
+    if (op == nullptr || !op->fill(*resized, resized->rect(), param.default_color, stream))
+      return false;
+  }
+  auto* op = pick(ImageOperation::Resize, *resized, *source);
+  if (op == nullptr ||
+      !op->resize(*resized, transform.dst_roi, *source, transform.src_roi, param.interpolation_mode, stream))
+    return false;
+  if (resized != &dst) {
+    op = pick(ImageOperation::Convert, dst, *resized);
+    if (op == nullptr || !op->convert(dst, *resized, stream))
+      return false;
+  }
+
+  if (param.normalize_type == NormalizeType::None || is_identity(param.mean, param.std))
+    return true;
+  if (dst.data_type() != core::DataType::Float32) {
+    KZ_LOG_ERROR("image_preprocessor: normalization needs a float32 input");
+    return false;
+  }
+  const auto roi = param.normalize_type == NormalizeType::Roi ? transform.dst_roi : dst.rect();
+  op = pick(ImageOperation::Normalize, dst, dst);
+  return op != nullptr && op->normalize(dst, roi, param.mean, param.std, stream);
+}
+
+} // namespace hrt::preprocess

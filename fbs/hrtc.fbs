@@ -1,0 +1,34 @@
+// hrtc package metadata. A .hrtc file is this size-prefixed flatbuffer
+// followed by each engine's proto and data blobs, concatenated in declaration
+// order; the uint64 fields are their byte sizes, 0 when absent.
+// New fields go at the end of their table.
+
+namespace hrt.hrtc.fb;
+
+file_identifier "HRT2";
+file_extension "hrtc";
+
+table Engine {
+  type: string (required);
+  // JSON settings read by the engine of `type`.
+  config: string;
+  proto: uint64;
+  data: uint64;
+}
+
+table Algo {
+  name: string (required);
+  // JSON with "preprocess", "engine" and "postprocess" sections.
+  config: string;
+  engines: [Engine];
+}
+
+table Package {
+  name: string (required);
+  version: string (required);
+  timestamp: uint64;
+  description: string;
+  algos: [Algo];
+}
+
+root_type Package;

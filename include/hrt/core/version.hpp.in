@@ -1,0 +1,19 @@
+// -----------------------------------------------------------------------------
+// HybridRT | C++20 Model Inference Framework
+// File: include/hrt/core/version.hpp.in
+// Description: Declares the generated library version; CMake configures this
+//              template during the build.
+// -----------------------------------------------------------------------------
+
+#ifndef HRT_CORE_VERSION_HPP
+#define HRT_CORE_VERSION_HPP
+
+#include <string_view>
+
+namespace hrt::core {
+
+inline constexpr std::string_view kVersion = "@PROJECT_VERSION@";
+
+} // namespace hrt::core::core
+
+#endif // HRT_CORE_VERSION_HPP
