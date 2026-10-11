@@ -1,0 +1,52 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ORT_VERSION: 1.20.1
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            ort: linux-x64
+          - os: macos-latest
+            ort: osx-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools and OpenCV
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y clang ninja-build libopencv-dev
+            echo "CC=clang" >> "$GITHUB_ENV"
+            echo "CXX=clang++" >> "$GITHUB_ENV"
+          else
+            brew install ninja opencv
+          fi
+
+      - name: Download ONNX Runtime
+        run: |
+          name="onnxruntime-${{ matrix.ort }}-${ORT_VERSION}"
+          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/${name}.tgz" | tar xz
+          echo "ORT_ROOT=$PWD/${name}" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DORT_ROOT="$ORT_ROOT"
+
+      - name: Build
+        run: cmake --build build/debug --parallel
+
+      - name: Test
+        run: ctest --test-dir build/debug --output-on-failure --parallel 4
