@@ -89,9 +89,9 @@ A backend is enabled by pointing CMake at its SDK.
 | ONNX Runtime | `ort` | CPU | `-DORT_ROOT=<sdk>` |
 | ncnn | `ncnn` | CPU | `-Dncnn_ROOT=<sdk>` |
 | MNN | `mnn` | CPU | `-DMNN_ROOT=<sdk>` |
-| TensorRT | `trt` | CUDA (NPP) | `-DTensorRT_ROOT=<sdk>` |
-| RKNN | `rknn` | RGA | `-DRKNN_ROOT=<sdk> -DRGA_ROOT=<sdk>` |
-| CANN | `cann` | DVPP | `-DCANN_ROOT=<sdk>` |
+| [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html) | `trt` | CUDA (NPP) | `-DTensorRT_ROOT=<sdk>` |
+| [RKNN Toolkit2](https://github.com/airockchip/rknn-toolkit2) | `rknn` | RGA | `-DRKNN_ROOT=<sdk> -DRGA_ROOT=<sdk>` |
+| [CANN](https://www.hiascend.com/doc_center/source/en/CANNCommunityEdition/910/index/index.html) | `cann` | DVPP | `-DCANN_ROOT=<sdk>` |
 
 ## Reference
 
@@ -101,5 +101,5 @@ A backend is enabled by pointing CMake at its SDK.
 | [FlatBuffers](https://github.com/google/flatbuffers) | hrtc package metadata. |
 | [OpenCV](https://github.com/opencv/opencv) | Host image operators and rotated-box geometry. |
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime), [ncnn](https://github.com/Tencent/ncnn), [MNN](https://github.com/alibaba/MNN) | CPU inference backends. |
-| TensorRT, RKNN, CANN | Vendor inference backends. |
+| [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html), [RKNN Toolkit2](https://github.com/airockchip/rknn-toolkit2), [CANN](https://www.hiascend.com/doc_center/source/en/CANNCommunityEdition/910/index/index.html) | Vendor inference backends. |
 | [GoogleTest](https://github.com/google/googletest), [Google Benchmark](https://github.com/google/benchmark) | Unit tests and benchmarks. |

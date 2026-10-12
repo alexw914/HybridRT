@@ -124,3 +124,28 @@
   `git diff --check`（有暂存时加 `--cached`）。
 - 只有用户明确要求时才提交或推送；推送不强制覆盖远程历史。
 - 修改后同步更新受影响的 CMake、调用方、示例和文档，运行相关构建和测试，报告未验证的平台和后端。
+
+## 远程 TensorRT/CUDA 验证
+
+- GPU 远程主机 SSH 名称为 `gpu4090`，验证工作目录固定为 `/root/WorkSpace/AgentValidation`；验证过程只使用该目录，不创建临时源码副本或在其他目录构建。
+- 每次验证前，从本地仓库根目录将当前工作树同步到远程目录；保留远端 `build/` 和 `deps/` 缓存：
+
+  ```sh
+  rsync -a --delete --exclude='.git/' --exclude='build/' --exclude='deps/' --exclude='external/' --exclude='deps.cmake' --exclude='spdlog-1.17.0/' ./ gpu4090:/root/WorkSpace/AgentValidation/
+  ```
+
+- 远端使用 `/root/.local/bin/cmake`（当前为 4.4.3；系统默认 CMake 可能低于项目要求），先检查版本至少为 3.25，再从固定目录配置；TensorRT SDK 根目录为 `/opt/nvidia/TensorRT-10.16.1.11`：
+
+  ```sh
+  ssh gpu4090 'cd /root/WorkSpace/AgentValidation && /root/.local/bin/cmake -S . -B build -DTensorRT_ROOT=/opt/nvidia/TensorRT-10.16.1.11 -DHYBRIDRT_BUILD_TESTS=ON'
+  ```
+
+- 构建并重复运行 CUDA 预处理并发回归，然后运行完整 CTest；运行 TensorRT 测试时设置 SDK 库路径：
+
+  ```sh
+  ssh gpu4090 'cd /root/WorkSpace/AgentValidation && /root/.local/bin/cmake --build build --target hybridrt_test_image_model -j2'
+  ssh gpu4090 'cd /root/WorkSpace/AgentValidation && LD_LIBRARY_PATH=/opt/nvidia/TensorRT-10.16.1.11/lib:$LD_LIBRARY_PATH ./build/tests/hybridrt_test_image_model --gtest_filter=ImageModelTest.KeepsCudaPreprocessorScratchAliveUntilStreamCompletes --gtest_repeat=20 --gtest_break_on_failure'
+  ssh gpu4090 'cd /root/WorkSpace/AgentValidation && LD_LIBRARY_PATH=/opt/nvidia/TensorRT-10.16.1.11/lib:$LD_LIBRARY_PATH ctest --test-dir build --output-on-failure'
+  ```
+
+- 不降低项目或依赖的 CMake 最低版本来绕过配置失败。若远端 CMake 低于 3.25，先安装或选择符合要求的 CMake，再重新配置和构建；不能把旧 build 中已有的测试二进制运行结果当作当前源码的验证结果。
