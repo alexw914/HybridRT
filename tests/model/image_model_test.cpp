@@ -1,18 +1,25 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: tests/model/image_model_test.cpp
-// Description: Tests the pooled image model pipeline end to end on ONNX
-//              Runtime.
+// Description: Tests the pooled image model pipeline on ONNX Runtime and TensorRT.
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
 
+#ifdef HRT_TEST_TENSORRT
+#include <kitzoo/log/logger.hpp>
+#endif
 #include <kitzoo/os/filesys.hpp>
 
+#ifdef HRT_TEST_TENSORRT
+#include <NvInfer.h>
+#include <cmath>
+#endif
 #include <filesystem>
 #include <future>
 #include <gtest/gtest.h>
 
+#ifdef HRT_TEST_ORT
 #include "../engine/onnx_model.hpp"
 
 namespace {
@@ -215,3 +222,102 @@ TEST_F(ImageModelTest, AbortsOnUnusableConfigurations) {
 }
 
 } // namespace
+#endif
+
+#ifdef HRT_TEST_TENSORRT
+namespace {
+
+class TestLogger final : public nvinfer1::ILogger {
+public:
+  auto log(Severity severity, const char* message) noexcept -> void override {
+    if (severity <= Severity::kERROR)
+      KZ_LOG_ERROR("tensorrt test: {}", message);
+  }
+};
+
+#ifndef HRT_TEST_ORT
+class ImageModelTest : public ::testing::Test {};
+#endif
+
+TEST_F(ImageModelTest, KeepsCudaPreprocessorScratchAliveUntilStreamCompletes) {
+  auto first_context = hrt::core::Context::create(hrt::core::DeviceType::Cuda);
+  if (first_context == nullptr)
+    GTEST_SKIP() << "CUDA device is unavailable";
+  first_context->make_current();
+
+  TestLogger logger;
+  hrt::UniquePtr<nvinfer1::IBuilder> builder(nvinfer1::createInferBuilder(logger));
+  ASSERT_NE(builder, nullptr);
+#if HRT_TENSORRT_VERSION < 100000
+  constexpr auto kNetworkFlags =
+      1U << static_cast<unsigned int>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
+#else
+  constexpr auto kNetworkFlags = 0U;
+#endif
+  hrt::UniquePtr<nvinfer1::INetworkDefinition> network(builder->createNetworkV2(kNetworkFlags));
+  hrt::UniquePtr<nvinfer1::IBuilderConfig> config(builder->createBuilderConfig());
+  ASSERT_NE(network, nullptr);
+  ASSERT_NE(config, nullptr);
+  auto* input = network->addInput("input", nvinfer1::DataType::kFLOAT, nvinfer1::Dims4{1, 3, 1024, 1024});
+  ASSERT_NE(input, nullptr);
+  auto* relu = network->addActivation(*input, nvinfer1::ActivationType::kRELU);
+  ASSERT_NE(relu, nullptr);
+  network->markOutput(*relu->getOutput(0));
+  hrt::UniquePtr<nvinfer1::IHostMemory> serialized(builder->buildSerializedNetwork(*network, *config));
+  ASSERT_NE(serialized, nullptr);
+  const auto* begin = static_cast<const std::uint8_t*>(serialized->data());
+  const auto bytes = std::make_shared<const hrt::hrtc::Bytes>(begin, begin + serialized->size());
+  serialized.reset();
+  config.reset();
+  network.reset();
+  builder.reset();
+  const hrt::hrtc::AlgoParam algo{
+      .name = "relu",
+      .engines = {{.engine_type = "trt", .config = {}, .proto = {}, .data = bytes}},
+      .config = R"({"preprocess":{"std":[255,255,255]},"postprocess":{"type":"GeneralClassify"}})"};
+  using Model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>;
+  for (int device_id : {0, 1}) {
+    hrt::SharedPtr<hrt::core::Context> context = hrt::core::Context::create(hrt::core::DeviceType::Cuda, device_id);
+    if (context == nullptr)
+      continue;
+    for (const auto options : {hrt::model::ImageModelOptions{1, 2, 2}, hrt::model::ImageModelOptions{3, 2, 3}}) {
+      auto model = Model::create(algo, context, options);
+      hrt::Vector<std::future<bool>> runs;
+      for (int worker = 0; worker < 8; ++worker) {
+        runs.push_back(std::async(std::launch::async, [&model, &context, worker]() -> bool {
+          context->make_current();
+          auto stream = context->create_stream();
+          // Distinct frame values expose scratch reuse across streams.
+          hrt::Vector<std::uint8_t> pixels(1024 * 1024 * 3, static_cast<std::uint8_t>(20 + worker * 20));
+          const auto image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, pixels.data(),
+                                                    hrt::core::ImageFormat::InterBgr, {1024, 1024});
+          if (!image)
+            return false;
+          hrt::core::Image device_image(hrt::core::MemoryType::Cuda, hrt::core::ImageFormat::InterBgr,
+                                        hrt::core::DataType::Uint8, {1024, 1024});
+          if (!hrt::core::Buffer::copy(*device_image.buffer(), *image->buffer(), hrt::core::CopyPolicy::DirectCopy,
+                                       stream.get()))
+            return false;
+          stream->synchronize();
+          const auto expected = static_cast<float>(20 + worker * 20) / 255.0F;
+          for (int frame = 0; frame < 20; ++frame) {
+            const auto result = model->process_sync(frame % 2 == 0 ? device_image : *image);
+            if (!result || result->size() != 1 || result->front().size() != 3 * 1024 * 1024)
+              return false;
+            for (float value : result->front()) {
+              if (std::abs(value - expected) > 0.00001F)
+                return false;
+            }
+          }
+          return true;
+        }));
+      }
+      for (auto& run : runs)
+        EXPECT_TRUE(run.get()) << "device=" << device_id << ", preprocess=" << options.preprocess;
+    }
+  }
+  first_context->make_current();
+}
+
+} // namespace
+#endif

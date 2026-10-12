@@ -348,6 +348,8 @@ auto ImageModel<Result>::process_sync(const core::Image& src, const core::Rect& 
   {
     auto preprocessor = preprocessor_pool_.acquire();
     transform = (*preprocessor)->process(*image, src, src_rect, preprocessor_param_, stream);
+    // Scratch buffers may be reused on another stream only after this completes.
+    stream->synchronize();
   }
   if (!transform)
     return std::nullopt;
