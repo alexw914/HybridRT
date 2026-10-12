@@ -30,7 +30,8 @@ using TrtPtr = UniquePtr<T, TrtDeleter>;
 
 // EngineParam.data is a serialized engine for the target GPU and TensorRT
 // version. Config: {"plugin_libraries": [...]}, loaded before deserializing.
-// CUDA buffers bind directly; host buffers are staged through device copies.
+// CUDA buffers bind directly; host buffers are staged through device copies,
+// which run fastest from create_host_memory() (CUDA-pinned).
 class TensorrtEngine final : public Engine {
 public:
   TensorrtEngine() = default;
@@ -45,6 +46,8 @@ public:
   auto set_inputs(const core::Buffers& inputs) -> bool override;
 
   auto set_outputs(const core::Buffers& outputs) -> bool override;
+
+  KZ_NODISCARD auto create_host_memory() const -> SharedPtr<core::Memory> override;
 
   auto inference(core::Stream* stream) -> bool override;
 

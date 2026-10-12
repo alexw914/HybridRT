@@ -86,6 +86,11 @@ public:
 
   virtual auto set_outputs(const core::Buffers& outputs) -> bool;
 
+  // Empty host memory that this backend copies to and from fastest (e.g.
+  // CUDA-pinned), for IO the host writes or reads; null when plain host memory
+  // is as good. Sized by the Buffer built over it.
+  KZ_NODISCARD virtual auto create_host_memory() const -> SharedPtr<core::Memory>;
+
 protected:
   Engine() = default;
 

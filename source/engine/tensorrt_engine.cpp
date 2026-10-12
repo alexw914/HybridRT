@@ -15,6 +15,7 @@
 #include <optional>
 
 #include "include/backend/cuda/cuda_common.hpp"
+#include "include/backend/cuda/cuda_host_memory.hpp"
 #include "include/core/config.hpp"
 
 namespace hrt::engine {
@@ -188,8 +189,9 @@ auto TensorrtEngine::bind(std::size_t index, bool input, const SharedPtr<core::B
     staging.reset();
     address = buffer->memory()->device();
   } else {
-    const auto& proto = (input ? input_protos_ : output_protos_)[index];
-    staging = std::make_shared<core::Buffer>(proto);
+    // Kept across calls: cudaFree synchronizes the whole device.
+    if (staging == nullptr || !staging->valid())
+      staging = std::make_shared<core::Buffer>((input ? input_protos_ : output_protos_)[index]);
     if (!staging->valid())
       return false;
     address = staging->memory()->device();
@@ -202,6 +204,10 @@ auto TensorrtEngine::bind(std::size_t index, bool input, const SharedPtr<core::B
   bindings_[static_cast<std::size_t>((input ? input_bindings_ : output_bindings_)[index])] = pointer;
   return true;
 #endif
+}
+
+auto TensorrtEngine::create_host_memory() const -> SharedPtr<core::Memory> {
+  return backend::create_cuda_host_memory();
 }
 
 auto TensorrtEngine::set_inputs(const core::Buffers& inputs) -> bool {

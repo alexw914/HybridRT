@@ -49,8 +49,16 @@ hybridrt_add_unit_test(hrtc SOURCES hrtc/hrtc_test.cpp DEPENDS hrt::hrtc kitzoo:
 hybridrt_add_unit_test(memory SOURCES core/memory_test.cpp DEPENDS hrt::hybridrt)
 hybridrt_add_unit_test(image_preprocessor SOURCES preprocess/image_preprocessor_test.cpp DEPENDS hrt::hybridrt)
 
+if(HRT_USE_CUDA)
+    hybridrt_add_unit_test(image SOURCES core/image_test.cpp DEPENDS hrt::hybridrt CUDA::cudart)
+endif()
+
 if(HRT_USE_ORT)
     hybridrt_add_unit_test(onnxruntime_engine SOURCES engine/onnxruntime_engine_test.cpp DEPENDS hrt::hybridrt)
+endif()
+
+if(HRT_USE_TENSORRT)
+    hybridrt_add_unit_test(tensorrt_engine SOURCES engine/tensorrt_engine_test.cpp DEPENDS hrt::hybridrt CUDA::cudart)
 endif()
 
 hybridrt_add_unit_test(detect SOURCES postprocess/detect_test.cpp DEPENDS hrt::hybridrt)

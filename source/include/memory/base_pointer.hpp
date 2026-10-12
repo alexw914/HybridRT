@@ -36,7 +36,8 @@ struct BasePointer {
   bool owned = false;
   core::SyncedHead head = core::SyncedHead::Synced;
   kitzoo::memory::ByteBuffer host_storage;
-  // Frees owned device storage; null for host and wrapped storage.
+  // Frees owned storage outside host_storage (device or pinned host); null
+  // for host_storage and wrapped storage.
   void (*release)(BasePointer&) = nullptr;
 };
 

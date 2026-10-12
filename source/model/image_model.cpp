@@ -149,10 +149,21 @@ auto builtin_postprocessor(std::string_view type, const kitzoo::json::Json& conf
     return postprocess::create_keypoint_postprocessor(type, config, engine);
 }
 
-auto make_buffers(const Vector<core::BufferProto>& protos) -> std::optional<core::Buffers> {
+// With `host_engine`, buffers use its fast host memory when it offers one.
+auto make_buffers(const Vector<core::BufferProto>& protos, const engine::Engine* host_engine)
+    -> std::optional<core::Buffers> {
   core::Buffers buffers;
   for (const auto& proto : protos) {
-    auto buffer = std::make_shared<core::Buffer>(proto);
+    SharedPtr<core::Buffer> buffer;
+    if (auto memory = host_engine != nullptr ? host_engine->create_host_memory() : nullptr) {
+      buffer = std::make_shared<core::Buffer>(std::move(memory), proto);
+      if (!buffer->valid()) {
+        KZ_LOG_WARN("ImageModel: engine host memory is unavailable; using the engine IO memory");
+        buffer.reset();
+      }
+    }
+    if (buffer == nullptr)
+      buffer = std::make_shared<core::Buffer>(proto);
     if (!buffer->valid()) {
       KZ_LOG_ERROR("ImageModel: cannot allocate engine IO");
       return std::nullopt;
@@ -276,9 +287,13 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
 
   // An input set is held from preprocessing through inference, an output set
   // from inference through postprocessing, and a stream for the whole call.
+  // Outputs are read on the host; inputs are written there only by the CPU
+  // preprocessor (Auto follows the engine's input memory).
+  const auto* host_input_engine =
+      preprocessor_param_.device == preprocess::ImagePreprocessorType::Cpu ? &engine : nullptr;
   core::MemoryType input_memory = core::MemoryType::Cpu;
   for (std::size_t i = 0; i < preprocess_num + engine_num; ++i) {
-    auto buffers = make_buffers(engine.input_protos());
+    auto buffers = make_buffers(engine.input_protos(), host_input_engine);
     KZ_CHECK_MSG(buffers && !buffers->empty(), "ImageModel: cannot allocate the inputs of algo {}", algo.name);
     auto image = make_input_image(*buffers->front());
     KZ_CHECK_MSG(image.has_value(), "ImageModel: the engine input of algo {} does not fit the preprocess config",
@@ -293,7 +308,7 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
     preprocessor_pool_.add(std::make_unique<UniquePtr<preprocess::ImagePreprocessor>>(std::move(preprocessor)));
   }
   for (std::size_t i = 0; i < engine_num + postprocess_num; ++i) {
-    auto buffers = make_buffers(engine.output_protos());
+    auto buffers = make_buffers(engine.output_protos(), &engine);
     KZ_CHECK_MSG(buffers.has_value(), "ImageModel: cannot allocate the outputs of algo {}", algo.name);
     output_pool_.add(std::make_unique<core::Buffers>(std::move(*buffers)));
   }

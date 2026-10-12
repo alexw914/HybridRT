@@ -13,6 +13,7 @@
 
 #ifdef HRT_TEST_TENSORRT
 #include <NvInfer.h>
+#include <algorithm>
 #include <cmath>
 #endif
 #include <filesystem>
@@ -276,6 +277,23 @@ TEST_F(ImageModelTest, KeepsCudaPreprocessorScratchAliveUntilStreamCompletes) {
       .engines = {{.engine_type = "trt", .config = {}, .proto = {}, .data = bytes}},
       .config = R"({"preprocess":{"std":[255,255,255]},"postprocess":{"type":"GeneralClassify"}})"};
   using Model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>;
+  auto cpu_preprocess_algo = algo;
+  cpu_preprocess_algo.config =
+      R"({"preprocess":{"device":"cpu","std":[255,255,255]},"postprocess":{"type":"GeneralClassify"}})";
+  hrt::SharedPtr<hrt::core::Context> cpu_preprocess_context = hrt::core::Context::create(hrt::core::DeviceType::Cuda);
+  if (cpu_preprocess_context == nullptr)
+    GTEST_SKIP() << "CUDA device is unavailable";
+  auto cpu_preprocess_model = Model::create(cpu_preprocess_algo, cpu_preprocess_context);
+  ASSERT_NE(cpu_preprocess_model, nullptr);
+  hrt::Vector<std::uint8_t> cpu_preprocess_pixels(1024 * 1024 * 3, 64);
+  const auto cpu_preprocess_image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, cpu_preprocess_pixels.data(),
+                                                           hrt::core::ImageFormat::InterBgr, {1024, 1024});
+  ASSERT_TRUE(cpu_preprocess_image);
+  const auto cpu_preprocess_result = cpu_preprocess_model->process_sync(*cpu_preprocess_image);
+  ASSERT_TRUE(cpu_preprocess_result);
+  EXPECT_TRUE(std::all_of(cpu_preprocess_result->front().begin(), cpu_preprocess_result->front().end(),
+                          [](float value) -> bool { return std::abs(value - 64.0F / 255.0F) <= 0.00001F; }));
+
   for (int device_id : {0, 1}) {
     hrt::SharedPtr<hrt::core::Context> context = hrt::core::Context::create(hrt::core::DeviceType::Cuda, device_id);
     if (context == nullptr)
@@ -299,15 +317,54 @@ TEST_F(ImageModelTest, KeepsCudaPreprocessorScratchAliveUntilStreamCompletes) {
                                        stream.get()))
             return false;
           stream->synchronize();
+          const auto device_view = hrt::core::Image::wrap(
+              hrt::core::MemoryType::Cuda, reinterpret_cast<void*>(device_image.buffer()->memory()->device()),
+              hrt::core::ImageFormat::InterBgr, {1024, 1024});
+          if (!device_view)
+            return false;
+          hrt::core::Image host_copy(hrt::core::MemoryType::Cpu, hrt::core::ImageFormat::InterBgr,
+                                     hrt::core::DataType::Uint8, {1024, 1024});
+          if (!hrt::core::Buffer::copy(*host_copy.buffer(), *device_image.buffer(), hrt::core::CopyPolicy::DirectCopy,
+                                       stream.get()))
+            return false;
+          stream->synchronize();
+          const auto* copied_pixels = static_cast<const std::uint8_t*>(host_copy.buffer()->memory()->cpu());
+          if (copied_pixels == nullptr || !std::equal(pixels.begin(), pixels.end(), copied_pixels))
+            return false;
           const auto expected = static_cast<float>(20 + worker * 20) / 255.0F;
-          for (int frame = 0; frame < 20; ++frame) {
-            const auto result = model->process_sync(frame % 2 == 0 ? device_image : *image);
+          const auto valid_result = [expected](const auto& result) -> bool {
             if (!result || result->size() != 1 || result->front().size() != 3 * 1024 * 1024)
               return false;
-            for (float value : result->front()) {
-              if (std::abs(value - expected) > 0.00001F)
+            return std::all_of(result->front().begin(), result->front().end(),
+                               [expected](float value) -> bool { return std::abs(value - expected) <= 0.00001F; });
+          };
+          for (int frame = 0; frame < 20; ++frame) {
+            const auto result = model->process_sync(frame % 2 == 0 ? *device_view : *image);
+            if (!valid_result(result))
+              return false;
+          }
+          for (int memory_type = 0; memory_type < 2; ++memory_type) {
+            hrt::Vector<std::uint8_t> transient_pixels(1024 * 1024 * 3, static_cast<std::uint8_t>(20 + worker * 20));
+            const auto transient_host = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, transient_pixels.data(),
+                                                               hrt::core::ImageFormat::InterBgr, {1024, 1024});
+            if (!transient_host)
+              return false;
+            if (memory_type == 0) {
+              if (!valid_result(model->process_sync(*transient_host)))
                 return false;
+              continue;
             }
+            hrt::core::Image transient_device(hrt::core::MemoryType::Cuda, hrt::core::ImageFormat::InterBgr,
+                                              hrt::core::DataType::Uint8, {1024, 1024});
+            if (!hrt::core::Buffer::copy(*transient_device.buffer(), *transient_host->buffer(),
+                                         hrt::core::CopyPolicy::DirectCopy, stream.get()))
+              return false;
+            stream->synchronize();
+            const auto transient_view = hrt::core::Image::wrap(
+                hrt::core::MemoryType::Cuda, reinterpret_cast<void*>(transient_device.buffer()->memory()->device()),
+                hrt::core::ImageFormat::InterBgr, {1024, 1024});
+            if (!transient_view || !valid_result(model->process_sync(*transient_view)))
+              return false;
           }
           return true;
         }));

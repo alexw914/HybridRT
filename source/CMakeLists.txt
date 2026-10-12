@@ -73,6 +73,7 @@ if(HRT_USE_CUDA)
         backend/cuda/cuda_common.cpp
         backend/cuda/cuda_context.cpp
         backend/cuda/cuda_memory.cpp
+        backend/cuda/cuda_host_memory.cpp
         preprocess/cuda_image_preprocessor.cpp)
     target_link_libraries(hybridrt PRIVATE
         CUDA::cudart CUDA::nppc CUDA::nppial CUDA::nppicc CUDA::nppidei CUDA::nppig)
