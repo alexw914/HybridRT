@@ -2,7 +2,7 @@
 // HybridRT | C++20 Model Inference Framework
 // File: benchmarks/preprocess_bench.cpp
 // Description: Benchmarks image preprocessing: format conversions checked
-//              against OpenCV, and each YOLO task's preprocess config.
+//              against OpenCV, YOLO task configs, and video resolutions.
 // -----------------------------------------------------------------------------
 
 #include <benchmark/benchmark.h>
@@ -115,7 +115,51 @@ auto BM_Task(benchmark::State& state) -> void {
   }
 }
 
+auto BM_Resolution(benchmark::State& state) -> void {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  cv::setNumThreads(1);
+  const Size source_size{static_cast<int>(state.range(0)), static_cast<int>(state.range(1))};
+  const Size target_size{static_cast<int>(state.range(2)), static_cast<int>(state.range(3))};
+  cv::Mat pixels(source_size.height, source_size.width, CV_8UC3);
+  cv::randu(pixels, 0, 256);
+  const auto source =
+      Image::wrap(MemoryType::Cpu, pixels.data, ImageFormat::InterBgr, source_size, DataType::Uint8, pixels.step);
+  Image target(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, target_size);
+  auto processor = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  ImagePreprocessorParam param;
+  param.resize_type = ResizeType::LetterBox;
+  param.std = {255, 255, 255};
+  param.default_color = {114, 114, 114};
+  if (!source || !target.valid() || !processor) {
+    state.SkipWithError("Cannot allocate preprocessing buffers");
+    return;
+  }
+  for (int i = 0; i < 20; ++i) {
+    if (!processor->process(target, *source, {}, param)) {
+      state.SkipWithError("Warmup failed");
+      return;
+    }
+  }
+  for (auto _ : state) {
+    if (!processor->process(target, *source, {}, param)) {
+      state.SkipWithError("Preprocessing failed");
+      break;
+    }
+    benchmark::DoNotOptimize(target.memory()->cpu());
+  }
+}
+
+auto resolution_cases(benchmark::Benchmark* bench) -> void {
+  for (const int width : {1920, 3840}) {
+    for (const auto size : {hrt::core::Size{640, 360}, hrt::core::Size{640, 640}, hrt::core::Size{960, 540},
+                            hrt::core::Size{960, 960}, hrt::core::Size{1280, 720}, hrt::core::Size{1280, 1280}})
+      bench->Args({width, width * 9 / 16, size.width, size.height});
+  }
+}
+
 } // namespace
 
 BENCHMARK(BM_Convert)->DenseRange(0, 8)->Unit(benchmark::kMillisecond)->UseRealTime();
 BENCHMARK(BM_Task)->DenseRange(0, 4)->Unit(benchmark::kMillisecond)->UseRealTime();
+BENCHMARK(BM_Resolution)->Apply(resolution_cases)->Unit(benchmark::kMillisecond)->UseRealTime();

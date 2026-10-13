@@ -151,6 +151,76 @@ TEST(ImagePreprocessorTest, NormalizesOnlyTheRoiWhenAsked) {
   EXPECT_FLOAT_EQ(planar_at(dst, 2, 0, 7), 3.0F);
 }
 
+TEST(ImagePreprocessorTest, ConvertsAndNormalizesAllByteValuesWithChannelOrderAndPadding) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto src = uniform_bgr(256, 4, {0, 0, 0}, 784);
+  for (int y = 0; y < 4; ++y) {
+    for (int x = 0; x < 256; ++x) {
+      auto* pixel = src.pixels.data() + y * 784 + x * 3;
+      pixel[0] = static_cast<std::uint8_t>(x);
+      pixel[1] = static_cast<std::uint8_t>(255 - x);
+      pixel[2] = static_cast<std::uint8_t>((x + 127) % 256);
+    }
+  }
+  auto processor = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  ASSERT_NE(processor, nullptr);
+  for (const auto source_format : {ImageFormat::InterRgb, ImageFormat::InterBgr}) {
+    auto source = Image::wrap(MemoryType::Cpu, src.pixels.data(), source_format, {256, 4}, DataType::Uint8, 784);
+    ASSERT_TRUE(source);
+    for (const auto target_format : {ImageFormat::PlanarRgb, ImageFormat::PlanarBgr}) {
+      Image dst(MemoryType::Cpu, target_format, DataType::Float32, {256, 8}, {25344, 8448, 1056});
+      ASSERT_TRUE(dst.valid());
+      for (const auto mode : {NormalizeType::Full, NormalizeType::Roi, NormalizeType::None}) {
+        for (const bool identity : {false, true}) {
+          ImagePreprocessorParam param;
+          param.resize_type = ResizeType::LetterBox;
+          param.dst_image_format = target_format;
+          param.normalize_type = mode;
+          param.mean = identity ? hrt::Array<float, 3>{0, 0, 0} : hrt::Array<float, 3>{10, 20, 30};
+          param.std = identity ? hrt::Array<float, 3>{1, 1, 1} : hrt::Array<float, 3>{2, 3, 4};
+          param.default_color = {11, 22, 33};
+          ASSERT_TRUE(processor->process(dst, *source, {}, param));
+          const auto swap = (source_format == ImageFormat::InterRgb) != (target_format == ImageFormat::PlanarRgb);
+          for (int c = 0; c < 3; ++c) {
+            const auto channel = static_cast<std::size_t>(c);
+            const auto input_channel = swap ? 2 - c : c;
+            for (int y = 0; y < 8; ++y) {
+              const auto padding = y < 2 || y >= 6;
+              for (int x = 0; x < 256; ++x) {
+                float expected = padding ? param.default_color[static_cast<std::size_t>(input_channel)]
+                                         : src.pixels[static_cast<std::size_t>((y - 2) * 784 + x * 3 + input_channel)];
+                if (mode == NormalizeType::Full || (mode == NormalizeType::Roi && !padding))
+                  expected = (expected - param.mean[channel]) / param.std[channel];
+                EXPECT_NEAR(planar_at(dst, c, x, y), expected, 1.0e-5F);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+TEST(ImagePreprocessorTest, NormalizesInterleavedFloatOutputThroughFallback) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto src = uniform_bgr(8, 4, {10, 20, 30});
+  Image dst(MemoryType::Cpu, ImageFormat::InterRgb, DataType::Float32, {8, 4});
+  ImagePreprocessorParam param;
+  param.dst_image_format = ImageFormat::InterRgb;
+  param.mean = {10, 20, 30};
+  param.std = {2, 3, 4};
+  auto processor = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  ASSERT_TRUE(processor->process(dst, src.image, {}, param));
+  const auto* values = static_cast<const float*>(dst.memory()->cpu());
+  for (int i = 0; i < 8 * 4; ++i) {
+    EXPECT_FLOAT_EQ(values[i * 3], 10.0F);
+    EXPECT_FLOAT_EQ(values[i * 3 + 1], 0.0F);
+    EXPECT_FLOAT_EQ(values[i * 3 + 2], -5.0F);
+  }
+}
+
 TEST(ImagePreprocessorTest, CropsTheSourceRect) {
   // Left half blue, right half red; cropping the right half yields pure red.
   auto src = uniform_bgr(8, 4, {255, 0, 0});

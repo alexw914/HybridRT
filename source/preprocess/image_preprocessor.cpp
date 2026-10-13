@@ -180,6 +180,12 @@ auto ImagePreprocessor::fused(core::Image& /*dst*/, const ImageTransform& /*tran
   return false;
 }
 
+auto ImagePreprocessor::convert_normalize(core::Image& dst, const core::Image& src, const core::Rect& roi,
+                                          const Array<float, 3>& mean, const Array<float, 3>& stddev,
+                                          core::Stream* stream) -> bool {
+  return convert(dst, src, stream) && normalize(dst, roi, mean, stddev, stream);
+}
+
 auto ImagePreprocessor::cpu() -> ImagePreprocessor* {
   if (type() == ImagePreprocessorType::Cpu)
     return this;
@@ -284,6 +290,11 @@ auto ImagePreprocessor::run(core::Image& dst, const core::Image& src, const Imag
     return false;
   if (resized != &dst) {
     op = pick(ImageOperation::Convert, dst, *resized);
+    if (op != nullptr && param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std) &&
+        dst.data_type() == core::DataType::Float32 && op->supports(ImageOperation::Normalize, dst, dst)) {
+      const auto roi = param.normalize_type == NormalizeType::Roi ? transform.dst_roi : dst.rect();
+      return op->convert_normalize(dst, *resized, roi, param.mean, param.std, stream);
+    }
     if (op == nullptr || !op->convert(dst, *resized, stream))
       return false;
   }

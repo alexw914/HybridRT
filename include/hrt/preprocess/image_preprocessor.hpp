@@ -166,6 +166,10 @@ protected:
   ImagePreprocessor();
 
 private:
+  virtual auto convert_normalize(core::Image& dst, const core::Image& src, const core::Rect& roi,
+                                 const Array<float, 3>& mean, const Array<float, 3>& stddev, core::Stream* stream)
+      -> bool;
+
   auto cpu() -> ImagePreprocessor*;
 
   auto scratch(UniquePtr<core::Image>& slot, core::MemoryType memory_type, core::ImageFormat format,

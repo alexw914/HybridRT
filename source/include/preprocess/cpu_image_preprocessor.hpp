@@ -39,6 +39,9 @@ public:
                  core::Stream* stream) -> bool override;
 
 private:
+  auto convert_normalize(core::Image& dst, const core::Image& src, const core::Rect& roi, const Array<float, 3>& mean,
+                         const Array<float, 3>& stddev, core::Stream* stream) -> bool override;
+
   // Reused intermediates for multi-step conversions.
   cv::Mat bgr_;
   Array<cv::Mat, 3> planes_;

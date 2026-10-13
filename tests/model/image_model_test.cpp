@@ -14,8 +14,8 @@
 #ifdef HRT_TEST_TENSORRT
 #include <NvInfer.h>
 #include <algorithm>
-#include <cmath>
 #endif
+#include <cmath>
 #include <filesystem>
 #include <future>
 #include <gtest/gtest.h>
@@ -119,7 +119,7 @@ TEST_F(ImageModelTest, ServesConcurrentCallsFromPools) {
       const auto value = static_cast<std::uint8_t>(40 * t);
       for (int i = 0; i < 20; ++i) {
         const auto result = model->process_sync(uniform_bgr(pixels, value, value, value, {3 + i + t, 5 + (i % 7)}));
-        if (!result || (*result)[0][5] != static_cast<float>(value) / 255.0F)
+        if (!result || !(std::abs((*result)[0][5] - static_cast<float>(value) / 255.0F) <= 1.0e-7F))
           return false;
       }
       return true;

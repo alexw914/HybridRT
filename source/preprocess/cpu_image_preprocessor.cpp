@@ -296,6 +296,33 @@ auto CpuImagePreprocessor::convert(core::Image& dst, const core::Image& src, cor
   return true;
 }
 
+auto CpuImagePreprocessor::convert_normalize(core::Image& dst, const core::Image& src, const core::Rect& roi,
+                                             const Array<float, 3>& mean, const Array<float, 3>& stddev,
+                                             core::Stream* stream) -> bool {
+  if (layout_of(src.format()) != Layout::Inter3 || src.data_type() != core::DataType::Uint8 ||
+      layout_of(dst.format()) != Layout::Planar3 || dst.data_type() != core::DataType::Float32)
+    return convert(dst, src, stream) && normalize(dst, roi, mean, stddev, stream);
+
+  auto* dst_base = mutable_host(dst, stream);
+  auto* src_base = host(src, stream);
+  if (dst_base == nullptr || src_base == nullptr)
+    return false;
+  cv::split(inter(src, src_base), planes_.data());
+  const auto swap = rgb_order(src.format()) != rgb_order(dst.format());
+  const auto rect = cv_rect(roi);
+  for (int i = 0; i < 3; ++i) {
+    const auto c = static_cast<std::size_t>(i);
+    const auto& input = planes_[static_cast<std::size_t>(swap ? 2 - i : i)];
+    auto output = plane(dst, dst_base, i);
+    // Padding outside a normalized ROI must retain its unnormalized value.
+    if (roi != dst.rect())
+      input.convertTo(output, CV_32F);
+    const auto alpha = 1.0 / static_cast<double>(stddev[c]);
+    input(rect).convertTo(output(rect), CV_32F, alpha, -static_cast<double>(mean[c]) * alpha);
+  }
+  return true;
+}
+
 auto CpuImagePreprocessor::normalize(core::Image& image, const core::Rect& roi, const Array<float, 3>& mean,
                                      const Array<float, 3>& stddev, core::Stream* stream) -> bool {
   auto* base = mutable_host(image, stream);
