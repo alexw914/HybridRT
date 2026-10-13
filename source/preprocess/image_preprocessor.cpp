@@ -14,6 +14,10 @@
 
 #include "include/preprocess/cpu_image_preprocessor.hpp"
 
+#ifdef HRT_USE_METAL
+#include "include/preprocess/metal_image_preprocessor.hpp"
+#endif
+
 #ifdef HRT_USE_CUDA
 #include "include/preprocess/cuda_image_preprocessor.hpp"
 #endif
@@ -156,6 +160,10 @@ auto ImagePreprocessor::create(ImagePreprocessorType type, core::MemoryType targ
   switch (type) {
   case ImagePreprocessorType::Cpu:
     return std::make_unique<CpuImagePreprocessor>();
+#ifdef HRT_USE_METAL
+  case ImagePreprocessorType::Metal:
+    return MetalImagePreprocessor::create();
+#endif
 #ifdef HRT_USE_CUDA
   case ImagePreprocessorType::Cuda:
     return std::make_unique<CudaImagePreprocessor>();
@@ -237,9 +245,14 @@ auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const 
   return transform;
 }
 
+auto ImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
+                                       const ImagePreprocessorParam& /*param*/) const -> bool {
+  return supports(ImageOperation::Fused, dst, src);
+}
+
 auto ImagePreprocessor::run(core::Image& dst, const core::Image& src, const ImageTransform& transform,
                             const ImagePreprocessorParam& param, core::Stream* stream) -> bool {
-  if (supports(ImageOperation::Fused, dst, src))
+  if (supports_fused(dst, src, param))
     return fused(dst, transform, src, param, stream);
 
   auto* fallback = cpu();

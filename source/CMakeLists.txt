@@ -62,6 +62,16 @@ target_link_libraries(hybridrt
     PRIVATE kitzoo::log kitzoo::utilities opencv_imgproc $<TARGET_NAME_IF_EXISTS:opencv_geometry>)
 
 # -- Engines -------------------------------------------------------------------
+if(APPLE)
+    enable_language(OBJCXX)
+    target_sources(hybridrt PRIVATE preprocess/metal_image_preprocessor.cpp)
+    set_source_files_properties(preprocess/metal_image_preprocessor.cpp PROPERTIES
+        LANGUAGE OBJCXX COMPILE_OPTIONS "-fobjc-arc")
+    set_target_properties(hybridrt PROPERTIES OBJCXX_STANDARD 20 OBJCXX_STANDARD_REQUIRED ON)
+    target_link_libraries(hybridrt PRIVATE "-framework Metal" "-framework Foundation")
+    target_compile_definitions(hybridrt PRIVATE HRT_USE_METAL)
+endif()
+
 if(HRT_USE_ORT)
     target_sources(hybridrt PRIVATE engine/onnxruntime_engine.cpp)
     target_link_libraries(hybridrt PRIVATE onnxruntime)

@@ -126,12 +126,18 @@ auto BM_Resolution(benchmark::State& state) -> void {
   const auto source =
       Image::wrap(MemoryType::Cpu, pixels.data, ImageFormat::InterBgr, source_size, DataType::Uint8, pixels.step);
   Image target(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, target_size);
-  auto processor = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  const auto type = state.range(4) == 0 ? ImagePreprocessorType::Cpu : ImagePreprocessorType::Metal;
+  auto processor = ImagePreprocessor::create(type);
+  state.SetLabel(type == ImagePreprocessorType::Cpu ? "cpu" : "metal");
+  if (!processor) {
+    state.SkipWithMessage("Requested preprocessing device is unavailable");
+    return;
+  }
   ImagePreprocessorParam param;
   param.resize_type = ResizeType::LetterBox;
   param.std = {255, 255, 255};
   param.default_color = {114, 114, 114};
-  if (!source || !target.valid() || !processor) {
+  if (!source || !target.valid()) {
     state.SkipWithError("Cannot allocate preprocessing buffers");
     return;
   }
@@ -153,8 +159,12 @@ auto BM_Resolution(benchmark::State& state) -> void {
 auto resolution_cases(benchmark::Benchmark* bench) -> void {
   for (const int width : {1920, 3840}) {
     for (const auto size : {hrt::core::Size{640, 360}, hrt::core::Size{640, 640}, hrt::core::Size{960, 540},
-                            hrt::core::Size{960, 960}, hrt::core::Size{1280, 720}, hrt::core::Size{1280, 1280}})
-      bench->Args({width, width * 9 / 16, size.width, size.height});
+                            hrt::core::Size{960, 960}, hrt::core::Size{1280, 720}, hrt::core::Size{1280, 1280}}) {
+      bench->Args({width, width * 9 / 16, size.width, size.height, 0});
+#ifdef __APPLE__
+      bench->Args({width, width * 9 / 16, size.width, size.height, 1});
+#endif
+    }
   }
 }
 
@@ -162,4 +172,8 @@ auto resolution_cases(benchmark::Benchmark* bench) -> void {
 
 BENCHMARK(BM_Convert)->DenseRange(0, 8)->Unit(benchmark::kMillisecond)->UseRealTime();
 BENCHMARK(BM_Task)->DenseRange(0, 4)->Unit(benchmark::kMillisecond)->UseRealTime();
-BENCHMARK(BM_Resolution)->Apply(resolution_cases)->Unit(benchmark::kMillisecond)->UseRealTime();
+BENCHMARK(BM_Resolution)
+    ->Apply(resolution_cases)
+    ->Unit(benchmark::kMillisecond)
+    ->UseRealTime()
+    ->MeasureProcessCPUTime();

@@ -1,7 +1,7 @@
 {
   "name": "reference",
   "version": "1.0.0",
-  "description": "Every manifest field; see README.md next to this file for allowed values.",
+  "description": "Every manifest field; preprocess.device also accepts metal on macOS (explicit opt-in). See README.md next to this file for other allowed values.",
   "algos": [
     {
       "name": "yolov8_detect",

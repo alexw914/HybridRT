@@ -129,6 +129,32 @@ TEST_F(ImageModelTest, ServesConcurrentCallsFromPools) {
     EXPECT_TRUE(run.get());
 }
 
+#ifdef __APPLE__
+TEST_F(ImageModelTest, ServesConcurrentMetalPreprocessingFromPools) {
+  if (!hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Metal))
+    GTEST_SKIP() << "Metal GPU unavailable";
+  auto model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>::create(
+      classify_algo(R"({"device":"metal","std":[255,255,255]})"), cpu_,
+      {.preprocess = 3, .engine = 2, .postprocess = 3});
+  ASSERT_NE(model, nullptr);
+  hrt::Vector<std::future<bool>> runs;
+  for (int t = 0; t < 4; ++t) {
+    runs.push_back(std::async(std::launch::async, [&model, t]() -> bool {
+      hrt::Vector<std::uint8_t> pixels;
+      const auto value = static_cast<std::uint8_t>(40 * t);
+      for (int i = 0; i < 20; ++i) {
+        const auto result = model->process_sync(uniform_bgr(pixels, value, value, value, {3 + i + t, 5 + i % 7}));
+        if (!result || !(std::abs((*result)[0][5] - static_cast<float>(value) / 255.0F) <= 1.0e-7F))
+          return false;
+      }
+      return true;
+    }));
+  }
+  for (auto& run : runs)
+    EXPECT_TRUE(run.get());
+}
+#endif
+
 TEST_F(ImageModelTest, HandlesFrameSizeChangesAndRecoversAfterInvalidInput) {
   auto model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>::create(
       classify_algo(R"({"dst_image_format": "planar_rgb", "std": [255, 255, 255]})"), cpu_);

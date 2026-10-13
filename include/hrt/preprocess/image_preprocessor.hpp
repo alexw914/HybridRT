@@ -23,6 +23,7 @@ enum class ImagePreprocessorType {
   Cuda,
   Rga,
   Dvpp,
+  Metal,
 };
 
 NLOHMANN_JSON_SERIALIZE_ENUM(ImagePreprocessorType, {
@@ -31,6 +32,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(ImagePreprocessorType, {
                                                         {ImagePreprocessorType::Cuda, "cuda"},
                                                         {ImagePreprocessorType::Rga, "rga"},
                                                         {ImagePreprocessorType::Dvpp, "dvpp"},
+                                                        {ImagePreprocessorType::Metal, "metal"},
                                                     })
 
 enum class InterpolationMode {
@@ -166,6 +168,9 @@ protected:
   ImagePreprocessor();
 
 private:
+  virtual auto supports_fused(const core::Image& dst, const core::Image& src, const ImagePreprocessorParam& param) const
+      -> bool;
+
   virtual auto convert_normalize(core::Image& dst, const core::Image& src, const core::Rect& roi,
                                  const Array<float, 3>& mean, const Array<float, 3>& stddev, core::Stream* stream)
       -> bool;

@@ -262,6 +262,99 @@ TEST(ImagePreprocessorTest, ConvertsNv12Input) {
   EXPECT_NEAR(planar_at(dst, 2, 3, 3), 128.0F, 2.0F);
 }
 
+#ifdef __APPLE__
+TEST(ImagePreprocessorTest, MetalFallsBackForNv12Input) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto metal = ImagePreprocessor::create(ImagePreprocessorType::Metal);
+  if (!metal)
+    GTEST_SKIP() << "Metal GPU unavailable";
+  hrt::Array<std::uint8_t, 24> pixels{};
+  std::fill_n(pixels.begin(), 16, std::uint8_t{80});
+  std::fill(pixels.begin() + 16, pixels.end(), std::uint8_t{128});
+  auto source = Image::wrap(MemoryType::Cpu, pixels.data(), ImageFormat::Nv12, {4, 4});
+  ASSERT_TRUE(source);
+  Image expected(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {4, 4});
+  Image actual(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {4, 4});
+  ImagePreprocessorParam param;
+  param.std = {255, 255, 255};
+  auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  ASSERT_TRUE(cpu->process(expected, *source, {}, param));
+  ASSERT_TRUE(metal->process(actual, *source, {}, param));
+  for (int c = 0; c < 3; ++c)
+    for (int y = 0; y < 4; ++y)
+      for (int x = 0; x < 4; ++x)
+        EXPECT_FLOAT_EQ(planar_at(actual, c, x, y), planar_at(expected, c, x, y));
+}
+
+TEST(ImagePreprocessorTest, MetalMatchesCpuAcrossGeometryStridesAndFrameChanges) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto metal = ImagePreprocessor::create(ImagePreprocessorType::Metal);
+  if (!metal)
+    GTEST_SKIP() << "Metal GPU unavailable";
+  auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  auto invalid_source = uniform_bgr(8, 8, {10, 20, 30});
+  Image invalid_target(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {8, 8});
+  EXPECT_FALSE(metal->process(invalid_target, invalid_source.image, {-1, 0, 8, 8}, ImagePreprocessorParam{}));
+  for (const auto size : {Size{13, 7}, Size{31, 17}, Size{9, 15}, Size{13, 7}}) {
+    const auto pitch = static_cast<std::size_t>(size.width * 3 + 16);
+    auto src = uniform_bgr(size.width, size.height, {0, 0, 0}, pitch);
+    for (int y = 0; y < size.height; ++y)
+      for (int x = 0; x < size.width; ++x)
+        for (int c = 0; c < 3; ++c)
+          src.pixels[static_cast<std::size_t>(y) * pitch + static_cast<std::size_t>(x * 3 + c)] =
+              static_cast<std::uint8_t>((x * 17 + y * 13 + c * 31) % 256);
+    const auto source_format = size.height == 15 ? ImageFormat::InterRgb : ImageFormat::InterBgr;
+    auto source = Image::wrap(MemoryType::Cpu, src.pixels.data(), source_format, size, DataType::Uint8, pitch);
+    ASSERT_TRUE(source);
+    const int side = size.width == 31 ? 16 : 8;
+    const auto row = static_cast<std::size_t>(side + 4) * sizeof(float);
+    const auto plane = row * static_cast<std::size_t>(side);
+    for (const auto format : {ImageFormat::PlanarRgb, ImageFormat::PlanarBgr}) {
+      Image expected(MemoryType::Cpu, format, DataType::Float32, {side, side});
+      Image actual(MemoryType::Cpu, format, DataType::Float32, {side, side}, {plane * 3, plane, row});
+      for (const auto resize : {ResizeType::Normal, ResizeType::LetterBox, ResizeType::KeepRatio,
+                                ResizeType::CenterCrop, ResizeType::PadOutside}) {
+        for (const auto interpolation :
+             {InterpolationMode::Linear, InterpolationMode::Nearest, InterpolationMode::Cubic}) {
+          for (const auto normalization : {NormalizeType::Full, NormalizeType::Roi, NormalizeType::None}) {
+            ImagePreprocessorParam param;
+            param.dst_image_format = format;
+            param.resize_type = resize;
+            param.resize_short_size = side;
+            param.interpolation_mode = interpolation;
+            param.normalize_type = normalization;
+            param.mean = {1, 2, 3};
+            param.std = {255, 127, 63};
+            param.default_color = {11, 22, 33};
+            const Rect crop{1, 1, size.width - 2, size.height - 2};
+            const auto reference = cpu->process(expected, *source, crop, param);
+            const auto result = metal->process(actual, *source, crop, param);
+            ASSERT_TRUE(reference);
+            ASSERT_TRUE(result);
+            EXPECT_EQ(result->src_roi, reference->src_roi);
+            EXPECT_EQ(result->dst_roi, reference->dst_roi);
+            for (int c = 0; c < 3; ++c)
+              for (int y = 0; y < side; ++y)
+                for (int x = 0; x < side; ++x) {
+                  const auto& roi = reference->dst_roi;
+                  const bool inside = x >= roi.x && x < roi.x + roi.width && y >= roi.y && y < roi.y + roi.height;
+                  const bool normalized =
+                      normalization == NormalizeType::Full || (normalization == NormalizeType::Roi && inside);
+                  const auto tolerance = interpolation == InterpolationMode::Linear
+                                             ? 1.01F / (normalized ? param.std[static_cast<std::size_t>(c)] : 1.0F)
+                                             : 1.0e-6F;
+                  EXPECT_NEAR(planar_at(actual, c, x, y), planar_at(expected, c, x, y), tolerance);
+                }
+          }
+        }
+      }
+    }
+  }
+}
+#endif
+
 TEST(ImagePreprocessorTest, CreatesByDevice) {
   EXPECT_EQ(hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Cpu)->type(),
             hrt::preprocess::ImagePreprocessorType::Cpu);
@@ -280,6 +373,8 @@ TEST(ImagePreprocessorTest, CreatesByDevice) {
 }
 
 TEST(ImagePreprocessorTest, ParsesDevice) {
+  EXPECT_EQ(kitzoo::json::Json::parse(R"({"device":"metal"})").get<hrt::preprocess::ImagePreprocessorParam>().device,
+            hrt::preprocess::ImagePreprocessorType::Metal);
   auto param = kitzoo::json::Json::parse(R"({"device": "cuda"})").get<hrt::preprocess::ImagePreprocessorParam>();
   EXPECT_EQ(param.device, hrt::preprocess::ImagePreprocessorType::Cuda);
   EXPECT_EQ(kitzoo::json::Json::parse(R"({"device": "auto"})").get<hrt::preprocess::ImagePreprocessorParam>().device,
