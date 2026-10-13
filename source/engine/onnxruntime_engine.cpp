@@ -216,7 +216,7 @@ auto OrtEngine::read_io(bool input) -> bool {
     ok(input ? api_->SessionGetInputName(session_, i, allocator, &name)
              : api_->SessionGetOutputName(session_, i, allocator, &name));
     names[i] = name;
-    static_cast<void>(api_->AllocatorFree(allocator, name));
+    api_->ReleaseStatus(api_->AllocatorFree(allocator, name));
   }
   Vector<std::size_t> order(count);
   std::iota(order.begin(), order.end(), std::size_t{0});

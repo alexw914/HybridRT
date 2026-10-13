@@ -12,6 +12,7 @@
 #include <kitzoo/os/filesys.hpp>
 
 #include <chrono>
+#include <concepts>
 #include <cstring>
 
 #include "include/hrtc/hrtc_generated.h"
@@ -29,7 +30,9 @@ class ByteReader {
 public:
   explicit ByteReader(std::span<const std::uint8_t> bytes) : rest_(bytes) {}
 
-  auto take(std::uint64_t size, SharedPtr<const Bytes>& out) -> bool {
+  // Generic so the cast below is dependent: needed where std::size_t differs
+  // from std::uint64_t, and GCC's -Wuseless-cast stays quiet where it does not.
+  auto take(std::unsigned_integral auto size, SharedPtr<const Bytes>& out) -> bool {
     if (size > rest_.size())
       return false;
     const auto head = rest_.first(static_cast<std::size_t>(size));
