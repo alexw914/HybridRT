@@ -22,7 +22,7 @@
           "backends": [
             {
               "engine_type": "trt",
-              "config": {"plugin_libraries": []},
+              "config": {"plugin_libraries": [], "input_shapes": {}},
               "data": "models/yolov8_detect.engine"
             },
             {
@@ -52,7 +52,8 @@
                 "inter_op_num_threads": 0,
                 "execution_provider": "cpu",
                 "provider_options": {},
-                "custom_op_libraries": []
+                "custom_op_libraries": [],
+                "input_shapes": {}
               },
               "data": "models/yolov8_detect.onnx"
             }

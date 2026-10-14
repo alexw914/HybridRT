@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <numeric>
 #include <optional>
 
@@ -135,16 +136,18 @@ auto OrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
   String provider = "cpu";
   Map<String, String> provider_options;
   Vector<String> custom_op_libraries;
+  Map<String, Vector<std::int64_t>> input_shapes;
   core::Problems problems;
-  core::check_keys(
-      config,
-      {"intra_op_num_threads", "inter_op_num_threads", "execution_provider", "provider_options", "custom_op_libraries"},
-      "config", problems);
+  core::check_keys(config,
+                   {"intra_op_num_threads", "inter_op_num_threads", "execution_provider", "provider_options",
+                    "custom_op_libraries", "input_shapes"},
+                   "config", problems);
   core::read(config, "intra_op_num_threads", intra_threads, "config", problems);
   core::read(config, "inter_op_num_threads", inter_threads, "config", problems);
   core::read(config, "execution_provider", provider, "config", problems);
   core::read(config, "provider_options", provider_options, "config", problems);
   core::read(config, "custom_op_libraries", custom_op_libraries, "config", problems);
+  core::read(config, "input_shapes", input_shapes, "config", problems);
   KZ_MAYBE_UNUSED std::uint32_t coreml = 0;
   if (provider == "coreml") {
 #ifdef HRT_ORT_COREML
@@ -196,7 +199,57 @@ auto OrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
   KZ_CHECK_MSG(failure.empty(), "onnxruntime: {}", failure);
 
   proto_ = {DataLayout::Nchw, DataLayout::Nchw};
-  return read_io(true) && read_io(false);
+  if (!read_io(true) || !read_io(false))
+    return false;
+  core::fix_shapes(input_shapes, input_names_, input_protos_, "config.input_shapes", problems);
+  KZ_CHECK_MSG(problems.empty(), "onnxruntime: {}", core::join(problems));
+  const auto dynamic = [](const core::BufferProto& proto) -> bool { return core::is_dynamic(proto.shape); };
+  KZ_CHECK_RETURN(std::none_of(input_protos_.begin(), input_protos_.end(), dynamic), false,
+                  "onnxruntime: dynamic input dims other than the batch need config.input_shapes");
+  return std::none_of(output_protos_.begin(), output_protos_.end(), dynamic) || resolve_outputs();
+}
+
+// Output dims follow from the fixed inputs, which a run on zeroed inputs reveals.
+auto OrtEngine::resolve_outputs() -> bool {
+  OrtAllocator* allocator = nullptr;
+  auto failure = error(api_->GetAllocatorWithDefaultOptions(&allocator));
+  KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
+  Vector<OrtValue*> inputs(input_protos_.size(), nullptr);
+  Vector<OrtValue*> outputs(output_protos_.size(), nullptr);
+  KZ_SCOPE_EXIT {
+    release_values(inputs);
+    release_values(outputs);
+  };
+  Vector<const char*> input_names;
+  Vector<const char*> output_names;
+  for (std::size_t i = 0; i < inputs.size(); ++i) {
+    const auto& proto = input_protos_[i];
+    failure = error(api_->CreateTensorAsOrtValue(allocator, proto.shape.data(), proto.shape.size(),
+                                                 to_ort_type(proto.data_type), &inputs[i]));
+    KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
+    void* data = nullptr;
+    failure = error(api_->GetTensorMutableData(inputs[i], &data));
+    KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
+    std::memset(data, 0, static_cast<std::size_t>(core::volume(proto.shape)) * core::data_type_size(proto.data_type));
+    input_names.push_back(input_names_[i].c_str());
+  }
+  for (const auto& name : output_names_)
+    output_names.push_back(name.c_str());
+  failure = error(api_->Run(session_, nullptr, input_names.data(), inputs.data(), inputs.size(), output_names.data(),
+                            outputs.size(), outputs.data()));
+  KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: resolving output shapes: {}", failure);
+  for (std::size_t i = 0; i < outputs.size(); ++i) {
+    OrtTensorTypeAndShapeInfo* info = nullptr;
+    failure = error(api_->GetTensorTypeAndShape(outputs[i], &info));
+    KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
+    KZ_SCOPE_EXIT {
+      api_->ReleaseTensorTypeAndShapeInfo(info);
+    };
+    auto& shape = output_protos_[i].shape;
+    failure = error(api_->GetDimensions(info, shape.data(), shape.size()));
+    KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
+  }
+  return true;
 }
 
 auto OrtEngine::read_io(bool input) -> bool {
@@ -243,9 +296,8 @@ auto OrtEngine::read_io(bool input) -> bool {
     ok(api_->GetDimensions(tensor_info, shape.data(), rank));
 
     auto data_type = to_data_type(element_type);
-    // ponytail: static shapes only; dynamic dims need per-run reshaping of the bound buffers.
-    KZ_CHECK_RETURN(data_type && !core::is_dynamic(shape), false,
-                    "onnxruntime: tensor {} has an unsupported type or a dynamic shape", names[index]);
+    // ponytail: dynamic dims are fixed once at load; varying them per run needs rebinding resized buffers.
+    KZ_CHECK_RETURN(data_type.has_value(), false, "onnxruntime: tensor {} has an unsupported type", names[index]);
     out_names.push_back(names[index]);
     out_protos.push_back({core::MemoryType::Cpu, *data_type, shape, {}});
   }

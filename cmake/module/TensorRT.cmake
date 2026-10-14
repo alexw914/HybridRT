@@ -49,6 +49,10 @@ if (EXISTS "${TensorRT_INCLUDE_DIR}/NvInferVersion.h")
 
   math(EXPR HRT_TENSORRT_VERSION "${TensorRT_VERSION_MAJOR} * 10000 + ${TensorRT_VERSION_MINOR} * 100 + ${TensorRT_VERSION_PATCH}")
 
+  if (HRT_TENSORRT_VERSION LESS 80500)
+    message(FATAL_ERROR "TensorRT ${TensorRT_VERSION} is too old; HybridRT needs 8.5 or newer")
+  endif ()
+
   message(STATUS "Found TensorRT version ${TensorRT_VERSION}(${HRT_TENSORRT_VERSION}) in ${TensorRT_ROOT}")
 
 else ()

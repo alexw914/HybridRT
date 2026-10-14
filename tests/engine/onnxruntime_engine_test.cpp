@@ -7,7 +7,9 @@
 #include <hrt/engine/engine.hpp>
 #include <hrt/hrtc/hrtc.hpp>
 
+#include <cstdint>
 #include <gtest/gtest.h>
+#include <initializer_list>
 #include <string_view>
 
 #include "onnx_model.hpp"
@@ -15,19 +17,20 @@
 
 namespace {
 
-auto relu_model() -> hrt::SharedPtr<const hrt::hrtc::Bytes> {
-  return std::make_shared<const hrt::hrtc::Bytes>(hrt::test::unary_model("Relu", {1, 4}));
+auto relu_param(std::string_view config = {}, std::initializer_list<std::int64_t> dims = {1, 4})
+    -> hrt::hrtc::EngineParam {
+  return {.engine_type = "ort",
+          .config = hrt::String(config),
+          .proto = {},
+          .data = std::make_shared<const hrt::hrtc::Bytes>(hrt::test::unary_model("Relu", dims))};
 }
 
-auto relu_param(std::string_view config = {}) -> hrt::hrtc::EngineParam {
-  return {.engine_type = "ort", .config = hrt::String(config), .proto = {}, .data = relu_model()};
-}
-
-// Runs Relu on {-2, -0.5, 0, 3} with `config`.
-void expect_relu(std::string_view config) {
+// Runs Relu on {-2, -0.5, 0, 3} with `config`, on a model whose dims fix to {1, 4}.
+void expect_relu(std::string_view config, std::initializer_list<std::int64_t> dims = {1, 4}) {
   auto engine = hrt::engine::Engine::create("ORT");
   ASSERT_NE(engine, nullptr);
-  ASSERT_TRUE(engine->initialize(relu_param(config)));
+  ASSERT_TRUE(engine->initialize(relu_param(config, dims)));
+  EXPECT_EQ(engine->input_protos()[0].shape, (hrt::core::Shape{1, 4}));
   ASSERT_EQ(engine->input_names(), hrt::Vector<hrt::String>{"x"});
   ASSERT_EQ(engine->output_protos().size(), 1U);
   EXPECT_EQ(engine->output_protos()[0].data_type, hrt::core::DataType::Float32);
@@ -57,6 +60,19 @@ TEST(OnnxruntimeEngineTest, RunsOnCoreml) {
   expect_relu(R"({"execution_provider": "coreml", "provider_options": {"ModelFormat": "MLProgram"}})");
 }
 #endif
+
+TEST(OnnxruntimeEngineTest, FixesDynamicShapesAtLoad) {
+  expect_relu({}, {-1, 4});
+  expect_relu(R"({"input_shapes": {"x": [1, 4]}})", {-1, -1});
+
+  auto engine = hrt::engine::Engine::create(hrt::engine::EngineType::Ort);
+  EXPECT_FALSE(engine->initialize(relu_param({}, {-1, -1})));
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  EXPECT_DEATH(engine->initialize(relu_param(R"({"input_shapes": {"y": [1, 4]}})", {-1, -1})), "");
+  EXPECT_DEATH(engine->initialize(relu_param(R"({"input_shapes": {"x": [1, 4, 1]}})", {-1, -1})), "");
+  EXPECT_DEATH(engine->initialize(relu_param(R"({"input_shapes": {"x": [1, 5]}})")), "");
+  EXPECT_DEATH(engine->initialize(relu_param(R"({"input_shapes": {"x": [1, 0]}})")), "");
+}
 
 TEST(OnnxruntimeEngineTest, ChecksConfig) {
   auto engine = hrt::engine::Engine::create(hrt::engine::EngineType::Ort);

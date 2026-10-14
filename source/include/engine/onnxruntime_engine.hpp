@@ -21,6 +21,8 @@ namespace hrt::engine {
 //       "MLProgram", "MLComputeUnits": "ALL" | "CPUOnly" | "CPUAndGPU",
 //       "RequireStaticInputShapes", "EnableOnSubgraphs": "0" | "1"
 //   "custom_op_libraries": paths for RegisterCustomOpsLibrary_V2
+//   "input_shapes": {"<input>": [dims]} fixing dynamic dims at load; without
+//       it only a dynamic leading batch dim is fixed, to 1
 class OrtEngine final : public Engine {
 public:
   OrtEngine();
@@ -48,6 +50,8 @@ private:
   auto error(OrtStatus* status) const -> String;
 
   auto read_io(bool input) -> bool;
+
+  auto resolve_outputs() -> bool;
 
   auto bind(const core::Buffers& buffers, bool input) -> bool;
 

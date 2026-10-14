@@ -8,10 +8,12 @@
 #ifndef HRT_CORE_CONFIG_HPP
 #define HRT_CORE_CONFIG_HPP
 
+#include <hrt/core/buffer.hpp>
 #include <hrt/core/containers.hpp>
 
 #include <kitzoo/json/reader.hpp>
 
+#include <cstdint>
 #include <initializer_list>
 #include <string_view>
 
@@ -74,6 +76,15 @@ auto read(const kitzoo::json::Json& object, std::string_view key, Vector<String>
 // An object whose values are all strings.
 auto read(const kitzoo::json::Json& object, std::string_view key, Map<String, String>& value, std::string_view section,
           Problems& problems) -> void;
+
+// An object of shapes: arrays of positive integers.
+auto read(const kitzoo::json::Json& object, std::string_view key, Map<String, Vector<std::int64_t>>& value,
+          std::string_view section, Problems& problems) -> void;
+
+// Fixes the dynamic dims of the model tensors `protos` (named `names`) from `fixed`; a tensor without an entry only
+// gets a dynamic leading batch dim, set to 1. An entry must name a tensor and keep its rank and static dims.
+auto fix_shapes(const Map<String, Vector<std::int64_t>>& fixed, const Vector<String>& names,
+                Vector<BufferProto>& protos, std::string_view section, Problems& problems) -> void;
 
 // A string naming a value of an enum serialized with NLOHMANN_JSON_SERIALIZE_ENUM.
 template <typename Enum>

@@ -183,4 +183,41 @@ auto read(const Json& object, std::string_view key, Map<String, String>& value, 
     value = found->get<Map<String, String>>();
 }
 
+auto read(const Json& object, std::string_view key, Map<String, Vector<std::int64_t>>& value, std::string_view section,
+          Problems& problems) -> void {
+  const auto shape = [](const Json& j) -> bool {
+    return j.is_array() && !j.empty() &&
+           std::all_of(j.begin(), j.end(), [](const Json& dim) { return dim.is_number_integer() && dim > 0; });
+  };
+  if (const auto* found = find(object, key, "an object of shapes", section, problems, [&](const Json& j) -> bool {
+        return j.is_object() && std::all_of(j.begin(), j.end(), shape);
+      }))
+    value = found->get<Map<String, Vector<std::int64_t>>>();
+}
+
+auto fix_shapes(const Map<String, Vector<std::int64_t>>& fixed, const Vector<String>& names,
+                Vector<BufferProto>& protos, std::string_view section, Problems& problems) -> void {
+  for (const auto& [name, shape] : fixed) {
+    if (std::find(names.begin(), names.end(), name) == names.end())
+      problems.push_back(String(section) + "." + name + ": no such model input");
+  }
+  for (std::size_t i = 0; i < protos.size(); ++i) {
+    auto& shape = protos[i].shape;
+    const auto it = fixed.find(names[i]);
+    if (it == fixed.end()) {
+      if (!shape.empty() && shape[0] < 0)
+        shape[0] = 1;
+      continue;
+    }
+    const auto& want = it->second;
+    const auto fits =
+        want.size() == shape.size() && std::equal(shape.begin(), shape.end(), want.begin(),
+                                                  [](auto model, auto dim) { return model < 0 || model == dim; });
+    if (fits)
+      shape = want;
+    else
+      problems.push_back(String(section) + "." + names[i] + ": does not fit the model shape " + Json(shape).dump());
+  }
+}
+
 } // namespace hrt::core

@@ -39,17 +39,20 @@ inline auto field(int number, std::string_view payload) -> hrt::String {
   return out;
 }
 
-// Float tensor value info with static dims.
-inline auto value_info(std::string_view name, std::initializer_list<std::uint64_t> dims) -> hrt::String {
+// Float tensor value info; a negative dim is dynamic, named after its position.
+inline auto value_info(std::string_view name, std::initializer_list<std::int64_t> dims) -> hrt::String {
   hrt::String shape;
-  for (auto dim : dims)
-    shape += field(1, field(1, dim));
+  int position = 0;
+  for (auto dim : dims) {
+    const auto symbol = "d" + std::to_string(position++);
+    shape += field(1, dim < 0 ? field(2, symbol) : field(1, static_cast<std::uint64_t>(dim)));
+  }
   const auto tensor = field(1, 1) + field(2, shape);
   return field(1, name) + field(2, field(1, tensor));
 }
 
 // y = op(x) with x and y float tensors of `dims`, opset 13.
-inline auto unary_model(std::string_view op, std::initializer_list<std::uint64_t> dims) -> hrtc::Bytes {
+inline auto unary_model(std::string_view op, std::initializer_list<std::int64_t> dims) -> hrtc::Bytes {
   const auto node = field(1, "x") + field(2, "y") + field(4, op);
   const auto graph =
       field(1, node) + field(2, "g") + field(11, value_info("x", dims)) + field(12, value_info("y", dims));

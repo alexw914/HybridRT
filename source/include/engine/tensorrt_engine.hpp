@@ -13,23 +13,10 @@
 
 namespace hrt::engine {
 
-struct TrtDeleter {
-  template <typename T>
-  auto operator()(T* object) const -> void {
-#if HRT_TENSORRT_VERSION >= 80000
-    delete object;
-#else
-    if (object != nullptr)
-      object->destroy();
-#endif
-  }
-};
-
-template <typename T>
-using TrtPtr = UniquePtr<T, TrtDeleter>;
-
 // EngineParam.data is a serialized engine for the target GPU and TensorRT
-// version. Config: {"plugin_libraries": [...]}, loaded before deserializing.
+// version (8.5+). Config: {"plugin_libraries": [...]}, loaded before
+// deserializing; "input_shapes": {"<input>": [dims]} fixes dynamic dims within
+// optimization profile 0, and without it only a dynamic leading batch dim, to 1.
 // CUDA buffers bind directly; host buffers are staged through device copies,
 // which run fastest from create_host_memory() (CUDA-pinned).
 class TensorrtEngine final : public Engine {
@@ -60,14 +47,9 @@ private:
   // Points TensorRT at `buffer` or, for host buffers, at a device staging copy.
   auto bind(std::size_t index, bool input, const SharedPtr<core::Buffer>& buffer) -> bool;
 
-  TrtPtr<nvinfer1::IRuntime> runtime_;
-  TrtPtr<nvinfer1::ICudaEngine> engine_;
-  TrtPtr<nvinfer1::IExecutionContext> context_;
-#if HRT_TENSORRT_VERSION < 80500
-  Vector<int> input_bindings_;
-  Vector<int> output_bindings_;
-  Vector<void*> bindings_;
-#endif
+  UniquePtr<nvinfer1::IRuntime> runtime_;
+  UniquePtr<nvinfer1::ICudaEngine> engine_;
+  UniquePtr<nvinfer1::IExecutionContext> context_;
   // Device copies of host-bound buffers; null when bound directly.
   core::Buffers input_staging_;
   core::Buffers output_staging_;

@@ -13,6 +13,7 @@
 #include <dlfcn.h>
 #include <mutex>
 #include <optional>
+#include <type_traits>
 
 #include "include/backend/cuda/cuda_common.hpp"
 #include "include/backend/cuda/cuda_host_memory.hpp"
@@ -113,39 +114,34 @@ auto TensorrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo:
     return false;
   }
   Vector<String> plugin_libraries;
+  Map<String, Vector<std::int64_t>> input_shapes;
   core::Problems problems;
-  core::check_keys(config, {"plugin_libraries"}, "config", problems);
+  core::check_keys(config, {"plugin_libraries", "input_shapes"}, "config", problems);
   core::read(config, "plugin_libraries", plugin_libraries, "config", problems);
+  core::read(config, "input_shapes", input_shapes, "config", problems);
   KZ_CHECK_MSG(problems.empty(), "tensorrt: {}", core::join(problems));
   load_plugins(plugin_libraries);
 
   runtime_.reset(nvinfer1::createInferRuntime(logger()));
   if (runtime_ == nullptr)
     return false;
-#if HRT_TENSORRT_VERSION >= 80500
   engine_.reset(runtime_->deserializeCudaEngine(param.data->data(), param.data->size()));
-#else
-  engine_.reset(runtime_->deserializeCudaEngine(param.data->data(), param.data->size(), nullptr));
-#endif
   if (engine_ == nullptr || (context_.reset(engine_->createExecutionContext()), context_ == nullptr)) {
     KZ_LOG_ERROR("tensorrt: failed to deserialize the engine");
     return false;
   }
 
   proto_ = {DataLayout::Nchw, DataLayout::Nchw};
-  // Name-ordered tensors: name -> binding index.
-  Map<String, int> tensors;
-#if HRT_TENSORRT_VERSION >= 80500
+  Set<String> tensors;
   for (int i = 0; i < engine_->getNbIOTensors(); ++i)
-    tensors.emplace(engine_->getIOTensorName(i), i);
-  for (const auto& [name, index] : tensors) {
+    tensors.emplace(engine_->getIOTensorName(i));
+  for (const auto& name : tensors) {
     const auto type = data_type_of(engine_->getTensorDataType(name.c_str()));
-    const auto shape = shape_of(engine_->getTensorShape(name.c_str()));
-    if (!type || core::is_dynamic(shape)) {
-      KZ_LOG_ERROR("tensorrt: tensor {} has an unsupported type or a dynamic shape", name);
+    if (!type) {
+      KZ_LOG_ERROR("tensorrt: tensor {} has an unsupported type", name);
       return false;
     }
-    const core::BufferProto proto{core::MemoryType::Cuda, *type, shape, {}};
+    const core::BufferProto proto{core::MemoryType::Cuda, *type, shape_of(engine_->getTensorShape(name.c_str())), {}};
     if (engine_->getTensorIOMode(name.c_str()) == nvinfer1::TensorIOMode::kINPUT) {
       input_names_.push_back(name);
       input_protos_.push_back(proto);
@@ -154,29 +150,27 @@ auto TensorrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo:
       output_protos_.push_back(proto);
     }
   }
-#else
-  bindings_.resize(static_cast<std::size_t>(engine_->getNbBindings()));
-  for (int i = 0; i < engine_->getNbBindings(); ++i)
-    tensors.emplace(engine_->getBindingName(i), i);
-  for (const auto& [name, index] : tensors) {
-    const auto type = data_type_of(engine_->getBindingDataType(index));
-    const auto shape = shape_of(engine_->getBindingDimensions(index));
-    if (!type || core::is_dynamic(shape)) {
-      KZ_LOG_ERROR("tensorrt: tensor {} has an unsupported type or a dynamic shape", name);
-      return false;
-    }
-    const core::BufferProto proto{core::MemoryType::Cuda, *type, shape, {}};
-    if (engine_->bindingIsInput(index)) {
-      input_names_.push_back(name);
-      input_protos_.push_back(proto);
-      input_bindings_.push_back(index);
-    } else {
-      output_names_.push_back(name);
-      output_protos_.push_back(proto);
-      output_bindings_.push_back(index);
-    }
+  // Dynamic dims are fixed once, within optimization profile 0; outputs then follow from the inputs.
+  core::fix_shapes(input_shapes, input_names_, input_protos_, "config.input_shapes", problems);
+  KZ_CHECK_MSG(problems.empty(), "tensorrt: {}", core::join(problems));
+  for (std::size_t i = 0; i < input_protos_.size(); ++i) {
+    const auto& shape = input_protos_[i].shape;
+    KZ_CHECK_RETURN(!core::is_dynamic(shape), false,
+                    "tensorrt: input {} has dynamic dims other than the batch; set config.input_shapes",
+                    input_names_[i]);
+    nvinfer1::Dims dims{};
+    dims.nbDims = static_cast<std::int32_t>(shape.size());
+    for (std::size_t d = 0; d < shape.size(); ++d)
+      dims.d[d] = static_cast<std::remove_reference_t<decltype(dims.d[0])>>(shape[d]);
+    // Reports dims outside the profile through the logger.
+    KZ_CHECK_RETURN(context_->setInputShape(input_names_[i].c_str(), dims), false,
+                    "tensorrt: input {} shape is outside the engine's optimization profile", input_names_[i]);
   }
-#endif
+  for (std::size_t i = 0; i < output_protos_.size(); ++i) {
+    output_protos_[i].shape = shape_of(context_->getTensorShape(output_names_[i].c_str()));
+    KZ_CHECK_RETURN(!core::is_dynamic(output_protos_[i].shape), false, "tensorrt: output {} has a data-dependent shape",
+                    output_names_[i]);
+  }
   input_staging_.resize(input_protos_.size());
   output_staging_.resize(output_protos_.size());
   return true;
@@ -197,13 +191,8 @@ auto TensorrtEngine::bind(std::size_t index, bool input, const SharedPtr<core::B
     address = staging->memory()->device();
   }
   auto* pointer = reinterpret_cast<void*>(address);
-#if HRT_TENSORRT_VERSION >= 80500
   const auto& name = (input ? input_names_ : output_names_)[index];
   return context_->setTensorAddress(name.c_str(), pointer);
-#else
-  bindings_[static_cast<std::size_t>((input ? input_bindings_ : output_bindings_)[index])] = pointer;
-  return true;
-#endif
 }
 
 auto TensorrtEngine::create_host_memory() const -> SharedPtr<core::Memory> {
@@ -236,11 +225,7 @@ auto TensorrtEngine::inference(core::Stream* stream) -> bool {
         !core::Buffer::copy(*input_staging_[i], *inputs_[i], core::CopyPolicy::DirectCopy, stream))
       return false;
   }
-#if HRT_TENSORRT_VERSION >= 80500
   const auto ok = context_->enqueueV3(backend::cuda_stream(stream));
-#else
-  const auto ok = context_->enqueueV2(bindings_.data(), backend::cuda_stream(stream), nullptr);
-#endif
   if (!ok) {
     KZ_LOG_ERROR("tensorrt: enqueue failed");
     return false;
@@ -266,11 +251,6 @@ auto TensorrtEngine::do_release() -> void {
   context_.reset();
   engine_.reset();
   runtime_.reset();
-#if HRT_TENSORRT_VERSION < 80500
-  input_bindings_.clear();
-  output_bindings_.clear();
-  bindings_.clear();
-#endif
 }
 
 } // namespace hrt::engine
