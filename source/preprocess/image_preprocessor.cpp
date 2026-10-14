@@ -220,12 +220,37 @@ auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const 
     return std::nullopt;
   adjust_roi(transform.dst_roi, transform.src_roi);
 
-  // ponytail: stages the whole source; upload only src_roi when cascaded crops make bandwidth matter.
   const core::Image* input = &src;
+  auto local = transform;
   if (!accepts(src.memory()->memory_type())) {
-    auto* staged = scratch(staged_src_, memory_type(), src.format(), src.data_type(), src.size());
+    // Host interleaved sources stage only what resize reads, as in cascaded crops: src_roi plus a margin for the
+    // interpolation taps. Other layouts stage whole.
+    const core::Image* from = &src;
+    std::optional<core::Image> region;
+    const auto format = src.format();
+    if (src.memory()->memory_type() == core::MemoryType::Cpu &&
+        (format == core::ImageFormat::InterBgr || format == core::ImageFormat::InterRgb ||
+         format == core::ImageFormat::InterRgba)) {
+      constexpr int kMargin = 2;
+      const auto& roi = transform.src_roi;
+      const auto area = core::intersect(
+          {roi.x - kMargin, roi.y - kMargin, roi.width + 2 * kMargin, roi.height + 2 * kMargin}, src.rect());
+      const auto& stride = src.stride();
+      auto* base = static_cast<std::byte*>(const_cast<void*>(src.memory()->cpu(stream)));
+      if (base != nullptr && area != src.rect())
+        region = core::Image::wrap(core::MemoryType::Cpu,
+                                   base + static_cast<std::size_t>(area.y) * stride[1] +
+                                       static_cast<std::size_t>(area.x) * stride[2],
+                                   format, {area.width, area.height}, src.data_type(), stride[1]);
+      if (region && region->valid()) {
+        from = &*region;
+        local.src_roi.x -= area.x;
+        local.src_roi.y -= area.y;
+      }
+    }
+    auto* staged = scratch(staged_src_, memory_type(), format, from->data_type(), from->size());
     if (staged == nullptr ||
-        !core::Buffer::copy(*staged->buffer(), *src.buffer(), core::CopyPolicy::AutoDstStride, stream))
+        !core::Buffer::copy(*staged->buffer(), *from->buffer(), core::CopyPolicy::AutoDstStride, stream))
       return std::nullopt;
     input = staged;
   }
@@ -238,7 +263,7 @@ auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const 
       return std::nullopt;
   }
 
-  if (!run(*output, *input, transform, param, stream))
+  if (!run(*output, *input, local, param, stream))
     return std::nullopt;
   if (!direct && !core::Buffer::copy(*dst.buffer(), *output->buffer(), core::CopyPolicy::DirectCopy, stream))
     return std::nullopt;

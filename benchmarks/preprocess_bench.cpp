@@ -170,7 +170,8 @@ auto resolution_cases(benchmark::Benchmark* bench) -> void {
   }
 }
 
-// CUDA letterbox into device memory: 0 uploads a host frame first, 1 starts from a device frame, 2 only uploads.
+// CUDA letterbox into device memory: 0 uploads a host frame first, 1 starts from a device frame, 2 only uploads,
+// 3 crops a 480x960 person-sized region of a host frame, as a cascaded classifier does.
 auto BM_CudaResolution(benchmark::State& state) -> void {
   using namespace hrt::core;
   using namespace hrt::preprocess;
@@ -184,7 +185,8 @@ auto BM_CudaResolution(benchmark::State& state) -> void {
   const Size source_size{static_cast<int>(state.range(0)), static_cast<int>(state.range(1))};
   const Size target_size{static_cast<int>(state.range(2)), static_cast<int>(state.range(3))};
   const auto mode = state.range(4);
-  state.SetLabel(mode == 0 ? "host_source" : mode == 1 ? "device_source" : "upload_only");
+  constexpr const char* kLabels[] = {"host_source", "device_source", "upload_only", "host_crop"};
+  state.SetLabel(kLabels[mode]);
   cv::Mat pixels(source_size.height, source_size.width, CV_8UC3);
   cv::randu(pixels, 0, 256);
   const auto host =
@@ -202,9 +204,10 @@ auto BM_CudaResolution(benchmark::State& state) -> void {
   param.std = {255, 255, 255};
   param.default_color = {114, 114, 114};
   const auto& source = mode == 1 ? device : *host;
+  const Rect crop = mode == 3 ? Rect{source_size.width / 2 - 240, source_size.height / 2 - 480, 480, 960} : Rect{};
   auto step = [&]() -> bool {
     const auto ok = mode == 2 ? Buffer::copy(*device.buffer(), *host->buffer(), CopyPolicy::DirectCopy, stream.get())
-                              : processor->process(target, source, {}, param, stream.get()).has_value();
+                              : processor->process(target, source, crop, param, stream.get()).has_value();
     stream->synchronize();
     return ok;
   };
@@ -227,6 +230,8 @@ auto cuda_cases(benchmark::Benchmark* bench) -> void {
     for (const auto size : {hrt::core::Size{640, 640}, hrt::core::Size{1280, 1280}})
       for (const int mode : {0, 1, 2})
         bench->Args({width, width * 9 / 16, size.width, size.height, mode});
+  bench->Args({3840, 2160, 224, 224, 0});
+  bench->Args({3840, 2160, 224, 224, 3});
 }
 
 } // namespace

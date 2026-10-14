@@ -247,6 +247,40 @@ TEST(ImagePreprocessorTest, CropsTheSourceRect) {
   }
 }
 
+TEST(ImagePreprocessorTest, CudaStagesOnlyTheCroppedHostRegion) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto cuda = ImagePreprocessor::create(ImagePreprocessorType::Cuda);
+  if (!cuda)
+    GTEST_SKIP() << "CUDA preprocessing unavailable";
+  const auto pitch = std::size_t{64 * 3 + 8};
+  auto src = uniform_bgr(64, 48, {0, 0, 0}, pitch);
+  for (std::size_t i = 0; i < src.pixels.size(); ++i)
+    src.pixels[i] = static_cast<std::uint8_t>((i * 37) % 251);
+  Image device(MemoryType::Cuda, ImageFormat::InterBgr, DataType::Uint8, {64, 48});
+  ASSERT_TRUE(Buffer::copy(*device.buffer(), *src.image.buffer(), CopyPolicy::AutoDstStride));
+  // Staging only the crop and its margin must not change what resize reads, borders included.
+  for (const auto crop : {Rect{10, 6, 30, 20}, Rect{0, 0, 17, 48}, Rect{50, 40, 14, 8}}) {
+    for (const auto interpolation : {InterpolationMode::Linear, InterpolationMode::Nearest, InterpolationMode::Cubic}) {
+      ImagePreprocessorParam param;
+      param.resize_type = ResizeType::LetterBox;
+      param.interpolation_mode = interpolation;
+      Image from_host(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {32, 32});
+      Image from_device(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {32, 32});
+      const auto host_transform = cuda->process(from_host, src.image, crop, param);
+      const auto device_transform = cuda->process(from_device, device, crop, param);
+      ASSERT_TRUE(host_transform);
+      ASSERT_TRUE(device_transform);
+      EXPECT_EQ(host_transform->src_roi, crop);
+      EXPECT_EQ(host_transform->dst_roi, device_transform->dst_roi);
+      for (int c = 0; c < 3; ++c)
+        for (int y = 0; y < 32; ++y)
+          for (int x = 0; x < 32; ++x)
+            ASSERT_EQ(planar_at(from_host, c, x, y), planar_at(from_device, c, x, y));
+    }
+  }
+}
+
 TEST(ImagePreprocessorTest, ConvertsNv12Input) {
   // Mid-gray NV12: Y = U = V = 128.
   hrt::Vector<std::uint8_t> nv12(4 * 4 * 3 / 2, 128);
