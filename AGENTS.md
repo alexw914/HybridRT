@@ -6,9 +6,8 @@
 ## 项目定位
 
 - HybridRT 是 C++20 模型推理框架，只负责预处理、推理、后处理及串联三者的模型封装。
-- 算子（CUDA kernel、NPU 自定义算子等）不放入本仓库，由独立仓库提供，运行时从引擎
-  `config` 加载（ORT/RKNN `custom_op_libraries`，TensorRT `plugin_libraries`）；算子库是
-  可选项，加载失败只 `KZ_LOG_WARN` 并跳过。
+- 引擎自定义算子库从引擎 `config` 加载（ORT/RKNN `custom_op_libraries`，TensorRT
+  `plugin_libraries`），是可选项，加载失败只 `KZ_LOG_WARN` 并跳过。
 - 基础能力统一用 kitzoo，不在本仓库重复实现或另行封装，缺少的通用能力补充到 kitzoo：
   JSON 用 `kitzoo::json::Reader` 解析、nlohmann 原生接口读取，参数结构体用
   `NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT` 直接映射，`get<T>()` 前先用
