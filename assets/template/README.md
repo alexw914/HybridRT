@@ -28,7 +28,7 @@ most 64) to `ImageModel::create`.
 
 | Key | Default | Values |
 | --- | --- | --- |
-| `device` | `auto` | `auto` (device of the engine input), `cpu`, `cuda`, `rga`, `dvpp` |
+| `device` | `auto` | `auto` (device of the engine input), `cpu`, `cuda`, `rga`, `dvpp`, `metal` (macOS, never picked by `auto`) |
 | `interpolation_mode` | `linear` | `linear`, `nearest`, `cubic` |
 | `resize_type` | `normal` | `normal` (stretch), `keep_ratio` (top-left), `letter_box` (centered; alias `center_keep_ratio`), `center_crop` (square input, needs `resize_short_size`), `pad_outside` (grows the source rect to the input aspect ratio, scaled by `pad_scale`) |
 | `dst_image_format` | `planar_rgb` | `planar_rgb`, `planar_bgr`, `inter_rgb`, `inter_bgr`, `inter_rgba`, `gray`, `nv12`, `nv21`, `yu12`, `yv12`; planar and gray need an NCHW input, interleaved NHWC |
