@@ -301,24 +301,24 @@ auto ImagePreprocessor::run(core::Image& dst, const core::Image& src, const Imag
   if (op == nullptr ||
       !op->resize(*resized, transform.dst_roi, *source, transform.src_roi, param.interpolation_mode, stream))
     return false;
+  const bool normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
+  const auto roi = param.normalize_type == NormalizeType::Roi ? transform.dst_roi : dst.rect();
   if (resized != &dst) {
     op = pick(ImageOperation::Convert, dst, *resized);
-    if (op != nullptr && param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std) &&
-        dst.data_type() == core::DataType::Float32 && op->supports(ImageOperation::Normalize, dst, dst)) {
-      const auto roi = param.normalize_type == NormalizeType::Roi ? transform.dst_roi : dst.rect();
+    if (op == nullptr)
+      return false;
+    if (normalize && dst.data_type() == core::DataType::Float32 && op->supports(ImageOperation::Normalize, dst, dst))
       return op->convert_normalize(dst, *resized, roi, param.mean, param.std, stream);
-    }
-    if (op == nullptr || !op->convert(dst, *resized, stream))
+    if (!op->convert(dst, *resized, stream))
       return false;
   }
 
-  if (param.normalize_type == NormalizeType::None || is_identity(param.mean, param.std))
+  if (!normalize)
     return true;
   if (dst.data_type() != core::DataType::Float32) {
     KZ_LOG_ERROR("image_preprocessor: normalization needs a float32 input");
     return false;
   }
-  const auto roi = param.normalize_type == NormalizeType::Roi ? transform.dst_roi : dst.rect();
   op = pick(ImageOperation::Normalize, dst, dst);
   return op != nullptr && op->normalize(dst, roi, param.mean, param.std, stream);
 }
