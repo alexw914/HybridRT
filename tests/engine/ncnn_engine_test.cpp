@@ -6,6 +6,7 @@
 
 #include <hrt/engine/engine.hpp>
 
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <string_view>
 
@@ -43,7 +44,26 @@ TEST(NcnnEngineTest, RunsReluModel) {
   const auto* result = static_cast<const float*>(output->memory()->cpu());
   EXPECT_FLOAT_EQ(result[0], 0.0F);
   EXPECT_FLOAT_EQ(result[1], 0.0F);
+  EXPECT_FLOAT_EQ(result[2], 0.0F);
   EXPECT_FLOAT_EQ(result[3], 3.0F);
+  EXPECT_TRUE(std::equal(values.begin(), values.end(), static_cast<const float*>(input->memory()->cpu())));
+
+  const hrt::Array<float, 4> updated{4.0F, -1.0F, 2.0F, -3.0F};
+  std::copy(updated.begin(), updated.end(), static_cast<float*>(input->memory()->mutable_cpu()));
+  ASSERT_TRUE(engine->inference());
+  EXPECT_FLOAT_EQ(result[0], 4.0F);
+  EXPECT_FLOAT_EQ(result[1], 0.0F);
+  EXPECT_FLOAT_EQ(result[2], 2.0F);
+  EXPECT_FLOAT_EQ(result[3], 0.0F);
+
+  ASSERT_TRUE(engine->initialize(param));
+  ASSERT_EQ(engine->input_protos().size(), 1U);
+  ASSERT_EQ(engine->output_protos().size(), 1U);
+  ASSERT_TRUE(engine->set_inputs({input}));
+  ASSERT_TRUE(engine->set_outputs({output}));
+  ASSERT_TRUE(engine->inference());
+  EXPECT_FLOAT_EQ(result[0], 4.0F);
+  EXPECT_FLOAT_EQ(result[3], 0.0F);
 }
 
 TEST(NcnnEngineTest, RejectsBrokenParam) {

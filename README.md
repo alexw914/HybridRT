@@ -82,16 +82,22 @@ hrt-model-bench -m model.hrtc|manifest.json [-a algo] [-e ort] [-n 100] [-w 10]
 ## Backends
 
 A backend is enabled by pointing CMake at its SDK. Version is the minimum supported release and,
-in parentheses, the version tests last ran on; `-` is not pinned or tested.
+in parentheses, the version tests last ran on; `-` means no minimum is pinned.
+A row without a parenthesized version has not been tested.
 
 | Backend | Engine type | Image operators | CMake | Version |
 | --- | --- | --- | --- | --- |
 | ONNX Runtime | `ort` | CPU | `-DORT_ROOT=<sdk>` | 1.20+ (1.31.0) |
-| ncnn | `ncnn` | CPU | `-Dncnn_ROOT=<sdk>` | - |
-| MNN | `mnn` | CPU | `-DMNN_ROOT=<sdk>` | - |
+| ncnn | `ncnn` | CPU | `-Dncnn_ROOT=<sdk>` | - (1.0.20261007) |
+| MNN | `mnn` | CPU | `-DMNN_ROOT=<sdk>` | - (3.0.0) |
 | [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html) | `trt` | CUDA (NPP) | `-DTensorRT_ROOT=<sdk>` | 8.5+ (10.16.1) |
 | [RKNN Toolkit2](https://github.com/airockchip/rknn-toolkit2) | `rknn` | RGA | `-DRKNN_ROOT=<sdk> -DRGA_ROOT=<sdk>` | - |
 | [CANN](https://www.hiascend.com/doc_center/source/en/CANNCommunityEdition/910/index/index.html) | `cann` | DVPP | `-DCANN_ROOT=<sdk>` | - |
+
+MNN selects Metal with engine config `{"forward_type": "metal"}` and requires an SDK
+built with Metal support. The official macOS Metal packages for 3.0.0 and 3.6.1
+failed standalone ReLU inference on macOS 27.0.1 arm64 with shader compilation
+errors and a crash; CPU 3.0.0 remains the validated configuration.
 
 ## Reference
 
