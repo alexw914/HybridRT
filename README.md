@@ -4,8 +4,7 @@ HybridRT is a C++20 model inference framework. It runs the preprocess, infer
 and postprocess steps of a model across CPU, GPU and NPU backends, loading
 models and their configs from a single `.hrtc` package. It has no inference
 engine of its own: inference runs on the integrated frameworks listed under
-Backends. Operators are provided by a separate library; foundation utilities
-come from [kitzoo](https://github.com/alexw914/kitzoo).
+Backends. Foundation utilities come from [kitzoo](https://github.com/alexw914/kitzoo).
 
 ## Build and test
 
@@ -82,16 +81,17 @@ hrt-model-bench -m model.hrtc|manifest.json [-a algo] [-e ort] [-n 100] [-w 10]
 
 ## Backends
 
-A backend is enabled by pointing CMake at its SDK.
+A backend is enabled by pointing CMake at its SDK. Version is the minimum supported release and,
+in parentheses, the version tests last ran on; `-` is not pinned or tested.
 
-| Backend | Engine type | Image operators | CMake |
-| --- | --- | --- | --- |
-| ONNX Runtime | `ort` | CPU | `-DORT_ROOT=<sdk>` |
-| ncnn | `ncnn` | CPU | `-Dncnn_ROOT=<sdk>` |
-| MNN | `mnn` | CPU | `-DMNN_ROOT=<sdk>` |
-| [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html) | `trt` | CUDA (NPP) | `-DTensorRT_ROOT=<sdk>` |
-| [RKNN Toolkit2](https://github.com/airockchip/rknn-toolkit2) | `rknn` | RGA | `-DRKNN_ROOT=<sdk> -DRGA_ROOT=<sdk>` |
-| [CANN](https://www.hiascend.com/doc_center/source/en/CANNCommunityEdition/910/index/index.html) | `cann` | DVPP | `-DCANN_ROOT=<sdk>` |
+| Backend | Engine type | Image operators | CMake | Version |
+| --- | --- | --- | --- | --- |
+| ONNX Runtime | `ort` | CPU | `-DORT_ROOT=<sdk>` | 1.20+ (1.31.0) |
+| ncnn | `ncnn` | CPU | `-Dncnn_ROOT=<sdk>` | - |
+| MNN | `mnn` | CPU | `-DMNN_ROOT=<sdk>` | - |
+| [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html) | `trt` | CUDA (NPP) | `-DTensorRT_ROOT=<sdk>` | 8.5+ (10.16.1) |
+| [RKNN Toolkit2](https://github.com/airockchip/rknn-toolkit2) | `rknn` | RGA | `-DRKNN_ROOT=<sdk> -DRGA_ROOT=<sdk>` | - |
+| [CANN](https://www.hiascend.com/doc_center/source/en/CANNCommunityEdition/910/index/index.html) | `cann` | DVPP | `-DCANN_ROOT=<sdk>` | - |
 
 ## Reference
 
