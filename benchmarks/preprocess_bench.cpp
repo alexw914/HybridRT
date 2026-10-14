@@ -5,6 +5,8 @@
 //              against OpenCV, YOLO task configs, and video resolutions.
 // -----------------------------------------------------------------------------
 
+#include <hrt/core/context.hpp>
+
 #include <benchmark/benchmark.h>
 #include <cmath>
 #include <filesystem>
@@ -168,6 +170,65 @@ auto resolution_cases(benchmark::Benchmark* bench) -> void {
   }
 }
 
+// CUDA letterbox into device memory: 0 uploads a host frame first, 1 starts from a device frame, 2 only uploads.
+auto BM_CudaResolution(benchmark::State& state) -> void {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto context = Context::create(DeviceType::Cuda);
+  if (context == nullptr) {
+    state.SkipWithMessage("CUDA device is unavailable");
+    return;
+  }
+  context->make_current();
+  auto stream = context->create_stream();
+  const Size source_size{static_cast<int>(state.range(0)), static_cast<int>(state.range(1))};
+  const Size target_size{static_cast<int>(state.range(2)), static_cast<int>(state.range(3))};
+  const auto mode = state.range(4);
+  state.SetLabel(mode == 0 ? "host_source" : mode == 1 ? "device_source" : "upload_only");
+  cv::Mat pixels(source_size.height, source_size.width, CV_8UC3);
+  cv::randu(pixels, 0, 256);
+  const auto host =
+      Image::wrap(MemoryType::Cpu, pixels.data, ImageFormat::InterBgr, source_size, DataType::Uint8, pixels.step);
+  Image device(MemoryType::Cuda, ImageFormat::InterBgr, DataType::Uint8, source_size);
+  Image target(MemoryType::Cuda, ImageFormat::PlanarRgb, DataType::Float32, target_size);
+  auto processor = ImagePreprocessor::create(ImagePreprocessorType::Cuda);
+  if (!host || !device.valid() || !target.valid() || !processor ||
+      !Buffer::copy(*device.buffer(), *host->buffer(), CopyPolicy::DirectCopy, stream.get())) {
+    state.SkipWithError("Cannot prepare CUDA preprocessing");
+    return;
+  }
+  ImagePreprocessorParam param;
+  param.resize_type = ResizeType::LetterBox;
+  param.std = {255, 255, 255};
+  param.default_color = {114, 114, 114};
+  const auto& source = mode == 1 ? device : *host;
+  auto step = [&]() -> bool {
+    const auto ok = mode == 2 ? Buffer::copy(*device.buffer(), *host->buffer(), CopyPolicy::DirectCopy, stream.get())
+                              : processor->process(target, source, {}, param, stream.get()).has_value();
+    stream->synchronize();
+    return ok;
+  };
+  for (int i = 0; i < 20; ++i) {
+    if (!step()) {
+      state.SkipWithError("Warmup failed");
+      return;
+    }
+  }
+  for (auto _ : state) {
+    if (!step()) {
+      state.SkipWithError("Preprocessing failed");
+      break;
+    }
+  }
+}
+
+auto cuda_cases(benchmark::Benchmark* bench) -> void {
+  for (const int width : {1920, 3840})
+    for (const auto size : {hrt::core::Size{640, 640}, hrt::core::Size{1280, 1280}})
+      for (const int mode : {0, 1, 2})
+        bench->Args({width, width * 9 / 16, size.width, size.height, mode});
+}
+
 } // namespace
 
 BENCHMARK(BM_Convert)->DenseRange(0, 8)->Unit(benchmark::kMillisecond)->UseRealTime();
@@ -177,3 +238,4 @@ BENCHMARK(BM_Resolution)
     ->Unit(benchmark::kMillisecond)
     ->UseRealTime()
     ->MeasureProcessCPUTime();
+BENCHMARK(BM_CudaResolution)->Apply(cuda_cases)->Unit(benchmark::kMillisecond)->UseRealTime();
