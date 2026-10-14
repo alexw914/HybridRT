@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/preprocess/metal_image_preprocessor.cpp
-// Description: Implements fused Metal preprocessing with reusable host staging.
+// Description: Implements fused Metal preprocessing on wrapped host memory.
 // -----------------------------------------------------------------------------
 
 #include "include/preprocess/metal_image_preprocessor.hpp"
@@ -12,7 +12,6 @@
 #import <Metal/Metal.h>
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <limits>
 
 #include "include/backend/metal/image_kernel.hpp"
@@ -23,17 +22,27 @@ namespace {
 
 struct Params {
   std::uint32_t sw, sh, dw, dh, rw, rh, left, top;
+  std::uint32_t src_row, dst_row, dst_plane;
   std::uint32_t swap, nearest, normalization;
   Array<float, 3> fill, mean, scale;
 };
 
-static_assert(sizeof(Params) == 80);
+static_assert(sizeof(Params) == 92);
 
-auto ensure_buffer(id<MTLDevice> device, id<MTLBuffer> __strong& buffer, std::size_t bytes) -> bool {
-  if (buffer == nil || [buffer length] < bytes)
-    buffer = [device newBufferWithLength:bytes options:MTLResourceStorageModeShared];
-  KZ_CHECK_RETURN(buffer != nil, false, "metal: cannot allocate {} staging bytes", bytes);
-  return true;
+// Views host memory without copying. Metal needs page-aligned bounds, so the buffer spans the enclosing pages and
+// `offset` locates `data`; the kernel only touches the `bytes` that follow it.
+auto wrap_host(id<MTLDevice> device, const void* data, std::size_t bytes, NSUInteger& offset) -> id<MTLBuffer> {
+  const auto page = static_cast<std::uintptr_t>(NSPageSize());
+  const auto address = reinterpret_cast<std::uintptr_t>(data);
+  const auto base = address & ~(page - 1);
+  offset = address - base;
+  const auto length = (offset + bytes + page - 1) & ~(page - 1);
+  if (length > [device maxBufferLength])
+    return nil;
+  return [device newBufferWithBytesNoCopy:reinterpret_cast<void*>(base)
+                                   length:length
+                                  options:MTLResourceStorageModeShared
+                              deallocator:nil];
 }
 
 } // namespace
@@ -42,8 +51,7 @@ struct MetalImagePreprocessor::State {
   id<MTLDevice> device = nil;
   id<MTLCommandQueue> queue = nil;
   id<MTLComputePipelineState> pipeline = nil;
-  id<MTLBuffer> input = nil;
-  id<MTLBuffer> output = nil;
+  bool unified = false;
 };
 
 MetalImagePreprocessor::MetalImagePreprocessor() : state_(std::make_unique<State>()) {
@@ -65,6 +73,7 @@ MetalImagePreprocessor::MetalImagePreprocessor() : state_(std::make_unique<State
       return;
     }
     state_->queue = [state_->device newCommandQueue];
+    state_->unified = [state_->device hasUnifiedMemory];
   }
 }
 
@@ -89,11 +98,15 @@ auto MetalImagePreprocessor::accepts(core::MemoryType type) const -> bool {
   return type == core::MemoryType::Cpu;
 }
 
+// The kernel works on wrapped host memory in place. Discrete GPUs would read it over the bus for every tap, so they
+// leave the work to the CPU flow; the float output must be addressable in whole elements.
 auto MetalImagePreprocessor::supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool {
-  return op == ImageOperation::Fused && accepts(src.memory()->memory_type()) && accepts(dst.memory()->memory_type()) &&
-         src.data_type() == core::DataType::Uint8 && dst.data_type() == core::DataType::Float32 &&
+  return op == ImageOperation::Fused && state_->unified && accepts(src.memory()->memory_type()) &&
+         accepts(dst.memory()->memory_type()) && src.data_type() == core::DataType::Uint8 &&
+         dst.data_type() == core::DataType::Float32 &&
          (src.format() == core::ImageFormat::InterRgb || src.format() == core::ImageFormat::InterBgr) &&
-         (dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::PlanarBgr);
+         (dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::PlanarBgr) &&
+         dst.stride()[1] % sizeof(float) == 0 && dst.stride()[2] % sizeof(float) == 0;
 }
 
 auto MetalImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
@@ -109,25 +122,29 @@ auto MetalImagePreprocessor::fused(core::Image& dst, const ImageTransform& trans
     KZ_CHECK_RETURN(!from.empty() && !to.empty(), false, "metal: empty resize region");
     KZ_CHECK_RETURN(from == core::intersect(from, src.rect()) && to == core::intersect(to, dst.rect()), false,
                     "metal: resize region is outside its image");
-    const auto src_row = static_cast<std::size_t>(from.width) * 3;
-    const auto dst_row = static_cast<std::size_t>(dst.size().width) * sizeof(float);
-    const auto dst_plane = dst_row * static_cast<std::size_t>(dst.size().height);
+    const auto* input = static_cast<const std::byte*>(src.memory()->cpu(stream));
+    auto* output = dst.memory()->mutable_cpu(stream);
+    KZ_CHECK_RETURN(input != nullptr && output != nullptr, false, "metal: host buffers are unavailable");
+    const auto src_stride = src.stride()[1];
+    const auto* src_origin =
+        input + static_cast<std::size_t>(from.y) * src_stride + static_cast<std::size_t>(from.x) * 3;
+    const auto src_extent =
+        static_cast<std::size_t>(from.height - 1) * src_stride + static_cast<std::size_t>(from.width) * 3;
+    const auto dst_extent = 2 * dst.stride()[1] + static_cast<std::size_t>(dst.size().height - 1) * dst.stride()[2] +
+                            static_cast<std::size_t>(dst.size().width) * sizeof(float);
     const auto capacity = std::min(static_cast<std::size_t>([state_->device maxBufferLength]),
                                    static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()));
-    KZ_CHECK_RETURN(src_row <= capacity / static_cast<std::size_t>(from.height) && dst_plane <= capacity / 3, false,
+    KZ_CHECK_RETURN(src_extent <= capacity && dst_extent <= capacity, false,
                     "metal: image exceeds device buffer or kernel indexing limits");
-    if (!ensure_buffer(state_->device, state_->input, src_row * static_cast<std::size_t>(from.height)) ||
-        !ensure_buffer(state_->device, state_->output, dst_plane * 3))
-      return false;
-    const auto* input = static_cast<const std::byte*>(src.memory()->cpu(stream));
-    auto* output = static_cast<std::byte*>(dst.memory()->mutable_cpu(stream));
-    KZ_CHECK_RETURN(input != nullptr && output != nullptr, false, "metal: host buffers are unavailable");
-    auto* staged = static_cast<std::byte*>([state_->input contents]);
-    for (int y = 0; y < from.height; ++y)
-      std::memcpy(staged + static_cast<std::size_t>(y) * src_row,
-                  input + static_cast<std::size_t>(from.y + y) * src.stride()[1] + static_cast<std::size_t>(from.x) * 3,
-                  src_row);
+    NSUInteger src_offset = 0;
+    NSUInteger dst_offset = 0;
+    id<MTLBuffer> src_buffer = wrap_host(state_->device, src_origin, src_extent, src_offset);
+    id<MTLBuffer> dst_buffer = wrap_host(state_->device, output, dst_extent, dst_offset);
+    KZ_CHECK_RETURN(src_buffer != nil && dst_buffer != nil, false, "metal: cannot wrap host image memory");
     Params params{};
+    params.src_row = static_cast<std::uint32_t>(src_stride);
+    params.dst_row = static_cast<std::uint32_t>(dst.stride()[2] / sizeof(float));
+    params.dst_plane = static_cast<std::uint32_t>(dst.stride()[1] / sizeof(float));
     params.sw = static_cast<std::uint32_t>(from.width);
     params.sh = static_cast<std::uint32_t>(from.height);
     params.dw = static_cast<std::uint32_t>(dst.size().width);
@@ -150,22 +167,16 @@ auto MetalImagePreprocessor::fused(core::Image& dst, const ImageTransform& trans
     id<MTLComputeCommandEncoder> encoder = [command computeCommandEncoder];
     KZ_CHECK_RETURN(command != nil && encoder != nil, false, "metal: command allocation failed");
     [encoder setComputePipelineState:state_->pipeline];
-    [encoder setBuffer:state_->input offset:0 atIndex:0];
-    [encoder setBuffer:state_->output offset:0 atIndex:1];
+    [encoder setBuffer:src_buffer offset:src_offset atIndex:0];
+    [encoder setBuffer:dst_buffer offset:dst_offset atIndex:1];
     [encoder setBytes:&params length:sizeof(params) atIndex:2];
     [encoder dispatchThreads:MTLSizeMake(params.dw, params.dh, 1) threadsPerThreadgroup:MTLSizeMake(16, 16, 1)];
     [encoder endEncoding];
     [command commit];
-    // Host consumers and pool reuse must wait for the GPU, even on unified memory.
+    // The wrapped host images must not be released or reused before the GPU is done with them.
     [command waitUntilCompleted];
     KZ_CHECK_RETURN([command status] == MTLCommandBufferStatusCompleted, false, "metal: execution failed: {}",
                     [[[command error] localizedDescription] UTF8String]);
-    const auto* result = static_cast<const std::byte*>([state_->output contents]);
-    for (std::size_t c = 0; c < 3; ++c) {
-      for (int y = 0; y < dst.size().height; ++y)
-        std::memcpy(output + c * dst.stride()[1] + static_cast<std::size_t>(y) * dst.stride()[2],
-                    result + c * dst_plane + static_cast<std::size_t>(y) * dst_row, dst_row);
-    }
     return true;
   }
 }
