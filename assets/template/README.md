@@ -38,6 +38,11 @@ most 64) to `ImageModel::create`.
 | `resize_short_size` | `-1` | Short side before `center_crop` |
 | `pad_scale` | `1.0` | Scale of `pad_outside` |
 
+A cascade passes each detection as `src_rect` to `process_sync`. Only `pad_outside` clips it to
+the image; for the other resize types a region leaving the image fails the call, so grow and clip
+detections with `hrt::core::pad_scale(box, scale_w, scale_h, image.rect())`. `center_crop` can still
+leave a clipped box when `resize_short_size` is below the input size.
+
 ## Engine config
 
 | Engine | Keys (all optional) |

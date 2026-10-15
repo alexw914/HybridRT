@@ -131,6 +131,8 @@ public:
   auto operator=(ImagePreprocessor&&) -> ImagePreprocessor& = delete;
 
   // An empty `src_rect` selects the whole source; `param.device` is ignored.
+  // Fails when the region read leaves the source: only pad_outside clips
+  // `src_rect`, so clip boxes for the others with core::pad_scale.
   auto process(core::Image& dst, const core::Image& src, const core::Rect& src_rect,
                const ImagePreprocessorParam& param, core::Stream* stream = nullptr) -> std::optional<ImageTransform>;
 

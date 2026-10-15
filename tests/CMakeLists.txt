@@ -50,6 +50,7 @@ if(TARGET hybridrt_example_image_model AND HRT_USE_ORT)
 endif()
 
 hybridrt_add_unit_test(hrtc SOURCES hrtc/hrtc_test.cpp DEPENDS hrt::hrtc kitzoo::os)
+hybridrt_add_unit_test(define SOURCES core/define_test.cpp DEPENDS hrt::hybridrt)
 hybridrt_add_unit_test(memory SOURCES core/memory_test.cpp DEPENDS hrt::hybridrt)
 hybridrt_add_unit_test(image_preprocessor SOURCES preprocess/image_preprocessor_test.cpp DEPENDS hrt::hybridrt)
 

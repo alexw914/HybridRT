@@ -97,6 +97,12 @@ struct Rect2f {
 
 auto intersect(const Rect2f& a, const Rect2f& b) -> Rect2f;
 
+// Grows `rect` about its center by scale_w x scale_h, as a cascade grows a
+// detection before the next stage, and returns the whole pixels it covers
+// inside `bounds` (the image rect), a valid src_rect for any resize_type;
+// empty when they do not overlap.
+auto pad_scale(const Rect2f& rect, float scale_w, float scale_h, const Rect& bounds) -> Rect;
+
 // Angle in degrees, clockwise in image coordinates (y down).
 struct RotatedRect {
   Point2f center;

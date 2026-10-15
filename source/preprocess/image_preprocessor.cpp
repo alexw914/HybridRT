@@ -218,6 +218,12 @@ auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const 
   const auto rect = src_rect.empty() ? src.rect() : src_rect;
   if (!calc_resize_position(transform.dst_roi, transform.src_roi, dst.rect(), rect, src.size(), param))
     return std::nullopt;
+  // Only pad_outside clips by itself; reading past the image would abort in OpenCV.
+  const auto& read = transform.src_roi;
+  KZ_CHECK_RETURN(core::intersect(read, src.rect()) == read, std::nullopt,
+                  "ImagePreprocessor: source region ({}, {}, {}x{}) leaves the {}x{} image; clip it with "
+                  "core::pad_scale",
+                  read.x, read.y, read.width, read.height, src.size().width, src.size().height);
   adjust_roi(transform.dst_roi, transform.src_roi);
 
   const core::Image* input = &src;
