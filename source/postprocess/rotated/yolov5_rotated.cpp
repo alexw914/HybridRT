@@ -36,7 +36,7 @@ public:
 protected:
   auto decode(RotatedResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    if (outputs.size() != param_.head_num)
+    if (outputs.size() != param_.strides.size())
       return false;
     for (std::size_t head = 0; head < outputs.size(); ++head) {
       const auto ok =
@@ -50,7 +50,7 @@ protected:
 private:
   template <typename Grid>
   auto decode_head(RotatedResultMap& result, const Grid& grid, std::size_t head) const -> void {
-    const auto stride = param_.strides_per_head[head];
+    const auto stride = param_.strides[head];
     const auto& anchors = param_.anchors[head];
     const auto min_objectness = grid.raw_bound(min_objectness_logit_);
     const auto channels = param_.class_num + 6;

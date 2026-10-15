@@ -77,9 +77,7 @@
         "postprocess": {
           "type": "YoloV5Detect",
           "class_num": 80,
-          "head_num": 3,
-          "anchors_per_head": [3, 3, 3],
-          "strides_per_head": [8, 16, 32],
+          "strides": [8, 16, 32],
           "anchors": [[10, 13, 16, 30, 33, 23], [30, 61, 62, 45, 59, 119], [116, 90, 156, 198, 373, 326]],
           "confidence_threshold": [0.25],
           "iou_threshold": [0.45]
@@ -117,9 +115,7 @@
         "postprocess": {
           "type": "YoloV5Rotated",
           "class_num": 15,
-          "head_num": 3,
-          "anchors_per_head": [3, 3, 3],
-          "strides_per_head": [8, 16, 32],
+          "strides": [8, 16, 32],
           "anchors": [[10, 13, 16, 30, 33, 23], [30, 61, 62, 45, 59, 119], [116, 90, 156, 198, 373, 326]],
           "confidence_threshold": [0.25],
           "iou_threshold": [0.45]

@@ -129,8 +129,8 @@ TEST(DetectYoloV5Test, KeepsLowObjectnessAboveThreshold) {
   // Objectness 0.4 (logit < 0.25) with a confident class still clears 0.25.
   const auto output = proto(DataType::Float32, {1, 6, 2, 2});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
-  auto config = Json::parse(R"({"class_num": 1, "head_num": 1, "anchors_per_head": [1], "strides_per_head": [8],
-                                "anchors": [[8, 8]], "confidence_threshold": [0.25], "iou_threshold": [0.45]})");
+  auto config = Json::parse(
+      R"({"class_num": 1, "strides": [8], "anchors": [[8, 8]], "confidence_threshold": [0.25], "iou_threshold": [0.45]})");
   auto postprocessor = hrt::postprocess::create_detect_postprocessor("YoloV5Detect", config, engine);
   ASSERT_NE(postprocessor, nullptr);
 
@@ -147,6 +147,29 @@ TEST(DetectYoloV5Test, KeepsLowObjectnessAboveThreshold) {
   EXPECT_FLOAT_EQ(box.rect.x, 0.0F);
   EXPECT_FLOAT_EQ(box.rect.width, 8.0F);
   EXPECT_NEAR(box.score, 0.4F * sigmoid(10.0F), 1e-5F);
+}
+
+TEST(DetectYoloV5Test, TakesOneStrideAndAnchorListPerHead) {
+  const auto output = proto(DataType::Float32, {1, 12, 2, 2});
+  FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
+  // Two anchors in the head: 2 * (class_num + 5) channels.
+  const auto good = Json::parse(
+      R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "strides": [8], "anchors": [[8, 8, 16, 16]]})");
+  EXPECT_TRUE(hrt::postprocess::check_config("YoloV5Detect", good).empty());
+  EXPECT_NE(hrt::postprocess::create_detect_postprocessor("YoloV5Detect", good, engine), nullptr);
+
+  // The removed head_num, anchors_per_head and strides_per_head are unknown keys.
+  const auto old = Json::parse(
+      R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "head_num": 1, "anchors_per_head": [2], "strides_per_head": [8],
+                                   "anchors": [[8, 8, 16, 16]]})");
+  EXPECT_EQ(hrt::postprocess::check_config("YoloV5Detect", old).size(), 3U);
+
+  for (
+      const auto* bad :
+      {R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "strides": [8, 16], "anchors": [[8, 8, 16, 16]]})",
+       R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "strides": [8], "anchors": [[8, 8, 16]]})",
+       R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "strides": [8], "anchors": [[8, 8]]})"})
+    EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV5Detect", Json::parse(bad), engine), "") << bad;
 }
 
 TEST(DetectGeneralTest, AppliesNmsAndMapsToSource) {

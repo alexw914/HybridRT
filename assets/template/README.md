@@ -68,7 +68,7 @@ each in [0, 1].
 | `type` | Keys |
 | --- | --- |
 | `YoloV8Detect`, `YoloV8Rotated` | `class_num`, `strides` (one per output head), `reg_max` (16), thresholds |
-| `YoloV5Detect`, `YoloV5Rotated` | `class_num`, `head_num`, `anchors_per_head`, `strides_per_head`, `anchors` (per head: w0, h0, w1, h1, ...), thresholds |
+| `YoloV5Detect`, `YoloV5Rotated` | `class_num`, `strides` (one per output head), `anchors` (one list per head: w0, h0, w1, h1, ...), thresholds |
 | `GeneralDetect`, `GeneralRotated` | `class_num`, thresholds; decoded `[1, 4 + classes (+ angle), N]` output |
 | `YoloKeypoint` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), thresholds |
 | `GeneralKeypoint` | `general_keypoint_type`: `heatmap`, `point_with_visible`, `point_channel_first`, `point_channel_last` |

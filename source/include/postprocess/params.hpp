@@ -17,19 +17,18 @@
 namespace hrt::postprocess {
 
 // Anchor-based heads: per anchor x, y, w, h, [theta,] objectness, classes.
+// One stride and one anchor list per output head.
 struct YoloV5Param {
   unsigned int class_num = 0;
-  unsigned int head_num = 0;
-  Vector<int> anchors_per_head;
-  Vector<float> strides_per_head;
+  Vector<float> strides;
   // Per head: w0, h0, w1, h1, ...
   Vector<Vector<float>> anchors;
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV5Param, class_num, head_num, anchors_per_head, strides_per_head,
-                                                anchors, confidence_threshold, iou_threshold)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV5Param, class_num, strides, anchors, confidence_threshold,
+                                                iou_threshold)
 
 // Anchor-free heads: 4 * reg_max distance bins, [theta,] classes.
 struct YoloV8Param {

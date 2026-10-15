@@ -64,17 +64,15 @@ auto check_yolov5(YoloV5Param& param, const engine::Engine& engine, std::size_t 
     return false;
   const auto input = engine_input_size(engine);
   const auto& outputs = engine.output_protos();
-  if (!input || outputs.size() != param.head_num || param.strides_per_head.size() != param.head_num ||
-      param.anchors_per_head.size() != param.head_num || param.anchors.size() != param.head_num) {
-    KZ_LOG_ERROR("yolov5: head_num, strides_per_head, anchors_per_head and anchors must match the {} outputs",
-                 outputs.size());
+  if (!input || outputs.size() != param.strides.size() || outputs.size() != param.anchors.size()) {
+    KZ_LOG_ERROR("yolov5: strides and anchors must match the {} outputs", outputs.size());
     return false;
   }
-  for (std::size_t i = 0; i < param.head_num; ++i) {
+  for (std::size_t i = 0; i < outputs.size(); ++i) {
     const auto head = head_shape(outputs[i], engine.proto().output_layout);
-    const auto anchors = static_cast<std::size_t>(param.anchors_per_head[i]);
-    const auto stride = param.strides_per_head[i];
-    if (!head || param.anchors[i].size() != anchors * 2 ||
+    const auto anchors = param.anchors[i].size() / 2;
+    const auto stride = param.strides[i];
+    if (!head || anchors == 0 || param.anchors[i].size() % 2 != 0 ||
         static_cast<float>(head->cols) * stride != static_cast<float>(input->width) ||
         static_cast<float>(head->rows) * stride != static_cast<float>(input->height) ||
         static_cast<std::size_t>(head->channels) != (param.class_num + 5 + extra_channels) * anchors) {
