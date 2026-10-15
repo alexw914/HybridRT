@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: tools/hrt_model_bench.cpp
-// Description: Measures engine inference speed of every algo and backend in an
-//              .hrtc package or a JSON manifest on generated inputs.
+// Description: Measures engine inference speed of every backend of one algo in
+//              an .hrtc package or a JSON manifest on generated inputs.
 // -----------------------------------------------------------------------------
 
 #include <hrt/engine/engine.hpp>
@@ -10,6 +10,7 @@
 
 #include <kitzoo/core/cli.hpp>
 #include <kitzoo/log/logger.hpp>
+#include <kitzoo/time/time.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -86,12 +87,12 @@ auto bench(const hrt::hrtc::AlgoParam& algo, const hrt::hrtc::EngineParam& param
   }
   hrt::Vector<double> times(static_cast<std::size_t>(iterations));
   for (auto& time : times) {
-    const auto start = std::chrono::steady_clock::now();
+    const kitzoo::time::Stopwatch watch;
     if (!run()) {
       KZ_LOG_ERROR("{}: inference failed", name);
       return false;
     }
-    time = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    time = watch.elapsed_as<std::chrono::duration<double, std::milli>>().count();
   }
   std::sort(times.begin(), times.end());
   const auto mean = std::accumulate(times.begin(), times.end(), 0.0) / static_cast<double>(times.size());
@@ -106,18 +107,20 @@ auto bench(const hrt::hrtc::AlgoParam& algo, const hrt::hrtc::EngineParam& param
 } // namespace
 
 auto main(int argc, char** argv) -> int {
-  kitzoo::core::Options options("hrt-model-bench", "Measure engine inference speed of an .hrtc package or manifest");
+  kitzoo::core::Options options("hrt-model-bench",
+                                "Measure engine inference speed of one algo of an .hrtc package or manifest");
   auto add = options.add_options();
   add("m,model", ".hrtc package or .json manifest", kitzoo::core::value<hrt::String>());
-  add("a,algo", "Algo name (default: all)", kitzoo::core::value<hrt::String>());
+  add("n,name", "Algo name", kitzoo::core::value<hrt::String>());
   add("e,engine", "Engine type, e.g. ort (default: all)", kitzoo::core::value<hrt::String>());
-  add("n,iterations", "Timed runs per engine", kitzoo::core::value<int>()->default_value("100"));
+  add("i,iterations", "Timed runs per engine", kitzoo::core::value<int>()->default_value("100"));
   add("w,warmup", "Untimed runs before timing", kitzoo::core::value<int>()->default_value("10"));
   add("h,help", "Print help");
   const auto args = options.parse(argc, argv);
   const auto iterations = args["iterations"].as<int>();
   const auto warmup = args["warmup"].as<int>();
-  if (args.count("help") != 0U || args.count("model") == 0U || iterations < 1 || warmup < 0) {
+  if (args.count("help") != 0U || args.count("model") == 0U || args.count("name") == 0U || iterations < 1 ||
+      warmup < 0) {
     KZ_LOG_INFO("\n{}", options.help());
     return args.count("help") != 0U ? 0 : 1;
   }
@@ -126,22 +129,23 @@ auto main(int argc, char** argv) -> int {
   const auto package = model.extension() == ".json" ? hrt::hrtc::load_json(model) : hrt::hrtc::load(model);
   if (!package)
     return 1;
-  const auto algo_name = args.count("algo") != 0U ? args["algo"].as<hrt::String>() : hrt::String{};
+  const auto name = args["name"].as<hrt::String>();
+  const auto* algo = package->find(name);
+  if (algo == nullptr) {
+    KZ_LOG_ERROR("no algo {} in {}", name, model.string());
+    return 1;
+  }
   const auto engine_type = args.count("engine") != 0U ? args["engine"].as<hrt::String>() : hrt::String{};
   bool ok = true;
   bool matched = false;
-  for (const auto& algo : package->algos) {
-    if (!algo_name.empty() && algo.name != algo_name)
+  for (const auto& param : algo->engines) {
+    if (!engine_type.empty() &&
+        hrt::engine::engine_type_from(param.engine_type) != hrt::engine::engine_type_from(engine_type))
       continue;
-    for (const auto& param : algo.engines) {
-      if (!engine_type.empty() &&
-          hrt::engine::engine_type_from(param.engine_type) != hrt::engine::engine_type_from(engine_type))
-        continue;
-      matched = true;
-      ok = bench(algo, param, warmup, iterations) && ok;
-    }
+    matched = true;
+    ok = bench(*algo, param, warmup, iterations) && ok;
   }
   if (!matched)
-    KZ_LOG_ERROR("no engine of the package matches the algo and engine filters");
+    KZ_LOG_ERROR("algo {} has no engine matching the engine filter", name);
   return ok && matched ? 0 : 1;
 }

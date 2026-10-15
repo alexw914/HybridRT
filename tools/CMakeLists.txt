@@ -8,7 +8,7 @@ set_target_properties(hrt_compress PROPERTIES OUTPUT_NAME hrt-compress RUNTIME_O
 hybridrt_apply_warnings(hrt_compress)
 
 add_executable(hrt_model_bench hrt_model_bench.cpp)
-target_link_libraries(hrt_model_bench PRIVATE hrt::hybridrt kitzoo::core kitzoo::log)
+target_link_libraries(hrt_model_bench PRIVATE hrt::hybridrt kitzoo::core kitzoo::log kitzoo::time)
 set_target_properties(hrt_model_bench PROPERTIES OUTPUT_NAME hrt-model-bench RUNTIME_OUTPUT_DIRECTORY
                                                                              ${HYBRIDRT_TOOLS_OUTPUT_DIR})
 hybridrt_apply_warnings(hrt_model_bench)

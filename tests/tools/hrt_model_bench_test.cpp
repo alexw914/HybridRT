@@ -56,11 +56,12 @@ protected:
 TEST_F(HrtModelBenchTest, ChecksArguments) {
   EXPECT_EQ(run({"-h"}).exit_code, 0);
   EXPECT_EQ(run({}).exit_code, 1);
-  EXPECT_EQ(run({"-m", manifest_, "-n", "0"}).exit_code, 1);
+  EXPECT_EQ(run({"-m", manifest_}).exit_code, 1);
+  EXPECT_EQ(run({"-m", manifest_, "-n", "relu", "-i", "0"}).exit_code, 1);
 }
 
 TEST_F(HrtModelBenchTest, TimesManifestAndPackage) {
-  const auto from_manifest = run({"-m", manifest_, "-n", "3", "-w", "1"});
+  const auto from_manifest = run({"-m", manifest_, "-n", "relu", "-i", "3", "-w", "1"});
   EXPECT_EQ(from_manifest.exit_code, 0);
   EXPECT_NE(from_manifest.output.find("relu/ort"), hrt::String::npos);
   EXPECT_NE(from_manifest.output.find("FPS"), hrt::String::npos);
@@ -69,17 +70,19 @@ TEST_F(HrtModelBenchTest, TimesManifestAndPackage) {
   ASSERT_TRUE(package);
   const auto path = dir_ / "bench.hrtc";
   ASSERT_TRUE(hrt::hrtc::save(*package, path));
-  EXPECT_EQ(run({"-m", path.string(), "-a", "relu", "-e", "ort", "-n", "3", "-w", "1"}).exit_code, 0);
+  EXPECT_EQ(run({"-m", path.string(), "-n", "relu", "-e", "ort", "-i", "3", "-w", "1"}).exit_code, 0);
 }
 
 TEST_F(HrtModelBenchTest, FailsWhenNothingRuns) {
-  const auto no_algo = run({"-m", manifest_, "-a", "missing"});
+  const auto no_algo = run({"-m", manifest_, "-n", "missing"});
   EXPECT_EQ(no_algo.exit_code, 1);
-  EXPECT_NE(no_algo.output.find("no engine"), hrt::String::npos);
-  EXPECT_EQ(run({"-m", manifest_, "-e", "ncnn"}).exit_code, 1);
+  EXPECT_NE(no_algo.output.find("no algo missing"), hrt::String::npos);
+  const auto no_engine = run({"-m", manifest_, "-n", "relu", "-e", "ncnn"});
+  EXPECT_EQ(no_engine.exit_code, 1);
+  EXPECT_NE(no_engine.output.find("no engine"), hrt::String::npos);
 
   kitzoo::os::write_file(dir_ / "broken.onnx", "not a model");
-  const auto broken = run({"-m", write_manifest("broken.json", dir_ / "broken.onnx"), "-n", "1"});
+  const auto broken = run({"-m", write_manifest("broken.json", dir_ / "broken.onnx"), "-n", "relu", "-i", "1"});
   EXPECT_EQ(broken.exit_code, 1);
   EXPECT_NE(broken.output.find("did not load"), hrt::String::npos);
 }

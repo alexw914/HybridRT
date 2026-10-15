@@ -72,11 +72,11 @@ hrt-compress -i model.hrtc -x extracted/
 hrt-compress -c -j manifest.json
 ```
 
-`tools/hrt-model-bench` times engine inference alone, on generated inputs, for every algo and
-backend of a package or manifest, using each engine's config:
+`tools/hrt-model-bench` times engine inference alone, on generated inputs, for every backend of
+one algo of a package or manifest, using each engine's config:
 
 ```sh
-hrt-model-bench -m model.hrtc|manifest.json [-a algo] [-e ort] [-n 100] [-w 10]
+hrt-model-bench -m model.hrtc|manifest.json -n algo [-e ort] [-i 100] [-w 10]
 ```
 
 ## Backends
