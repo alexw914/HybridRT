@@ -70,3 +70,18 @@ each in [0, 1].
 | `InstanceSegment` | `class_num`, `mask_threshold` (0.5), thresholds |
 | `SemanticSegment` | none |
 | `GeneralClassify` | `classify_postprocess_type`: `none`, `sigmoid`, `softmax` |
+
+## results.json
+
+`results.json` is the output layout of `hrt-validate`, the same for every task. `engine` is
+the `-e` value or `null`. Each image has `file`, `width`, `height`, `error` (`null` on success; then `results` is empty)
+and `results`, whose items always carry every field, empty when the task has none:
+
+| Field | Value |
+| --- | --- |
+| `class_id`, `score` | Detection class and score; classify: top 1 of output 0. Semantic segments and `GeneralKeypoint` use score 1. |
+| `x`, `y`, `width`, `height` | Box in source pixels, the top-left of the unrotated box; the full image for classify, semantic segments and `GeneralKeypoint`. |
+| `angle` | Rotated boxes; 0 otherwise. |
+| `keypoints` | `[x, y, score, visible]` per keypoint, `visible` 0 unlabeled, 1 invisible, 2 visible. |
+| `mask` | `{"rect": [x, y, w, h], "rle": [...]}`: row-major run lengths over `rect`, alternating 0 and 1, starting with 0; `null` without a mask. |
+| `cls` | Classify, one item per engine output: `output` index, `topk` `[[class, score], ...]` (5), `scores` by class. |

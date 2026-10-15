@@ -79,6 +79,16 @@ one algo of a package or manifest, using each engine's config:
 hrt-model-bench -m model.hrtc|manifest.json -n algo [-e ort] [-i 100] [-w 10]
 ```
 
+`tools/hrt-validate` runs one algo on every image of a directory on 8 threads and writes the
+results of any task in one JSON layout (`assets/template/results.json`), by default to
+`<input>_<algo>.json` beside the directory; `-r` also saves the images with drawn results. It
+exits with 1 if any image fails:
+
+```sh
+hrt-validate -m model.hrtc|manifest.json -n algo -i images/ [-e ort] [-o images_algo.json] \
+             [-r drawn/] [--preprocess-num 3] [--engine-num 2] [--postprocess-num 3]
+```
+
 ## Backends
 
 A backend is enabled by pointing CMake at its SDK. Version is the minimum supported release and,

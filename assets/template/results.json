@@ -1,0 +1,28 @@
+{
+  "model": "yolov8n-pose",
+  "task": "keypoint",
+  "type": "YoloKeypoint",
+  "engine": "ort",
+  "images": [
+    {
+      "file": "bus.jpg",
+      "width": 810,
+      "height": 1080,
+      "error": null,
+      "results": [
+        {
+          "class_id": 0,
+          "score": 0.89,
+          "x": 48.2,
+          "y": 398.5,
+          "width": 196.7,
+          "height": 503.1,
+          "angle": 0.0,
+          "keypoints": [[142.1, 430.8, 0.97, 2], [150.3, 422.6, 0.95, 2], [0.0, 0.0, 0.12, 1]],
+          "mask": { "rect": [48, 398, 197, 504], "rle": [120, 35, 160, 40, 98933] },
+          "cls": [{ "output": 0, "topk": [[1, 0.93], [0, 0.07]], "scores": [0.07, 0.93] }]
+        }
+      ]
+    }
+  ]
+}
