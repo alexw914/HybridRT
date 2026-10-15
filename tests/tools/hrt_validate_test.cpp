@@ -74,6 +74,9 @@ TEST_F(HrtValidateTest, WritesClassifyResults) {
                            output_, "-r", (dir_ / "drawn").string()});
   ASSERT_EQ(result.exit_code, 0) << result.output;
   EXPECT_FALSE(cv::imread((dir_ / "drawn" / "a.png").string()).empty());
+  // Counts are logged.
+  EXPECT_NE(result.output.find("total images: 1"), hrt::String::npos) << result.output;
+  EXPECT_NE(result.output.find("1/1 images inferred"), hrt::String::npos) << result.output;
   const auto json = read_output();
   EXPECT_EQ(json["model"], "classify");
   EXPECT_EQ(json["task"], "classify");
@@ -109,6 +112,7 @@ TEST_F(HrtValidateTest, RecordsUnreadableImages) {
   // Without -o the results go beside the input directory.
   const auto result = run({"-m", path.string(), "-n", "classify", "-i", (dir_ / "images").string() + "/"});
   EXPECT_EQ(result.exit_code, 1);
+  EXPECT_NE(result.output.find("1/2 images inferred"), hrt::String::npos) << result.output;
   output_ = (dir_ / "images_classify.json").string();
   const auto json = read_output();
   EXPECT_TRUE(json["engine"].is_null());

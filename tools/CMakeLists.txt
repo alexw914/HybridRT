@@ -15,7 +15,7 @@ hybridrt_apply_warnings(hrt_model_bench)
 
 if(TARGET opencv_imgcodecs)
     add_executable(hrt_validate hrt_validate.cpp)
-    target_link_libraries(hrt_validate PRIVATE hrt::hybridrt kitzoo::core kitzoo::log kitzoo::os kitzoo::thread opencv_imgcodecs)
+    target_link_libraries(hrt_validate PRIVATE hrt::hybridrt kitzoo::core kitzoo::log kitzoo::os kitzoo::thread kitzoo::time opencv_imgcodecs)
     set_target_properties(hrt_validate PROPERTIES OUTPUT_NAME hrt-validate RUNTIME_OUTPUT_DIRECTORY
                                                                            ${HYBRIDRT_TOOLS_OUTPUT_DIR})
     hybridrt_apply_warnings(hrt_validate)

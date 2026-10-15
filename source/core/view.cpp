@@ -6,8 +6,6 @@
 
 #include <hrt/core/view.hpp>
 
-#include <kitzoo/log/logger.hpp>
-
 #include <algorithm>
 #include <opencv2/imgproc.hpp>
 
@@ -43,12 +41,8 @@ auto blend_mask(cv::Mat& roi, const cv::Mat& bits, std::size_t cls) -> void {
 
 auto draw(cv::Mat& canvas, const postprocess::DetectResultMap& result) -> void {
   for (const auto& [cls, boxes] : result) {
-    for (const auto& box : boxes) {
-      const auto& r = box.rect;
-      KZ_LOG_INFO("class {} score {:.3f} box ({:.0f}, {:.0f}, {:.0f} x {:.0f})", cls, box.score, r.x, r.y, r.width,
-                  r.height);
+    for (const auto& box : boxes)
       draw_box(canvas, box, cls, 3);
-    }
   }
 }
 
@@ -56,8 +50,6 @@ auto draw(cv::Mat& canvas, const postprocess::RotatedResultMap& result) -> void 
   for (const auto& [cls, boxes] : result) {
     for (const auto& box : boxes) {
       const auto& r = box.rect;
-      KZ_LOG_INFO("class {} score {:.3f} center ({:.0f}, {:.0f}) size {:.0f} x {:.0f} angle {:.1f}", cls, box.score,
-                  r.center.x, r.center.y, r.size.width, r.size.height, r.angle);
       cv::Point2f corners[4];
       cv::RotatedRect({r.center.x, r.center.y}, {r.size.width, r.size.height}, r.angle).points(corners);
       for (int i = 0; i < 4; ++i)
@@ -75,7 +67,6 @@ auto draw(cv::Mat& canvas, const postprocess::ClassifyResult& result) -> void {
     if (scores.empty())
       continue;
     const auto best = static_cast<std::size_t>(std::max_element(scores.begin(), scores.end()) - scores.begin());
-    KZ_LOG_INFO("output {}: top class {} score {:.3f}", i, best, scores[best]);
     draw_label(canvas, best, scores[best], {8, 30 * ++line});
   }
 }
@@ -111,11 +102,7 @@ auto draw(cv::Mat& canvas, const postprocess::KeypointResultMap& result) -> void
   for (const auto& [cls, objects] : result) {
     for (const auto& object : objects) {
       const auto& points = object.keypoints;
-      const auto shown = std::count_if(points.begin(), points.end(), visible);
-      const auto& r = object.box.rect;
-      KZ_LOG_INFO("class {} score {:.3f} box ({:.0f}, {:.0f}, {:.0f} x {:.0f}) keypoints {}/{} visible", cls,
-                  object.box.score, r.x, r.y, r.width, r.height, shown, points.size());
-      if (cls >= 0 && !r.empty())
+      if (cls >= 0 && !object.box.rect.empty())
         draw_box(canvas, object.box, static_cast<std::size_t>(cls), 2);
       if (points.size() == 17) {
         for (const auto& [a, b] : kSkeleton) {
@@ -138,10 +125,7 @@ auto draw(cv::Mat& canvas, const postprocess::SegmentResultMap& result) -> void 
     for (const auto& object : objects) {
       if (cls < 0)
         continue;
-      const auto& r = object.box.rect;
       const auto& m = object.mask;
-      KZ_LOG_INFO("class {} score {:.3f} box ({:.0f}, {:.0f}, {:.0f} x {:.0f}) mask {} px", cls, object.box.score, r.x,
-                  r.y, r.width, r.height, std::count(m.data.begin(), m.data.end(), std::uint8_t{1}));
       const cv::Rect region(m.rect.x, m.rect.y, m.rect.width, m.rect.height);
       const cv::Mat bits(m.rect.height, m.rect.width, CV_8U, const_cast<std::uint8_t*>(m.data.data()));
       cv::Mat roi = canvas(region);
