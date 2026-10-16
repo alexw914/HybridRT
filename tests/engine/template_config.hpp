@@ -21,7 +21,7 @@ namespace hrt::test {
 inline auto template_config(std::string_view engine_type) -> String {
   const kitzoo::json::Reader reader(std::filesystem::path(HRT_TEMPLATE_DIR) / "hrtc_template.json");
   for (const auto& backend : reader.raw()["algos"][0]["config"]["engine"]["backends"]) {
-    if (backend["engine_type"] == engine_type)
+    if (backend["engine_type"].is_string() && backend["engine_type"].get_ref<const String&>() == engine_type)
       return backend.value("config", kitzoo::json::Json::object()).dump();
   }
   return {};

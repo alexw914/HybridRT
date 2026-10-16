@@ -33,10 +33,22 @@ if (NOT MNN_LIBRARY)
   message(FATAL_ERROR "Cannot found MNN library in ${MNN_ROOT}/lib")
 endif ()
 
-add_library(MNN UNKNOWN IMPORTED GLOBAL)
+if(WIN32)
+  find_file(MNN_RUNTIME NAMES MNN.dll HINTS "${MNN_ROOT}" PATH_SUFFIXES bin lib NO_DEFAULT_PATH)
+endif()
+
+if(WIN32 AND MNN_RUNTIME)
+  add_library(MNN SHARED IMPORTED GLOBAL)
+  set_target_properties(MNN PROPERTIES
+      IMPORTED_LOCATION "${MNN_RUNTIME}"
+      IMPORTED_IMPLIB "${MNN_LIBRARY}"
+      INTERFACE_COMPILE_DEFINITIONS USING_MNN_DLL)
+else()
+  add_library(MNN UNKNOWN IMPORTED GLOBAL)
+  set_target_properties(MNN PROPERTIES IMPORTED_LOCATION "${MNN_LIBRARY}")
+endif()
 
 set_target_properties(MNN PROPERTIES
-    IMPORTED_LOCATION ${MNN_LIBRARY}
     INTERFACE_INCLUDE_DIRECTORIES ${MNN_ROOT}/include
     )
 

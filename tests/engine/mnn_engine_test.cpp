@@ -26,7 +26,7 @@ auto relu_model() -> hrt::SharedPtr<const hrt::hrtc::Bytes> {
   auto y = _Relu(x);
   y->setName("y");
   const auto path = std::filesystem::temp_directory_path() / "hybridrt_mnn_relu.mnn";
-  Variable::save({y}, path.c_str());
+  Variable::save({y}, path.string().c_str());
   const auto content = kitzoo::os::read_file(path);
   std::filesystem::remove(path);
   return std::make_shared<const hrt::hrtc::Bytes>(content.begin(), content.end());

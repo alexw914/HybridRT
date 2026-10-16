@@ -125,7 +125,12 @@ endif()
 
 if(HRT_USE_MNN)
     target_sources(hybridrt PRIVATE engine/mnn_engine.cpp)
-    # Operators register from static initializers, so keep every object.
-    target_link_libraries(hybridrt PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,MNN>")
+    get_target_property(mnn_library_type MNN TYPE)
+    if(mnn_library_type STREQUAL "SHARED_LIBRARY")
+        target_link_libraries(hybridrt PRIVATE MNN)
+    else()
+        # Operators register from static initializers, so keep every object.
+        target_link_libraries(hybridrt PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,MNN>")
+    endif()
     target_compile_definitions(hybridrt PRIVATE HRT_USE_MNN)
 endif()

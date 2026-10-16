@@ -1,0 +1,6 @@
+file(LOCK "${HYBRIDRT_RUNTIME_DIR}/.hybridrt-runtime.lock" GUARD PROCESS)
+list(REMOVE_DUPLICATES HYBRIDRT_RUNTIME_DLLS)
+foreach(dll IN LISTS HYBRIDRT_RUNTIME_DLLS)
+    get_filename_component(name "${dll}" NAME)
+    file(COPY_FILE "${dll}" "${HYBRIDRT_RUNTIME_DIR}/${name}" ONLY_IF_DIFFERENT)
+endforeach()

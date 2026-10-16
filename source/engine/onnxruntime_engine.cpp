@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <numeric>
 #include <optional>
 
@@ -178,7 +179,8 @@ auto OrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
   }
   for (const auto& library : custom_op_libraries) {
     // Optional: a model that needs the operators fails to load without them.
-    if (auto* status = api_->RegisterCustomOpsLibrary_V2(session_options, library.c_str()); status != nullptr) {
+    const std::filesystem::path path(library);
+    if (auto* status = api_->RegisterCustomOpsLibrary_V2(session_options, path.c_str()); status != nullptr) {
       KZ_LOG_WARN("onnxruntime: skipping custom op library {}: {}", library, api_->GetErrorMessage(status));
       api_->ReleaseStatus(status);
     }

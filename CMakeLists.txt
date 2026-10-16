@@ -26,6 +26,7 @@ endif()
 
 include(HybridrtOptions)
 include(HybridrtWarnings)
+include(HybridrtRuntime)
 
 # -- Dependencies --------------------------------------------------------------
 include(external/kitzoo)

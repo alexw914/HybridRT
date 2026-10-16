@@ -63,7 +63,11 @@ list(APPEND TRT_LIBS_NAME nvinfer_plugin)
 list(APPEND TRT_LIBS_NAME nvinfer)
 
 foreach (trt_name ${TRT_LIBS_NAME})
-  find_library(${trt_name}_lib NAMES ${trt_name} HINTS ${TensorRT_ROOT} PATH_SUFFIXES lib)
+  set(trt_library_names ${trt_name})
+  if(WIN32)
+    list(PREPEND trt_library_names "${trt_name}_${TensorRT_VERSION_MAJOR}")
+  endif()
+  find_library(${trt_name}_lib NAMES ${trt_library_names} HINTS "${TensorRT_ROOT}" PATH_SUFFIXES lib lib/x64)
   if (NOT ${trt_name}_lib)
     set(TensorRT_FOUND OFF)
     message(FATAL_ERROR "Cannot found ${${trt_name}_lib} needed by TensorRT")
@@ -74,6 +78,17 @@ foreach (trt_name ${TRT_LIBS_NAME})
       INTERFACE_INCLUDE_DIRECTORIES ${TensorRT_INCLUDE_DIR}
       IMPORTED_LOCATION ${${trt_name}_lib}
   )
+  if(WIN32)
+    get_filename_component(trt_library_stem "${${trt_name}_lib}" NAME_WE)
+    find_file(${trt_name}_dll NAMES "${trt_library_stem}.dll"
+        HINTS "${TensorRT_ROOT}" PATH_SUFFIXES lib bin lib/x64 NO_DEFAULT_PATH)
+    if(NOT ${trt_name}_dll)
+      message(FATAL_ERROR "Cannot find ${trt_library_stem}.dll needed by TensorRT")
+    endif()
+    set_target_properties(TensorRT::${trt_name} PROPERTIES
+        IMPORTED_IMPLIB "${${trt_name}_lib}"
+        IMPORTED_LOCATION "${${trt_name}_dll}")
+  endif()
 endforeach ()
 
 set(TensorRT_FOUND ON)

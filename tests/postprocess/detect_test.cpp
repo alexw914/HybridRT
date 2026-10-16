@@ -75,7 +75,10 @@ TEST(DetectYoloV8Test, DecodesNhwcInt8) {
   ASSERT_NE(postprocessor, nullptr);
 
   const auto real = yolov8_values(true, 0.2F);
-  hrt::Vector<std::int8_t> quantized(real.begin(), real.end());
+  hrt::Vector<std::int8_t> quantized;
+  quantized.reserve(real.size());
+  for (const auto value : real)
+    quantized.push_back(static_cast<std::int8_t>(value));
   auto buffer = hrt::test::buffer_of(output, quantized);
   buffer->scale = 0.2F;
 

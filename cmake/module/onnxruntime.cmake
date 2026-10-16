@@ -27,6 +27,14 @@ set_target_properties(onnxruntime PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${ORT_ROOT}/include
 )
 
+if(WIN32)
+  find_file(ORT_RUNTIME NAMES onnxruntime.dll HINTS "${ORT_ROOT}" PATH_SUFFIXES lib bin NO_DEFAULT_PATH)
+  if(NOT ORT_RUNTIME)
+    message(FATAL_ERROR "Cannot find onnxruntime.dll in ${ORT_ROOT}/lib or bin")
+  endif()
+  set_target_properties(onnxruntime PROPERTIES IMPORTED_LOCATION "${ORT_RUNTIME}")
+endif()
+
 message(STATUS "Found onnxruntime API Version ${ORT_API_VERSION}: ${ORT_LIBRARY}")
 
 set(ORT_FOUND ON)

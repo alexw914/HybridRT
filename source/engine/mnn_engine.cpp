@@ -93,7 +93,7 @@ auto MnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
         KZ_LOG_ERROR("mnn: cannot create cache dir {}: {}", cache_dir, ec.message());
         return false;
       }
-      interpreter_->setCacheFile((std::filesystem::path(cache_dir) / cache_file).c_str());
+      interpreter_->setCacheFile((std::filesystem::path(cache_dir) / cache_file).string().c_str());
       tuning = MNN_GPU_TUNING_WIDE;
     }
     schedule.mode = tuning | MNN_GPU_MEMORY_BUFFER | MNN_GPU_MEMORY_IMAGE;

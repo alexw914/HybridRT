@@ -10,7 +10,7 @@
 #include <kitzoo/log/logger.hpp>
 
 #include <NvInferPlugin.h>
-#include <dlfcn.h>
+#include <filesystem>
 #include <mutex>
 #include <optional>
 #include <type_traits>
@@ -18,6 +18,15 @@
 #include "include/backend/cuda/cuda_common.hpp"
 #include "include/backend/cuda/cuda_host_memory.hpp"
 #include "include/core/config.hpp"
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
 
 namespace hrt::engine {
 
@@ -61,14 +70,27 @@ auto load_plugins(const Vector<String>& libraries) -> void {
   for (const auto& library : libraries) {
     if (loaded.contains(library))
       continue;
+#ifdef _WIN32
+    auto* handle = LoadLibraryW(std::filesystem::path(library).c_str());
+    if (handle == nullptr) {
+      KZ_LOG_WARN("tensorrt: skipping plugin library {}: Windows error {}", library, GetLastError());
+      continue;
+    }
+#else
     auto* handle = dlopen(library.c_str(), RTLD_NOW | RTLD_GLOBAL);
     if (handle == nullptr) {
       KZ_LOG_WARN("tensorrt: skipping plugin library {}: {}", library, dlerror());
       continue;
     }
+#endif
 #if HRT_TENSORRT_VERSION >= 80600
-    if ((dlsym(handle, "getPluginCreators") != nullptr || dlsym(handle, "getCreators") != nullptr) &&
-        getPluginRegistry()->loadLibrary(library.c_str()) == nullptr) {
+#ifdef _WIN32
+    const bool has_creators =
+        GetProcAddress(handle, "getPluginCreators") != nullptr || GetProcAddress(handle, "getCreators") != nullptr;
+#else
+    const bool has_creators = dlsym(handle, "getPluginCreators") != nullptr || dlsym(handle, "getCreators") != nullptr;
+#endif
+    if (has_creators && getPluginRegistry()->loadLibrary(library.c_str()) == nullptr) {
       KZ_LOG_WARN("tensorrt: cannot register the plugins of {}", library);
       continue;
     }

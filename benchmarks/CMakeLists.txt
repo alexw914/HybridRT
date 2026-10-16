@@ -15,6 +15,7 @@ function(hybridrt_add_benchmark name)
     target_link_libraries(${bench_name} PRIVATE benchmark::benchmark benchmark::benchmark_main ${ARG_DEPENDS})
     target_compile_definitions(${bench_name} PRIVATE HRT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     hybridrt_apply_warnings(${bench_name})
+    hybridrt_deploy_runtime(${bench_name})
 
     add_test(NAME bench_${name} COMMAND ${bench_name} --benchmark_min_time=0.01s)
     set_tests_properties(bench_${name} PROPERTIES LABELS benchmark)
