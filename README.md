@@ -27,7 +27,7 @@ Windows. Platforms the tests last ran on:
 | Linux x86_64, RTX 4090 | GCC 11.4 | TensorRT 10.16.1.11, ONNX Runtime 1.23.2 |
 | Linux x86_64 (WSL2, Ubuntu 24.04) | GCC 13.3 | none (CPU image operators and postprocessing) |
 | macOS arm64 | Apple Clang | ONNX Runtime 1.31.0 (CPU, CoreML), MNN 3.0.0 |
-| Windows x64 | MSVC 19.50 | ONNX Runtime 1.31.0, MNN 3.0.0, ncnn 20260526; TensorRT 10.16.1.11 on CUDA 12.6 (RTX 3060) |
+| Windows x64 | MSVC 19.50 | ONNX Runtime 1.31.0 |
 | RK3588 (Radxa Rock 5B+, Debian 12) | Arm GNU Toolchain 12.2 (cross) | RKNN runtime 2.3.2 with librga 1.10.1; MNN 2.5.0, ncnn 20260526 |
 
 Cross-compile for RK3588 with an aarch64 toolchain file whose glibc and libstdc++ are not newer
