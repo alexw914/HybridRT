@@ -101,31 +101,8 @@ jobs:
           "$PWD/external/$name/lib" >> $env:GITHUB_PATH
           "$PWD/external/opencv/build/x64/vc16/bin" >> $env:GITHUB_PATH
 
-      - name: Build MNN and ncnn CPU SDKs
-        run: |
-          Invoke-WebRequest https://github.com/alibaba/MNN/archive/refs/tags/3.0.0.zip -OutFile external/mnn.zip
-          Expand-Archive external/mnn.zip external
-          cmake -S external/MNN-3.0.0 -B build/mnn -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX="$PWD/external/mnn" -DMNN_BUILD_SHARED_LIBS=ON -DMNN_SEP_BUILD=OFF -DMNN_BUILD_TOOLS=OFF -DMNN_BUILD_CONVERTER=OFF -DMNN_METAL=OFF -DMNN_OPENCL=OFF -DMNN_VULKAN=OFF
-          if ($LASTEXITCODE -ne 0) { throw 'MNN configuration failed' }
-          cmake --build build/mnn --target MNN --parallel 4
-          if ($LASTEXITCODE -ne 0) { throw 'MNN build failed' }
-          cmake --install build/mnn
-          if ($LASTEXITCODE -ne 0) { throw 'MNN installation failed' }
-          New-Item -ItemType Directory -Force external/mnn/bin | Out-Null
-          Copy-Item build/mnn/MNN.dll external/mnn/bin/
-          "MNN_ROOT=$PWD/external/mnn" >> $env:GITHUB_ENV
-          Invoke-WebRequest https://github.com/Tencent/ncnn/archive/refs/tags/20260526.zip -OutFile external/ncnn.zip
-          Expand-Archive external/ncnn.zip external
-          cmake -S external/ncnn-20260526 -B build/ncnn -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_INSTALL_PREFIX="$PWD/external/ncnn" -DNCNN_VERSION=20260526 -DNCNN_VULKAN=OFF -DNCNN_BUILD_TOOLS=OFF -DNCNN_BUILD_EXAMPLES=OFF -DNCNN_BUILD_BENCHMARK=OFF -DNCNN_BUILD_TESTS=OFF -DNCNN_OPENMP=OFF -DNCNN_SHARED_LIB=OFF -DNCNN_RUNTIME_CPU=OFF -DNCNN_AVX=OFF -DNCNN_AVX2=OFF -DNCNN_AVX512=OFF
-          if ($LASTEXITCODE -ne 0) { throw 'ncnn configuration failed' }
-          cmake --build build/ncnn --parallel 4
-          if ($LASTEXITCODE -ne 0) { throw 'ncnn build failed' }
-          cmake --install build/ncnn
-          if ($LASTEXITCODE -ne 0) { throw 'ncnn installation failed' }
-          "ncnn_ROOT=$PWD/external/ncnn" >> $env:GITHUB_ENV
-
       - name: Configure
-        run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DORT_ROOT="$env:ORT_ROOT" -DOpenCV_DIR="$env:OpenCV_DIR" -DMNN_ROOT="$env:MNN_ROOT" -Dncnn_ROOT="$env:ncnn_ROOT"
+        run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DORT_ROOT="$env:ORT_ROOT" -DOpenCV_DIR="$env:OpenCV_DIR"
 
       - name: Build
         run: cmake --build build/debug --parallel 4
