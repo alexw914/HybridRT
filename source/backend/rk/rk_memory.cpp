@@ -66,9 +66,11 @@ auto dma_allocate(memory::BasePointer& pointer, std::size_t size) -> bool {
   request.len = size;
   request.fd_flags = O_CLOEXEC | O_RDWR;
   const auto allocated = ioctl(heap, kDmaHeapAlloc, &request);
+  // close() and the logger may overwrite errno.
+  const auto error = errno;
   close(heap);
   if (allocated < 0) {
-    KZ_LOG_ERROR("rk: dma-heap allocation of {} bytes failed: {}", size, std::strerror(errno));
+    KZ_LOG_ERROR("rk: dma-heap allocation of {} bytes from {} failed: {}", size, kDmaHeapPath, std::strerror(error));
     return false;
   }
   const auto fd = static_cast<int>(request.fd);

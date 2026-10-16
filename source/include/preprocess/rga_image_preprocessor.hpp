@@ -13,9 +13,10 @@
 
 namespace hrt::preprocess {
 
-// Fill and resize interleaved RGB/BGR uint8 images on the RGA; conversion
-// and normalization stay on the CPU. RGA addresses RkFd memory by fd and other
-// host memory by virtual address.
+// Fill and resize interleaved RGB/BGR uint8 images whose row stride is a
+// multiple of 16 pixels on the RGA; other images, conversion and normalization
+// stay on the CPU. RGA addresses RkFd memory by fd and RkVa memory by virtual
+// address; host heap images are staged into RkFd memory first.
 class RgaImagePreprocessor final : public ImagePreprocessor {
 public:
   KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Rga; }

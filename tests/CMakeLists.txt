@@ -18,7 +18,12 @@ function(hybridrt_add_unit_test name)
     target_compile_definitions(${test_name} PRIVATE HRT_TEMPLATE_DIR="${PROJECT_SOURCE_DIR}/assets/template")
     hybridrt_apply_warnings(${test_name})
     hybridrt_deploy_runtime(${test_name})
-    gtest_discover_tests(${test_name} DISCOVERY_TIMEOUT 30)
+    # Cross-compiled tests cannot run on the build host, so list them when CTest runs on the target.
+    if(CMAKE_CROSSCOMPILING)
+        gtest_discover_tests(${test_name} DISCOVERY_TIMEOUT 30 DISCOVERY_MODE PRE_TEST)
+    else()
+        gtest_discover_tests(${test_name} DISCOVERY_TIMEOUT 30)
+    endif()
 endfunction()
 
 # hybridrt_add_program_test(name PROGRAM <target> DEFINE <macro> SOURCES ... [DEPENDS ...])
@@ -78,7 +83,9 @@ if(HRT_USE_NCNN)
 endif()
 
 if(HRT_USE_MNN)
-    hybridrt_add_unit_test(mnn_engine SOURCES engine/mnn_engine_test.cpp DEPENDS hrt::hybridrt kitzoo::os MNN)
+    hybridrt_add_unit_test(mnn_engine SOURCES engine/mnn_engine_test.cpp DEPENDS hrt::hybridrt kitzoo::os)
+    # hybridrt already links MNN (whole-archive when static); linking it again plainly is rejected.
+    target_include_directories(hybridrt_test_mnn_engine PRIVATE $<TARGET_PROPERTY:MNN,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 
 if(HRT_USE_ORT OR HRT_USE_TENSORRT)

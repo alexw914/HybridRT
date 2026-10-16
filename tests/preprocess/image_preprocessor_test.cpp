@@ -281,6 +281,45 @@ TEST(ImagePreprocessorTest, CudaStagesOnlyTheCroppedHostRegion) {
   }
 }
 
+TEST(ImagePreprocessorTest, RgaMatchesCpuForAlignedAndUnalignedRowStrides) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto rga = ImagePreprocessor::create(ImagePreprocessorType::Rga);
+  if (!rga)
+    GTEST_SKIP() << "RGA preprocessing unavailable";
+  auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  // RGA takes only 16-pixel aligned rows: 800 runs on the RGA, 810 falls back to the CPU.
+  for (const int width : {800, 810}) {
+    // Smooth gradients: RGA and OpenCV sample differently, which only matters at sharp edges.
+    auto src = uniform_bgr(width, 1080, {0, 0, 0});
+    for (int y = 0; y < 1080; ++y) {
+      for (int x = 0; x < width; ++x) {
+        auto* px = src.pixels.data() +
+                   (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x)) * 3;
+        px[0] = static_cast<std::uint8_t>(y * 200 / 1080);
+        px[1] = static_cast<std::uint8_t>(x * 200 / width);
+        px[2] = static_cast<std::uint8_t>(250 - y * 200 / 1080);
+      }
+    }
+    ImagePreprocessorParam param;
+    param.resize_type = ResizeType::LetterBox;
+    param.dst_image_format = ImageFormat::InterRgb;
+    param.default_color = {114, 114, 114};
+    Image expected(MemoryType::Cpu, ImageFormat::InterRgb, DataType::Uint8, {128, 128});
+    Image actual(MemoryType::RkFd, ImageFormat::InterRgb, DataType::Uint8, {128, 128});
+    ASSERT_TRUE(actual.valid());
+    const auto reference = cpu->process(expected, src.image, {}, param);
+    const auto result = rga->process(actual, src.image, {}, param);
+    ASSERT_TRUE(reference);
+    ASSERT_TRUE(result) << "width " << width;
+    EXPECT_EQ(result->dst_roi, reference->dst_roi);
+    const auto* want = static_cast<const std::uint8_t*>(expected.memory()->cpu());
+    const auto* got = static_cast<const std::uint8_t*>(actual.memory()->cpu());
+    for (std::size_t i = 0; i < 128 * 128 * 3; ++i)
+      ASSERT_NEAR(got[i], want[i], 2) << "width " << width << " byte " << i;
+  }
+}
+
 TEST(ImagePreprocessorTest, ConvertsNv12Input) {
   // Mid-gray NV12: Y = U = V = 128.
   hrt::Vector<std::uint8_t> nv12(4 * 4 * 3 / 2, 128);

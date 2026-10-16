@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <initializer_list>
 #include <string_view>
+#include <utility>
 
 #ifndef _WIN32
 #include <sys/wait.h>
@@ -33,14 +34,26 @@ struct ToolResult {
 // output to `log`.
 inline auto run_tool(std::string_view program, std::initializer_list<String> args, const std::filesystem::path& log)
     -> ToolResult {
-  const auto quote = [](std::string_view text) -> String { return "\"" + String(text) + "\""; };
-  String command = quote(program);
-  for (const auto& arg : args)
-    command += " " + quote(arg);
-  command += " > " + quote(log.string()) + " 2>&1";
+  // Appending instead of `"literal" + String` avoids a GCC 12 -Wrestrict false positive (PR105329).
+  const auto append_quoted = [](String& command, std::string_view text) {
+    command += '"';
+    command += text;
+    command += '"';
+  };
+  String command;
+  append_quoted(command, program);
+  for (const auto& arg : args) {
+    command += ' ';
+    append_quoted(command, arg);
+  }
+  command += " > ";
+  append_quoted(command, log.string());
+  command += " 2>&1";
 #ifdef _WIN32
   // cmd.exe strips the outer quotes of a command line that starts with one.
-  command = "\"" + command + "\"";
+  String wrapped;
+  append_quoted(wrapped, command);
+  command = std::move(wrapped);
 #endif
   const auto status = std::system(command.c_str());
   ToolResult result;

@@ -21,9 +21,13 @@ auto rga_ok(IM_STATUS status, const char* what) -> bool {
   return false;
 }
 
+// RGA addresses RGB888 rows only at a pixel stride that is a multiple of 16.
 auto is_inter_u8(const core::Image& image) -> bool {
+  constexpr std::size_t kStrideAlignment = 16;
+  const auto& stride = image.stride();
   return image.data_type() == core::DataType::Uint8 &&
-         (image.format() == core::ImageFormat::InterRgb || image.format() == core::ImageFormat::InterBgr);
+         (image.format() == core::ImageFormat::InterRgb || image.format() == core::ImageFormat::InterBgr) &&
+         stride[2] != 0 && stride[1] % stride[2] == 0 && (stride[1] / stride[2]) % kStrideAlignment == 0;
 }
 
 auto rga_format(core::ImageFormat format) -> int {
@@ -59,7 +63,8 @@ auto select_cores() -> bool {
 } // namespace
 
 auto RgaImagePreprocessor::accepts(core::MemoryType type) const -> bool {
-  return type == core::MemoryType::RkFd || type == core::MemoryType::RkVa || type == core::MemoryType::Cpu;
+  // Heap memory is staged into the DMA heap: RGA2 cannot map pages above 4 GB and librga crashes on them.
+  return type == core::MemoryType::RkFd || type == core::MemoryType::RkVa;
 }
 
 auto RgaImagePreprocessor::supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool {
