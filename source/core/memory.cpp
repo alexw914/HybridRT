@@ -16,8 +16,8 @@
 #ifdef HRT_USE_CUDA
 #include "include/backend/cuda/cuda_memory.hpp"
 #endif
-#ifdef HRT_USE_RKNN
-#include "include/backend/rk/rk_memory.hpp"
+#ifdef HRT_USE_DMA_BUFFER
+#include "include/memory/dma_buffer_memory.hpp"
 #endif
 #ifdef HRT_USE_CANN
 
@@ -32,10 +32,8 @@ auto to_string(MemoryType type) -> std::string_view {
     return "Cpu";
   case MemoryType::Cuda:
     return "Cuda";
-  case MemoryType::RkVa:
-    return "RkVa";
-  case MemoryType::RkFd:
-    return "RkFd";
+  case MemoryType::DmaBuffer:
+    return "DmaBuffer";
   case MemoryType::Acl:
     return "Acl";
   case MemoryType::Dvpp:
@@ -54,8 +52,7 @@ auto device_type_of(MemoryType type) -> DeviceType {
   case MemoryType::Dvpp:
     return DeviceType::Ascend;
   case MemoryType::Cpu:
-  case MemoryType::RkVa:
-  case MemoryType::RkFd:
+  case MemoryType::DmaBuffer:
   case MemoryType::Unknown:
     break;
   }
@@ -69,9 +66,9 @@ auto Memory::create(MemoryType type, std::size_t size) -> UniquePtr<Memory> {
 auto Memory::create(MemoryType type, const Shape& shape, const Stride& stride) -> UniquePtr<Memory> {
   // Media memory needs row-aligned buffers unless the caller fixes the layout.
   auto requested = stride;
-#ifdef HRT_USE_RKNN
-  if (type == MemoryType::RkFd && stride.empty())
-    requested = backend::RkMemory::rga_stride(shape);
+#ifdef HRT_USE_DMA_BUFFER
+  if (type == MemoryType::DmaBuffer && stride.empty())
+    requested = memory::DmaBufferMemory::aligned_stride(shape);
 #endif
 #ifdef HRT_USE_CANN
   if (type == MemoryType::Dvpp && stride.empty())
@@ -90,9 +87,9 @@ auto Memory::create(MemoryType type, const Shape& shape, const Stride& stride) -
     memory = std::make_unique<backend::CudaMemory>(shape, *resolved);
     break;
 #endif
-#ifdef HRT_USE_RKNN
-  case MemoryType::RkFd:
-    memory = std::make_unique<backend::RkMemory>(shape, *resolved);
+#ifdef HRT_USE_DMA_BUFFER
+  case MemoryType::DmaBuffer:
+    memory = std::make_unique<memory::DmaBufferMemory>(shape, *resolved);
     break;
 #endif
 #ifdef HRT_USE_CANN
@@ -131,11 +128,17 @@ auto Memory::wrap(MemoryType type, void* host, KZ_MAYBE_UNUSED std::uintptr_t de
       break;
     return std::make_unique<backend::CudaMemory>(device, size, view_shape, *resolved);
 #endif
-#ifdef HRT_USE_RKNN
-  case MemoryType::RkVa:
-    if (host == nullptr)
+#ifdef HRT_USE_DMA_BUFFER
+  case MemoryType::DmaBuffer: {
+    // `device` is the dma-buf fd; `host` an existing mapping or null.
+    if (device == 0)
       break;
-    return std::make_unique<backend::RkMemory>(host, size, view_shape, *resolved);
+    auto memory =
+        std::make_unique<memory::DmaBufferMemory>(static_cast<int>(device), host, size, view_shape, *resolved);
+    if (!memory->have_cpu())
+      return nullptr;
+    return memory;
+  }
 #endif
 #ifdef HRT_USE_CANN
   case MemoryType::Acl:

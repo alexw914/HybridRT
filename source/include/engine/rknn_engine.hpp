@@ -19,7 +19,7 @@ namespace hrt::engine {
 //   "core_mask": "RKNN_NPU_CORE_AUTO" | "RKNN_NPU_CORE_0" | ...
 //   "custom_op_libraries": ["libops.so"]  each exporting
 //       extern "C" int hrt_rknn_register_custom_ops(rknn_context)
-// Inputs are NHWC in RkFd memory (float inputs in host memory); outputs are
+// Inputs are NHWC in DmaBuffer memory (float inputs in host memory); outputs are
 // NCHW host buffers, int8 ones carrying their quantization.
 class RknnEngine final : public Engine {
 public:

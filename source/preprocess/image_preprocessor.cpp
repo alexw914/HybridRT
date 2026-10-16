@@ -36,8 +36,7 @@ auto device_of(core::MemoryType type) -> ImagePreprocessorType {
   switch (type) {
   case core::MemoryType::Cuda:
     return ImagePreprocessorType::Cuda;
-  case core::MemoryType::RkVa:
-  case core::MemoryType::RkFd:
+  case core::MemoryType::DmaBuffer:
     return ImagePreprocessorType::Rga;
   case core::MemoryType::Acl:
   case core::MemoryType::Dvpp:

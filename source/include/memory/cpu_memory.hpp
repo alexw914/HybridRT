@@ -29,6 +29,10 @@ public:
 
 auto copy_cpu_to_cpu(core::Memory& dst, core::Memory& src, std::size_t axis) -> bool;
 
+// Memory for the inputs of engines that read them on the host: DmaBuffer when this build has a preprocessor that writes
+// dma-bufs (RGA) and a dma-heap is usable, so preprocessing runs there and fills them in place; Cpu otherwise.
+auto host_engine_input_memory() -> core::MemoryType;
+
 } // namespace hrt::memory
 
 #endif // HRT_MEMORY_CPU_MEMORY_HPP

@@ -14,6 +14,10 @@
 #include "include/core/config.hpp"
 #include "include/postprocess/params.hpp"
 
+#ifdef HRT_USE_DMA_BUFFER
+#include "include/memory/dma_buffer_memory.hpp"
+#endif
+
 namespace hrt::model {
 
 namespace {
@@ -149,7 +153,8 @@ auto builtin_postprocessor(std::string_view type, const kitzoo::json::Json& conf
     return postprocess::create_keypoint_postprocessor(type, config, engine);
 }
 
-// With `host_engine`, buffers use its fast host memory when it offers one.
+// With `host_engine`, buffers are written on the host: they use its fast host memory when it offers one, and
+// dma-bufs come from any heap, as no device with 32-bit DMA (RGA2) touches them.
 auto make_buffers(const Vector<core::BufferProto>& protos, const engine::Engine* host_engine)
     -> std::optional<core::Buffers> {
   core::Buffers buffers;
@@ -162,6 +167,14 @@ auto make_buffers(const Vector<core::BufferProto>& protos, const engine::Engine*
         buffer.reset();
       }
     }
+#ifdef HRT_USE_DMA_BUFFER
+    if (buffer == nullptr && host_engine != nullptr && proto.memory_type == core::MemoryType::DmaBuffer) {
+      buffer = std::make_shared<core::Buffer>(
+          std::make_shared<memory::DmaBufferMemory>(core::Shape{}, core::Stride{}, memory::DmaHeapUse::Any), proto);
+      if (!buffer->valid())
+        buffer.reset();
+    }
+#endif
     if (buffer == nullptr)
       buffer = std::make_shared<core::Buffer>(proto);
     if (!buffer->valid()) {

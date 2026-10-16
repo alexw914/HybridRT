@@ -49,8 +49,9 @@ NLOHMANN_JSON_SERIALIZE_ENUM(ImageFormat, {
 class Image {
 public:
   // Views caller-owned pixels without copying: `data` is a host pointer for
-  // MemoryType::Cpu and a device address otherwise. A zero `row_pitch` means
-  // packed rows. Empty when the memory type cannot be wrapped.
+  // MemoryType::Cpu, the dma-buf fd cast to a pointer for MemoryType::DmaBuffer,
+  // and a device address otherwise. A zero `row_pitch` means packed rows.
+  // Empty when the memory type cannot be wrapped.
   static auto wrap(MemoryType memory_type, void* data, ImageFormat format, Size size,
                    DataType data_type = DataType::Uint8, std::size_t row_pitch = 0) -> std::optional<Image>;
 

@@ -27,8 +27,9 @@ enum class MemoryType {
   Unknown,
   Cpu,
   Cuda,
-  RkVa,
-  RkFd,
+  // Linux dma-buf from a dma-heap, mapped to the host; device() is the fd. Media devices (RGA, NPUs, decoders)
+  // share it without copies, and host engines read it through the mapping.
+  DmaBuffer,
   Acl,
   Dvpp,
 };
@@ -59,7 +60,8 @@ public:
 
   static auto create(MemoryType type, const Shape& shape, const Stride& stride = {}) -> UniquePtr<Memory>;
 
-  // Views external storage without owning it; `size` bytes must stay valid.
+  // Views external storage without owning it; `size` bytes must stay valid. For DmaBuffer, `device` is the dma-buf fd
+  // (still the caller's to close) and `host` its mapping, or null to map it here.
   static auto wrap(MemoryType type, void* host, std::uintptr_t device, std::size_t size, const Shape& shape = {},
                    const Stride& stride = {}) -> UniquePtr<Memory>;
 

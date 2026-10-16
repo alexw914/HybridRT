@@ -13,6 +13,7 @@
 #include <optional>
 
 #include "include/core/config.hpp"
+#include "include/memory/cpu_memory.hpp"
 
 NLOHMANN_JSON_SERIALIZE_ENUM(MNNForwardType, {
                                                  {MNN_FORWARD_CPU, "cpu"},
@@ -117,7 +118,9 @@ auto MnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
     }
     input_names_.push_back(name);
     input_tensors_.push_back(tensor);
-    input_protos_.push_back({core::MemoryType::Cpu, *type, shape_of(*tensor), {}});
+    // Packed: host tensors wrap the buffer, and dma-bufs would otherwise pad rows for media devices.
+    const auto shape = shape_of(*tensor);
+    input_protos_.push_back({memory::host_engine_input_memory(), *type, shape, core::contiguous_stride(shape, *type)});
   }
   for (const auto& [name, tensor] : interpreter_->getSessionOutputAll(session_)) {
     const auto type = data_type_of(*tensor);
@@ -164,10 +167,10 @@ auto MnnEngine::set_outputs(const core::Buffers& outputs) -> bool {
   return true;
 }
 
-auto MnnEngine::inference(core::Stream* /*stream*/) -> bool {
+auto MnnEngine::inference(core::Stream* stream) -> bool {
   for (std::size_t i = 0; i < input_tensors_.size(); ++i) {
     // Preprocessing writes through the buffer, so refresh the host view.
-    static_cast<void>(inputs_[i]->memory()->cpu());
+    static_cast<void>(inputs_[i]->memory()->cpu(stream));
     input_tensors_[i]->copyFromHostTensor(host_inputs_[i].get());
   }
   if (interpreter_->runSession(session_) != MNN::NO_ERROR) {

@@ -34,6 +34,8 @@ struct BasePointer {
   // Usable bytes; only owned storage can grow.
   std::size_t capacity = 0;
   bool owned = false;
+  // DmaBuffer: every page lies below 4 GB, where devices with 32-bit DMA reach it.
+  bool below_4gb = false;
   core::SyncedHead head = core::SyncedHead::Synced;
   kitzoo::memory::ByteBuffer host_storage;
   // Frees owned storage outside host_storage (device or pinned host); null

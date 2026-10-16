@@ -290,7 +290,7 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForAlignedAndUnalignedRowStrides) {
   if (!rga)
     GTEST_SKIP() << "RGA preprocessing unavailable";
   auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
-  // Host images are staged into RkFd memory, whose rows RGA can address at any image width.
+  // Host images are staged into dma-bufs, whose rows RGA can address at any image width.
   for (const int width : {800, 810}) {
     // Smooth gradients: RGA and OpenCV sample differently, which only matters at sharp edges.
     auto src = uniform_bgr(width, 1080, {0, 0, 0});
@@ -308,7 +308,7 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForAlignedAndUnalignedRowStrides) {
     param.dst_image_format = ImageFormat::InterRgb;
     param.default_color = {114, 114, 114};
     Image expected(MemoryType::Cpu, ImageFormat::InterRgb, DataType::Uint8, {128, 128});
-    Image actual(MemoryType::RkFd, ImageFormat::InterRgb, DataType::Uint8, {128, 128});
+    Image actual(MemoryType::DmaBuffer, ImageFormat::InterRgb, DataType::Uint8, {128, 128});
     ASSERT_TRUE(actual.valid());
     const auto reference = cpu->process(expected, src.image, {}, param);
     const auto result = rga->process(actual, src.image, {}, param);
@@ -341,14 +341,20 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForCroppedSources) {
       px[2] = static_cast<std::uint8_t>(30 + (x + y) * 200 / (kWidth + kHeight));
     }
   }
-  // The same pixels in device memory (RGA reads the crop in place), and wrapped by virtual address with
-  // unaligned rows (RGA cannot address them, so resize falls back to the CPU).
-  Image device(MemoryType::RkFd, ImageFormat::InterBgr, DataType::Uint8, {kWidth, kHeight});
+  // The same pixels in a dma-buf (RGA reads the crop in place), and in one with packed, unaligned rows (RGA
+  // cannot address them, so resize falls back to the CPU).
+  Image device(MemoryType::DmaBuffer, ImageFormat::InterBgr, DataType::Uint8, {kWidth, kHeight});
   ASSERT_TRUE(Buffer::copy(*device.buffer(), *host.image.buffer(), CopyPolicy::AutoDstStride));
-  auto wrapped = Image::wrap(MemoryType::RkVa, host.pixels.data(), ImageFormat::InterBgr, {kWidth, kHeight},
-                             DataType::Uint8, kPitch);
-  ASSERT_TRUE(wrapped);
-  const hrt::Array<const Image*, 3> sources{&host.image, &device, &*wrapped};
+  Image packed(MemoryType::DmaBuffer, ImageFormat::InterBgr, DataType::Uint8, {kWidth, kHeight},
+               {kPitch * static_cast<std::size_t>(kHeight), kPitch, 3});
+  ASSERT_TRUE(packed.valid());
+  ASSERT_TRUE(Buffer::copy(*packed.buffer(), *host.image.buffer(), CopyPolicy::DirectCopy));
+  // A caller's frame wrapped by fd, as from a decoder: RGA reads it without staging.
+  const auto fd = device.memory()->mutable_device();
+  auto frame = Image::wrap(MemoryType::DmaBuffer, reinterpret_cast<void*>(fd), ImageFormat::InterBgr, {kWidth, kHeight},
+                           DataType::Uint8, device.stride()[1]);
+  ASSERT_TRUE(frame);
+  const hrt::Array<const Image*, 4> sources{&host.image, &device, &packed, &*frame};
   // Interior, offset 1 (RGA shifts it to 0), right and bottom edges, a 7x9 box upscaled past RGA's 16x,
   // a box thinner than the input aspect, and the whole image.
   const Rect crops[] = {{301, 157, 333, 219}, {1, 1, 200, 100},   {1001, 517, 269, 200},
@@ -368,7 +374,7 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForCroppedSources) {
           param.pad_scale = 1.2F;
           const auto type = format == ImageFormat::InterRgb ? DataType::Uint8 : DataType::Float32;
           Image expected(MemoryType::Cpu, format, type, {128, 96});
-          Image actual(MemoryType::RkFd, format, type, {128, 96});
+          Image actual(MemoryType::DmaBuffer, format, type, {128, 96});
           const auto reference = cpu->process(expected, host.image, crop, param);
           const auto result = rga->process(actual, *source, crop, param);
           ASSERT_TRUE(reference);

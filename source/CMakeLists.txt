@@ -61,6 +61,12 @@ target_link_libraries(hybridrt
     PUBLIC hrt::hrtc kitzoo::core kitzoo::json kitzoo::memory kitzoo::thread opencv_core
     PRIVATE kitzoo::log kitzoo::utilities opencv_imgproc $<TARGET_NAME_IF_EXISTS:opencv_geometry>)
 
+# Linux dma-bufs are shared by media devices and read by host engines.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_sources(hybridrt PRIVATE memory/dma_buffer_memory.cpp)
+    target_compile_definitions(hybridrt PRIVATE HRT_USE_DMA_BUFFER)
+endif()
+
 # -- Engines -------------------------------------------------------------------
 if(APPLE)
     enable_language(OBJCXX)
@@ -98,7 +104,6 @@ endif()
 
 if(HRT_USE_RKNN)
     target_sources(hybridrt PRIVATE
-        backend/rk/rk_memory.cpp
         preprocess/rga_image_preprocessor.cpp
         engine/rknn_engine.cpp)
     target_link_libraries(hybridrt PRIVATE rknn rga ${CMAKE_DL_LIBS})

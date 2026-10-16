@@ -126,7 +126,7 @@ auto yuv_to_bgr_code(core::ImageFormat format) -> int {
 } // namespace
 
 auto CpuImagePreprocessor::accepts(core::MemoryType type) const -> bool {
-  return type == core::MemoryType::Cpu || type == core::MemoryType::RkVa || type == core::MemoryType::RkFd;
+  return type == core::MemoryType::Cpu || type == core::MemoryType::DmaBuffer;
 }
 
 auto CpuImagePreprocessor::supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool {

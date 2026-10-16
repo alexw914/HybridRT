@@ -153,7 +153,7 @@ auto RknnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
       KZ_LOG_ERROR("rknn: input {} has an unsupported type", name);
       return false;
     }
-    const auto memory = *type == core::DataType::Float32 ? core::MemoryType::Cpu : core::MemoryType::RkFd;
+    const auto memory = *type == core::DataType::Float32 ? core::MemoryType::Cpu : core::MemoryType::DmaBuffer;
     input_names_.push_back(name);
     input_protos_.push_back({memory, *type, shape_of(attr), stride_of(attr, *type)});
     input_attrs_.push_back(attr);
@@ -192,9 +192,9 @@ auto RknnEngine::set_inputs(const core::Buffers& inputs) -> bool {
   input_mems_.clear();
   for (std::size_t i = 0; i < inputs.size(); ++i) {
     const auto& memory = inputs[i]->memory();
-    // RkFd buffers are shared with the NPU; others are copied each run.
+    // DmaBuffer inputs are shared with the NPU by fd; others are copied each run.
     auto mem =
-        memory->memory_type() == core::MemoryType::RkFd
+        memory->memory_type() == core::MemoryType::DmaBuffer
             ? make_mem(rknn_create_mem_from_fd(context_, static_cast<std::int32_t>(memory->device()),
                                                memory->mutable_cpu(), static_cast<std::uint32_t>(memory->bytes()), 0))
             : make_mem(rknn_create_mem(context_, static_cast<std::uint32_t>(memory->bytes())));
@@ -208,7 +208,7 @@ auto RknnEngine::set_inputs(const core::Buffers& inputs) -> bool {
 auto RknnEngine::inference(core::Stream* stream) -> bool {
   for (std::size_t i = 0; i < inputs_.size(); ++i) {
     const auto& memory = inputs_[i]->memory();
-    if (memory->memory_type() == core::MemoryType::RkFd) {
+    if (memory->memory_type() == core::MemoryType::DmaBuffer) {
       if (!memory->sync_to_device(stream))
         return false;
     } else {

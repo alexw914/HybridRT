@@ -87,4 +87,46 @@ TEST(MemoryTest, BufferUsesElementShape) {
   EXPECT_FLOAT_EQ(static_cast<const float*>(copy.memory()->cpu())[11], 11.0F);
 }
 
+TEST(MemoryTest, DmaBufferIsMappedAndSharedByFd) {
+  auto memory = hrt::core::Memory::create(hrt::core::MemoryType::DmaBuffer, hrt::core::Shape{1, 10, 3});
+  if (memory == nullptr)
+    GTEST_SKIP() << "no usable dma-heap";
+  EXPECT_EQ(memory->memory_type(), hrt::core::MemoryType::DmaBuffer);
+  // Rows are padded to 16 elements for media devices.
+  EXPECT_EQ(memory->stride(), (hrt::core::Stride{48, 48, 3}));
+  EXPECT_TRUE(memory->have_cpu());
+  EXPECT_TRUE(memory->have_device());
+  EXPECT_GT(memory->device(), 0U);
+  static_cast<std::uint8_t*>(memory->mutable_cpu())[5] = 7;
+  auto view = memory->ref();
+  // Device access ends the CPU window; reading again starts a new one.
+  EXPECT_EQ(view->device(), memory->device());
+  static_cast<void>(view->mutable_device());
+  EXPECT_EQ(static_cast<const std::uint8_t*>(memory->cpu())[5], 7);
+  ASSERT_TRUE(memory->resize(hrt::core::Shape{1, 64, 3}));
+  EXPECT_EQ(memory->bytes(), 192U);
+}
+
+TEST(MemoryTest, WrapsDmaBufferFdWithoutOwningIt) {
+  auto owner = hrt::core::Memory::create(hrt::core::MemoryType::DmaBuffer, hrt::core::Shape{4, 16});
+  if (owner == nullptr)
+    GTEST_SKIP() << "no usable dma-heap";
+  static_cast<std::uint8_t*>(owner->mutable_cpu())[17] = 9;
+  const auto fd = owner->mutable_device();
+  {
+    // A null host pointer maps the fd here, as for a decoder frame.
+    auto view = hrt::core::Memory::wrap(hrt::core::MemoryType::DmaBuffer, nullptr, fd, 64, hrt::core::Shape{4, 16});
+    ASSERT_NE(view, nullptr);
+    EXPECT_EQ(view->device(), fd);
+    EXPECT_NE(view->cpu(), owner->cpu());
+    EXPECT_EQ(static_cast<const std::uint8_t*>(view->cpu())[17], 9);
+    static_cast<std::uint8_t*>(view->mutable_cpu())[3] = 5;
+    static_cast<void>(view->mutable_device());
+    EXPECT_FALSE(view->resize(hrt::core::Shape{8, 16}));
+  }
+  // Dropping the view unmapped it but left the fd open.
+  EXPECT_EQ(static_cast<const std::uint8_t*>(owner->cpu())[3], 5);
+  EXPECT_EQ(hrt::core::Memory::wrap(hrt::core::MemoryType::DmaBuffer, nullptr, 0, 64), nullptr);
+}
+
 } // namespace

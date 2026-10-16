@@ -28,7 +28,7 @@ Windows. Platforms the tests last ran on:
 | Linux x86_64 (WSL2, Ubuntu 24.04) | GCC 13.3 | none (CPU image operators and postprocessing) |
 | macOS arm64 | Apple Clang | ONNX Runtime 1.31.0 (CPU, CoreML), MNN 3.0.0 |
 | Windows x64 | MSVC 19.50 | ONNX Runtime 1.31.0, MNN 3.0.0, ncnn 20260526; TensorRT 10.16.1.11 on CUDA 12.6 (RTX 3060) |
-| RK3588 (Radxa Rock 5B+, Debian 12) | Arm GNU Toolchain 12.2 (cross) | RKNN runtime 2.3.2 with librga 1.10.1 |
+| RK3588 (Radxa Rock 5B+, Debian 12) | Arm GNU Toolchain 12.2 (cross) | RKNN runtime 2.3.2 with librga 1.10.1; MNN 2.5.0, ncnn 20260526 |
 
 Cross-compile for RK3588 with an aarch64 toolchain file whose glibc and libstdc++ are not newer
 than the board's (Arm GNU Toolchain 12.2 matches Debian 12). Tools go to `build/tools` unless
@@ -135,7 +135,21 @@ failed standalone ReLU inference on macOS 27.0.1 arm64 with shader compilation
 errors and a crash; CPU 3.0.0 remains the validated configuration.
 
 RKNN takes uint8 images with `{"image_input": true}`; set `dst_image_format` to `inter_rgb`, as
-the runtime applies the model's layout and normalization. RGA fills and resizes interleaved RGB/BGR
-images whose rows are a multiple of 16 pixels. Host images are first copied into the CMA heap
-(RGA2 cannot address memory above 4 GB); other images, and calls whose copy does not fit in the
-heap, run on the CPU.
+the runtime applies the model's layout and normalization.
+
+`MemoryType::DmaBuffer` is a Linux dma-buf: a dma-heap allocation mapped into the process, whose fd
+(`device()`) media devices share without copies. Rows are padded to 16 elements unless a stride is
+given. On Linux builds:
+
+- RKNN inputs are dma-buffers bound to the NPU by fd. With RGA in the build and a usable dma-heap,
+  ncnn and MNN inputs are dma-buffers too, so `"device": "auto"` preprocesses on the RGA; they read
+  them through the mapping.
+- Wrap a decoder, camera or display frame without copying with
+  `Image::wrap(MemoryType::DmaBuffer, reinterpret_cast<void*>(fd), format, size, type, row_pitch)` or
+  `Memory::wrap(MemoryType::DmaBuffer, mapping_or_null, fd, size)`; the fd stays the caller's.
+- Host images are copied into a dma-buffer before the RGA reads them.
+- Buffers the RGA touches come from `system-dma32` or `cma`, as RGA2 only reaches memory below 4 GB.
+  When those heaps are exhausted they come from `system`, and the RGA leaves their work to the CPU.
+  Inputs only the CPU preprocessor writes come from `system` directly.
+- The RGA fills and resizes interleaved RGB/BGR uint8 images whose rows are a multiple of 16
+  pixels; other steps run on the CPU.

@@ -10,6 +10,10 @@
 
 #include <cstring>
 
+#ifdef HRT_USE_DMA_BUFFER
+#include "include/memory/dma_buffer_memory.hpp"
+#endif
+
 namespace hrt::memory {
 
 namespace {
@@ -102,6 +106,14 @@ auto copy_cpu_to_cpu(core::Memory& dst, core::Memory& src, std::size_t axis) -> 
     src_ptr += src_step;
   }
   return true;
+}
+
+auto host_engine_input_memory() -> core::MemoryType {
+#if defined(HRT_USE_DMA_BUFFER) && defined(HRT_USE_RKNN)
+  if (dma_heap_available())
+    return core::MemoryType::DmaBuffer;
+#endif
+  return core::MemoryType::Cpu;
 }
 
 } // namespace hrt::memory

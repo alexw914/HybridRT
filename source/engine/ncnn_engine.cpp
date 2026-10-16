@@ -11,8 +11,10 @@
 
 #include <algorithm>
 #include <optional>
+#include <utility>
 
 #include "include/core/config.hpp"
+#include "include/memory/cpu_memory.hpp"
 
 namespace hrt::engine {
 
@@ -110,7 +112,8 @@ auto NcnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
   static const unsigned char kNoWeights[1] = {};
   const auto* weights = weights_ == nullptr || weights_->empty() ? kNoWeights : weights_->data();
   if (net_->load_param_mem(param_text_.c_str()) != 0 ||
-      net_->load_model(weights) != static_cast<int>(weights_ == nullptr ? 0 : weights_->size())) {
+      // load_model returns int or size_t depending on the ncnn version.
+      std::cmp_not_equal(net_->load_model(weights), weights_ == nullptr ? 0 : weights_->size())) {
     KZ_LOG_ERROR("ncnn: failed to load the model");
     return false;
   }
@@ -129,7 +132,7 @@ auto NcnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
       return false;
     }
     input_names_.push_back(blob.name);
-    input_protos_.push_back({core::MemoryType::Cpu, *type, shape_of(mat), stride_of(mat)});
+    input_protos_.push_back({memory::host_engine_input_memory(), *type, shape_of(mat), stride_of(mat)});
   }
   for (auto index : output_indexes_) {
     const auto& blob = net_->blobs()[static_cast<std::size_t>(index)];
@@ -172,6 +175,8 @@ auto NcnnEngine::inference(core::Stream* stream) -> bool {
   auto extractor = net_->create_extractor();
   extractor.set_light_mode(true);
   for (std::size_t i = 0; i < input_indexes_.size(); ++i) {
+    // Preprocessing may write through a device (dma-buf); refresh the host view the Mat wraps.
+    static_cast<void>(inputs_[i]->memory()->cpu(stream));
     if (extractor.input(input_indexes_[i], input_mats_[i]) != 0)
       return false;
   }

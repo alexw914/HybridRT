@@ -13,15 +13,15 @@
 
 namespace hrt::preprocess {
 
-// Fill and resize interleaved RGB/BGR uint8 images whose row stride is a
-// multiple of 16 pixels on the RGA; other images, conversion and normalization
-// stay on the CPU. RGA addresses RkFd memory by fd and RkVa memory by virtual
-// address; host heap images are staged into RkFd memory first.
+// Fill and resize interleaved RGB/BGR uint8 dma-bufs on the RGA: rows must be
+// a multiple of 16 pixels and pages below 4 GB (RGA2 has 32-bit DMA). Other
+// images, conversion and normalization stay on the CPU; host images are staged
+// into dma-bufs first.
 class RgaImagePreprocessor final : public ImagePreprocessor {
 public:
   KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Rga; }
 
-  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::RkFd; }
+  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::DmaBuffer; }
 
   KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override;
 

@@ -27,7 +27,7 @@
 - 公开头文件在 `include/hrt/`，实现在 `source/`；私有头文件放 `source/include/<模块>/`，
   按 `"include/<模块>/<文件>.hpp"` 引用，`source/<模块>/` 只放 `.cpp`。后端 SDK 查找脚本在
   `cmake/module/`，第三方依赖在 `cmake/external/`。
-- `hrt::hrtc` 不依赖推理运行时；`source/memory/` 放主机内存与拷贝分发，设备公共代码（context、
+- `hrt::hrtc` 不依赖推理运行时；`source/memory/` 放主机内存（含 Linux dma-buffer）与拷贝分发，设备公共代码（context、
   memory、SDK 辅助）放 `source/backend/<device>/`，各任务的解码放 `source/postprocess/<task>/`。
 - 后端通过 SDK 根目录启用（`-DORT_ROOT=...` 等，见 `cmake/HybridrtBackends.cmake`）并定义
   `HRT_USE_<BACKEND>`；SDK 头文件和类型不得出现在 `include/hrt/`。新增后端只加

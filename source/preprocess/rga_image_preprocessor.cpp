@@ -10,6 +10,8 @@
 
 #include <im2d.hpp>
 
+#include "include/memory/dma_buffer_memory.hpp"
+
 namespace hrt::preprocess {
 
 namespace {
@@ -21,13 +23,15 @@ auto rga_ok(IM_STATUS status, const char* what) -> bool {
   return false;
 }
 
-// RGA addresses RGB888 rows only at a pixel stride that is a multiple of 16.
+// RGA addresses RGB888 rows only at a pixel stride that is a multiple of 16, and RGA2 only pages below 4 GB.
 auto is_inter_u8(const core::Image& image) -> bool {
   constexpr std::size_t kStrideAlignment = 16;
   const auto& stride = image.stride();
+  const auto* dma_buffer = dynamic_cast<const memory::DmaBufferMemory*>(image.memory().get());
   return image.data_type() == core::DataType::Uint8 &&
          (image.format() == core::ImageFormat::InterRgb || image.format() == core::ImageFormat::InterBgr) &&
-         stride[2] != 0 && stride[1] % stride[2] == 0 && (stride[1] / stride[2]) % kStrideAlignment == 0;
+         stride[2] != 0 && stride[1] % stride[2] == 0 && (stride[1] / stride[2]) % kStrideAlignment == 0 &&
+         dma_buffer != nullptr && dma_buffer->below_4gb();
 }
 
 auto rga_format(core::ImageFormat format) -> int {
@@ -40,12 +44,8 @@ auto rga_buffer(const core::Image& image, core::Stream* stream) -> rga_buffer_t 
   const auto w_stride = static_cast<int>(stride[1] / stride[2]);
   const auto h_stride = static_cast<int>(stride[0] / stride[1]);
   const auto size = image.size();
-  const auto& memory = image.memory();
-  if (memory->memory_type() == core::MemoryType::RkFd)
-    return wrapbuffer_fd_t(static_cast<int>(memory->mutable_device(stream)), size.width, size.height, w_stride,
-                           h_stride, rga_format(image.format()));
-  return wrapbuffer_virtualaddr_t(memory->mutable_cpu(stream), size.width, size.height, w_stride, h_stride,
-                                  rga_format(image.format()));
+  return wrapbuffer_fd_t(static_cast<int>(image.memory()->mutable_device(stream)), size.width, size.height, w_stride,
+                         h_stride, rga_format(image.format()));
 }
 
 auto rga_rect(const core::Rect& rect) -> im_rect {
@@ -63,8 +63,8 @@ auto select_cores() -> bool {
 } // namespace
 
 auto RgaImagePreprocessor::accepts(core::MemoryType type) const -> bool {
-  // Heap memory is staged into the DMA heap: RGA2 cannot map pages above 4 GB and librga crashes on them.
-  return type == core::MemoryType::RkFd || type == core::MemoryType::RkVa;
+  // Host memory is staged into a dma-buf: RGA2 cannot map pages above 4 GB and librga crashes on their addresses.
+  return type == core::MemoryType::DmaBuffer;
 }
 
 auto RgaImagePreprocessor::supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool {
