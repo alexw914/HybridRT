@@ -256,8 +256,13 @@ auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const 
     }
     auto* staged = scratch(staged_src_, memory_type(), format, from->data_type(), from->size());
     if (staged == nullptr ||
-        !core::Buffer::copy(*staged->buffer(), *from->buffer(), core::CopyPolicy::AutoDstStride, stream))
-      return std::nullopt;
+        !core::Buffer::copy(*staged->buffer(), *from->buffer(), core::CopyPolicy::AutoDstStride, stream)) {
+      // Device memory can run out (e.g. a small shared CMA heap); the CPU then runs the whole call.
+      auto* fallback = cpu();
+      if (fallback == nullptr || fallback == this)
+        return std::nullopt;
+      return fallback->process(dst, src, src_rect, param, stream);
+    }
     input = staged;
   }
 
