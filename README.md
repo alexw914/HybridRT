@@ -18,8 +18,9 @@ cmake --build build/debug --parallel
 ctest --test-dir build/debug --output-on-failure
 ```
 
-Windows builds support MSVC with ONNX Runtime, MNN and ncnn on CPU. CI covers
-Linux, macOS and Windows, including an Ultralytics ONNX model smoke test on Windows.
+Windows builds support MSVC with ONNX Runtime, MNN and ncnn on CPU, and TensorRT
+on CUDA. CI covers Linux, macOS and Windows, including an Ultralytics ONNX model
+smoke test on Windows.
 
 Run an algorithm on an image from a package or straight from its manifest (examples need OpenCV
 imgcodecs). `assets/yolo` versions the manifests and test images but not the models: download

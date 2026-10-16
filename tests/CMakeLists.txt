@@ -18,7 +18,7 @@ function(hybridrt_add_unit_test name)
     target_compile_definitions(${test_name} PRIVATE HRT_TEMPLATE_DIR="${PROJECT_SOURCE_DIR}/assets/template")
     hybridrt_apply_warnings(${test_name})
     hybridrt_deploy_runtime(${test_name})
-    gtest_discover_tests(${test_name})
+    gtest_discover_tests(${test_name} DISCOVERY_TIMEOUT 30)
 endfunction()
 
 # hybridrt_add_program_test(name PROGRAM <target> DEFINE <macro> SOURCES ... [DEPENDS ...])
