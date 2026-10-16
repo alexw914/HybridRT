@@ -18,9 +18,30 @@ cmake --build build/debug --parallel
 ctest --test-dir build/debug --output-on-failure
 ```
 
-Windows builds support MSVC with ONNX Runtime, MNN and ncnn on CPU, and TensorRT
-on CUDA. CI covers Linux, macOS and Windows, including an Ultralytics ONNX model
-smoke test on Windows.
+CI covers Linux, macOS and Windows, including an Ultralytics ONNX model smoke test on
+Windows. Platforms the tests last ran on:
+
+| Platform | Compiler | Backends |
+| --- | --- | --- |
+| Linux x86_64 (CI) | Clang | ONNX Runtime 1.31.0 |
+| Linux x86_64, RTX 4090 | GCC 11.4 | TensorRT 10.16.1.11, ONNX Runtime 1.23.2 |
+| Linux x86_64 (WSL2, Ubuntu 24.04) | GCC 13.3 | none (CPU image operators and postprocessing) |
+| macOS arm64 | Apple Clang | ONNX Runtime 1.31.0 (CPU, CoreML), MNN 3.0.0 |
+| Windows x64 | MSVC 19.50 | ONNX Runtime 1.31.0, MNN 3.0.0, ncnn 20260526; TensorRT 10.16.1.11 on CUDA 12.6 (RTX 3060) |
+| RK3588 (Radxa Rock 5B+, Debian 12) | Arm GNU Toolchain 12.2 (cross) | RKNN runtime 2.3.2 with librga 1.10.1 |
+
+Cross-compile for RK3588 with an aarch64 toolchain file whose glibc and libstdc++ are not newer
+than the board's (Arm GNU Toolchain 12.2 matches Debian 12). Tools go to `build/tools` unless
+`HYBRIDRT_TOOLS_OUTPUT_DIR` is set. Test binaries embed source paths, so run them on the board
+from the same directory layout. Under WSL, keep CMake away from Windows packages on the inherited
+`PATH`, e.g. with `-DCMAKE_IGNORE_PREFIX_PATH=<windows-prefix>`.
+
+```sh
+cmake -S . -B build/rk3588 -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=<aarch64-toolchain.cmake> \
+    -DRKNN_ROOT=<rknpu2> -DRKNN_PLATFORM=RK3588 -DRGA_ROOT=<librga> \
+    -DOpenCV_DIR=<aarch64-opencv>/lib/cmake/opencv4 -DHYBRIDRT_TOOLS_OUTPUT_DIR=build/rk3588/tools
+cmake --build build/rk3588 --parallel
+```
 
 Run an algorithm on an image from a package or straight from its manifest (examples need OpenCV
 imgcodecs). `assets/yolo` versions the manifests and test images but not the models: download
@@ -101,11 +122,11 @@ A row without a parenthesized version has not been tested.
 
 | Backend | Engine type | Image operators | CMake | Version |
 | --- | --- | --- | --- | --- |
-| ONNX Runtime | `ort` | CPU | `-DORT_ROOT=<sdk>` | 1.20+ (1.31.0) |
-| ncnn | `ncnn` | CPU | `-Dncnn_ROOT=<sdk>` | - (1.0.20261007) |
-| MNN | `mnn` | CPU | `-DMNN_ROOT=<sdk>` | - (3.0.0) |
+| [ONNX Runtime](https://github.com/microsoft/onnxruntime) | `ort` | CPU | `-DORT_ROOT=<sdk>` | 1.20+ (1.31.0) |
+| [ncnn](https://github.com/Tencent/ncnn) | `ncnn` | CPU | `-Dncnn_ROOT=<sdk>` | - (1.0.20261007) |
+| [MNN](https://github.com/alibaba/MNN) | `mnn` | CPU | `-DMNN_ROOT=<sdk>` | - (3.0.0) |
 | [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html) | `trt` | CUDA (NPP) | `-DTensorRT_ROOT=<sdk>` | 8.5+ (10.16.1) |
-| [RKNN Toolkit2](https://github.com/airockchip/rknn-toolkit2) | `rknn` | RGA | `-DRKNN_ROOT=<sdk> -DRGA_ROOT=<sdk>` | - |
+| [RKNN Toolkit2](https://github.com/airockchip/rknn-toolkit2) | `rknn` | RGA | `-DRKNN_ROOT=<sdk> -DRGA_ROOT=<sdk>` | - (2.3.2) |
 | [CANN](https://www.hiascend.com/doc_center/source/en/CANNCommunityEdition/910/index/index.html) | `cann` | DVPP | `-DCANN_ROOT=<sdk>` | - |
 
 MNN selects Metal with engine config `{"forward_type": "metal"}` and requires an SDK
@@ -113,13 +134,8 @@ built with Metal support. The official macOS Metal packages for 3.0.0 and 3.6.1
 failed standalone ReLU inference on macOS 27.0.1 arm64 with shader compilation
 errors and a crash; CPU 3.0.0 remains the validated configuration.
 
-## Reference
-
-| Project | Purpose |
-| --- | --- |
-| [kitzoo](https://github.com/alexw914/kitzoo) | Foundation utilities. |
-| [FlatBuffers](https://github.com/google/flatbuffers) | hrtc package metadata. |
-| [OpenCV](https://github.com/opencv/opencv) | Host image operators and rotated-box geometry. |
-| [ONNX Runtime](https://github.com/microsoft/onnxruntime), [ncnn](https://github.com/Tencent/ncnn), [MNN](https://github.com/alibaba/MNN) | CPU inference backends. |
-| [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html), [RKNN Toolkit2](https://github.com/airockchip/rknn-toolkit2), [CANN](https://www.hiascend.com/doc_center/source/en/CANNCommunityEdition/910/index/index.html) | Vendor inference backends. |
-| [GoogleTest](https://github.com/google/googletest), [Google Benchmark](https://github.com/google/benchmark) | Unit tests and benchmarks. |
+RKNN takes uint8 images with `{"image_input": true}`; set `dst_image_format` to `inter_rgb`, as
+the runtime applies the model's layout and normalization. RGA fills and resizes interleaved RGB/BGR
+images whose rows are a multiple of 16 pixels. Host images are first copied into the CMA heap
+(RGA2 cannot address memory above 4 GB); other images, and calls whose copy does not fit in the
+heap, run on the CPU.
