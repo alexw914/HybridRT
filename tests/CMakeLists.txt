@@ -85,7 +85,8 @@ endif()
 if(HRT_USE_MNN)
     hybridrt_add_unit_test(mnn_engine SOURCES engine/mnn_engine_test.cpp DEPENDS hrt::hybridrt kitzoo::os)
     # hybridrt already links MNN (whole-archive when static); linking it again plainly is rejected.
-    target_include_directories(hybridrt_test_mnn_engine PRIVATE $<TARGET_PROPERTY:MNN,INTERFACE_INCLUDE_DIRECTORIES>)
+    target_include_directories(hybridrt_test_mnn_engine SYSTEM PRIVATE
+        $<TARGET_PROPERTY:MNN,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 
 if(HRT_USE_ORT OR HRT_USE_TENSORRT)
