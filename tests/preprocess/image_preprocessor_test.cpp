@@ -6,6 +6,8 @@
 
 #include <hrt/preprocess/image_preprocessor.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <gtest/gtest.h>
 
@@ -288,7 +290,7 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForAlignedAndUnalignedRowStrides) {
   if (!rga)
     GTEST_SKIP() << "RGA preprocessing unavailable";
   auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
-  // RGA takes only 16-pixel aligned rows: 800 runs on the RGA, 810 falls back to the CPU.
+  // Host images are staged into RkFd memory, whose rows RGA can address at any image width.
   for (const int width : {800, 810}) {
     // Smooth gradients: RGA and OpenCV sample differently, which only matters at sharp edges.
     auto src = uniform_bgr(width, 1080, {0, 0, 0});
@@ -317,6 +319,88 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForAlignedAndUnalignedRowStrides) {
     const auto* got = static_cast<const std::uint8_t*>(actual.memory()->cpu());
     for (std::size_t i = 0; i < 128 * 128 * 3; ++i)
       ASSERT_NEAR(got[i], want[i], 2) << "width " << width << " byte " << i;
+  }
+}
+
+TEST(ImagePreprocessorTest, RgaMatchesCpuForCroppedSources) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto rga = ImagePreprocessor::create(ImagePreprocessorType::Rga);
+  if (!rga)
+    GTEST_SKIP() << "RGA preprocessing unavailable";
+  auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  constexpr int kWidth = 1270;
+  constexpr int kHeight = 717;
+  constexpr std::size_t kPitch = static_cast<std::size_t>(kWidth) * 3;
+  auto host = uniform_bgr(kWidth, kHeight, {0, 0, 0});
+  for (int y = 0; y < kHeight; ++y) {
+    for (int x = 0; x < kWidth; ++x) {
+      auto* px = host.pixels.data() + static_cast<std::size_t>(y) * kPitch + static_cast<std::size_t>(x) * 3;
+      px[0] = static_cast<std::uint8_t>(x * 200 / kWidth);
+      px[1] = static_cast<std::uint8_t>(y * 200 / kHeight);
+      px[2] = static_cast<std::uint8_t>(30 + (x + y) * 200 / (kWidth + kHeight));
+    }
+  }
+  // The same pixels in device memory (RGA reads the crop in place), and wrapped by virtual address with
+  // unaligned rows (RGA cannot address them, so resize falls back to the CPU).
+  Image device(MemoryType::RkFd, ImageFormat::InterBgr, DataType::Uint8, {kWidth, kHeight});
+  ASSERT_TRUE(Buffer::copy(*device.buffer(), *host.image.buffer(), CopyPolicy::AutoDstStride));
+  auto wrapped = Image::wrap(MemoryType::RkVa, host.pixels.data(), ImageFormat::InterBgr, {kWidth, kHeight},
+                             DataType::Uint8, kPitch);
+  ASSERT_TRUE(wrapped);
+  const hrt::Array<const Image*, 3> sources{&host.image, &device, &*wrapped};
+  // Interior, offset 1 (RGA shifts it to 0), right and bottom edges, a 7x9 box upscaled past RGA's 16x,
+  // a box thinner than the input aspect, and the whole image.
+  const Rect crops[] = {{301, 157, 333, 219}, {1, 1, 200, 100},   {1001, 517, 269, 200},
+                        {640, 300, 7, 9},     {100, 40, 50, 600}, {0, 0, kWidth, kHeight}};
+  for (std::size_t s = 0; s < sources.size(); ++s) {
+    const auto* source = sources[s];
+    for (const auto& crop : crops) {
+      for (const auto resize : {ResizeType::Normal, ResizeType::LetterBox, ResizeType::PadOutside}) {
+        for (const auto format : {ImageFormat::InterRgb, ImageFormat::PlanarRgb}) {
+          SCOPED_TRACE(testing::Message() << "source " << s << " crop " << crop.x << ',' << crop.y << ' ' << crop.width
+                                          << 'x' << crop.height << " resize " << static_cast<int>(resize) << " format "
+                                          << static_cast<int>(format));
+          ImagePreprocessorParam param;
+          param.resize_type = resize;
+          param.dst_image_format = format;
+          param.default_color = {114, 114, 114};
+          param.pad_scale = 1.2F;
+          const auto type = format == ImageFormat::InterRgb ? DataType::Uint8 : DataType::Float32;
+          Image expected(MemoryType::Cpu, format, type, {128, 96});
+          Image actual(MemoryType::RkFd, format, type, {128, 96});
+          const auto reference = cpu->process(expected, host.image, crop, param);
+          const auto result = rga->process(actual, *source, crop, param);
+          ASSERT_TRUE(reference);
+          ASSERT_TRUE(result);
+          EXPECT_EQ(result->dst_roi, reference->dst_roi);
+          const auto row = [](const Image& image, int y) -> const std::byte* {
+            return static_cast<const std::byte*>(image.memory()->cpu()) +
+                   static_cast<std::size_t>(y) * image.stride()[image.stride().size() - 2];
+          };
+          float worst = 0.0F;
+          for (int c = 0; c < 3; ++c) {
+            for (int y = 0; y < 96; ++y) {
+              for (int x = 0; x < 128; ++x) {
+                float want = 0.0F;
+                float got = 0.0F;
+                if (type == DataType::Uint8) {
+                  const auto offset = static_cast<std::size_t>(x * 3 + c);
+                  want = static_cast<float>(reinterpret_cast<const std::uint8_t*>(row(expected, y))[offset]);
+                  got = static_cast<float>(reinterpret_cast<const std::uint8_t*>(row(actual, y))[offset]);
+                } else {
+                  want = planar_at(expected, c, x, y);
+                  got = planar_at(actual, c, x, y);
+                }
+                worst = std::max(worst, std::abs(got - want));
+              }
+            }
+          }
+          // RGA and OpenCV bilinear sampling differ by a level or two on these gradients.
+          EXPECT_LE(worst, 3.0F);
+        }
+      }
+    }
   }
 }
 

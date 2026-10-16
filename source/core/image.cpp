@@ -74,8 +74,10 @@ auto Image::wrap(MemoryType memory_type, void* data, ImageFormat format, Size si
     for (auto axis = rows + 1; axis > 0; --axis)
       stride[axis - 1] = static_cast<std::size_t>(byte_shape[axis - 1]) * stride[axis];
   }
-  auto* host = memory_type == MemoryType::Cpu ? data : nullptr;
-  auto device = memory_type == MemoryType::Cpu ? std::uintptr_t{0} : reinterpret_cast<std::uintptr_t>(data);
+  // RkVa is host memory the RGA addresses by virtual address.
+  const bool host_addressed = memory_type == MemoryType::Cpu || memory_type == MemoryType::RkVa;
+  auto* host = host_addressed ? data : nullptr;
+  auto device = host_addressed ? std::uintptr_t{0} : reinterpret_cast<std::uintptr_t>(data);
   SharedPtr<Memory> memory = Memory::wrap(memory_type, host, device, stride.front(), byte_shape, stride);
   if (memory == nullptr)
     return std::nullopt;
