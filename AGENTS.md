@@ -1,206 +1,161 @@
 # 代码编写规则
 
-适用于仓库自有代码和 CMake 生成头文件的模板；第三方依赖、推理引擎 SDK 及 `build/`
-下的生成文件不直接修改。既有公开接口的调整需要明确授权，不为符合新规则而破坏兼容性。
+适用于仓库自有代码和 CMake 头文件模板；不直接修改第三方依赖、引擎 SDK 和 build/ 生成文件。
+公开接口调整需明确授权，不为遵守新规则破坏兼容性。本文件只保留长期规则，不记录一次性配置、
+机器地址、环境路径或安装步骤；可由工具配置一次后持续生效的设置放入对应配置文件。
 
-## 项目定位
+## 项目与基础能力
 
-- HybridRT 是 C++20 模型推理框架，只负责预处理、推理、后处理及串联三者的模型封装。
-- 引擎自定义算子库从引擎 `config` 加载（ORT/RKNN `custom_op_libraries`，TensorRT
-  `plugin_libraries`），是可选项，加载失败只 `KZ_LOG_WARN` 并跳过。
-- 基础能力统一用 kitzoo，不在本仓库重复实现或另行封装，缺少的通用能力补充到 kitzoo：
+- HybridRT 是 C++20 模型推理框架，只负责预处理、推理、后处理及模型封装。
+- 通用能力统一使用 kitzoo，不重复实现或包装；缺失能力补充到 kitzoo，只链接所需模块：
   JSON 用 `kitzoo::json::Reader` 解析、nlohmann 原生接口读取，参数结构体用
-  `NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT` 直接映射，`get<T>()` 前先用
-  `source/include/core/config.hpp` 的 `check_param` 无异常检查（未知键也是错误）；
-  主机内存 `kitzoo::memory::ByteBuffer`；日志 `KZ_LOG_*`；命令行 `kitzoo::core::Options`；
-  文件 `kitzoo::os`；字符串工具 `kitzoo::util`；属性 `KZ_NODISCARD`、`KZ_MAYBE_UNUSED`。
-  只链接需要的 kitzoo 模块目标。
-- 容器、字符串和智能指针在所有代码中用 kitzoo 别名 `Array`、`Vector`、`Map`、`Set`、
-  `Pair`、`String`、`UniquePtr`、`SharedPtr`（`include/hrt/core/containers.hpp` 引入 `hrt`，
-  命名空间外写 `hrt::Vector`），不写对应的 `std::` 类型；别名即 std 类型，可直接传给第三方
-  接口。`containers.hpp` 只由 `define.hpp`、`context.hpp`、`hrtc.hpp`、`config.hpp` 直接包含，
-  其余文件不重复包含它或它已引入的 `<vector>`、`<string>` 等标准头文件。
-- 链接 `kitzoo::memory` 的可执行文件由 kitzoo 以 mimalloc 替换进程分配器，库代码不指定分配器。
+  `NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT` 映射；`get<T>()` 前用
+  `source/include/core/config.hpp` 的 `check_param` 无异常检查，未知键也报错。
+  主机内存用 `kitzoo::memory::ByteBuffer`，日志用 `KZ_LOG_*`，命令行用
+  `kitzoo::core::Options`，文件用 `kitzoo::os`，字符串工具用 `kitzoo::util`，
+  属性用 `KZ_NODISCARD`、`KZ_MAYBE_UNUSED`。
+- 容器、字符串、智能指针统一用 kitzoo 别名 `Array`、`Vector`、`Map`、`Set`、
+  `Pair`、`String`、`UniquePtr`、`SharedPtr`，不写对应 std 类型；别名可直接传给第三方接口。
+  `include/hrt/core/containers.hpp` 将其引入 hrt，命名空间外写 `hrt::Vector` 等。
+  该头仅由 `define.hpp`、`context.hpp`、`hrtc.hpp`、`config.hpp` 直接包含；
+  其余文件不重复包含它或它已引入的标准容器、字符串头。
+- 链接 `kitzoo::memory` 的可执行文件由 kitzoo 用 mimalloc 替换进程分配器，库代码不指定分配器。
 
 ## 目录与模块
 
-- 公开头文件在 `include/hrt/`，实现在 `source/`；私有头文件放 `source/include/<模块>/`，
-  按 `"include/<模块>/<文件>.hpp"` 引用，`source/<模块>/` 只放 `.cpp`。后端 SDK 查找脚本在
-  `cmake/module/`，第三方依赖在 `cmake/external/`。
-- `hrt::hrtc` 不依赖推理运行时；`source/memory/` 放主机内存（含 Linux dma-buffer）与拷贝分发，设备公共代码（context、
-  memory、SDK 辅助）放 `source/backend/<device>/`，各任务的解码放 `source/postprocess/<task>/`。
-- 后端通过 SDK 根目录启用（`-DORT_ROOT=...` 等，见 `cmake/HybridrtBackends.cmake`）并定义
-  `HRT_USE_<BACKEND>`；SDK 头文件和类型不得出现在 `include/hrt/`。新增后端只加
-  `source/engine/<backend>_engine.*`、`source/CMakeLists.txt` 一段配置和 `Engine::create` 一个分支；
-  新增设备同理扩展 `Memory::create`/`wrap`、`copy_memory`、`Context::create`、
-  `ImagePreprocessor::create`。上层流程不出现按后端分支的代码。
-- 预处理流程只在 `ImagePreprocessor` 基类写一份，设备子类只实现算子，不支持的步骤由
-  `supports()` 返回 false 并退回 CPU。后处理只在主机执行，按 `postprocess.type` 注册。
-- `ImageModel`：algo 配置只描述模型（`preprocess`、`postprocess`），每个引擎只读取自己的
-  `config`；各阶段实例个数只作为 `create` 的 `ImageModelOptions` 传入，不写进模型包。
-- 生成的 `source/include/hrtc/hrtc_generated.h` 随仓库提交、不手改，修改 `fbs/hrtc.fbs` 后用
-  `-DHYBRIDRT_BUILD_FLATC=ON` 构建 `hrtc_schema` 重新生成。字段只在表末尾追加；不兼容的改动更换
-  `file_identifier` 并重新打包。
-- `assets/template/README.md` 说明每种 preprocess、engine、postprocess 类型的作用、全部参数及默认值和可选值，
-  以及各平台需要传入的参数（如 RKNN 的 `image_input`、`dst_image_format`）；代码中类型、参数、默认值或平台行为
-  变化时，在同一提交中同步更新它和 `hrtc_template.json`。
-- `assets/` 下只提交 `template/` 和 `PERF.md`。`hrtc_template.json` 的作用是说明参数如何设置：每种 postprocess 类型至少一个 algo，
-  不要求每个模型都有对应 algo。类型有测试模型时，该 algo 以模型命名（如 `yolov8n_detect`、`rtmo_s_pose`），写该模型的
-  预处理和后处理，`data` 为 `assets/<夹具>/` 下的本地文件（相对仓库根目录），测试和基准从这里读取配置；同类型的其他模型
-  （变体、导出方式、输出列含义）写在 `template/README.md` 的文字或表格中。测试模型的来源、导出或转换方式、sha256 和
-  验证结论写进 `template/README.md` 的 Test models，转换脚本放在 `template/`。测试模型、图片、夹具 manifest 和输出结果
-  只放本地、不提交，不另建夹具目录的 README、manifest 或 sources 文件。
-- 性能优化（前处理、后处理、`ImageModel` pipeline 的提速）在同一提交中补充到 `assets/PERF.md`，最新的在前：
-  瓶颈及定位方法、改动、测量方式（平台、模型、输入、线程、次数、工具）和前后数据，以及尚未处理的部分；普通功能
-  实现不写入。
-- 引擎推理耗时只由 `tools/hrt-model-bench` 测量；`benchmarks/` 只保留 `preprocess_bench`、
-  `postprocess_bench`、`pipeline_bench`。
-- 模型文件、`.hrtc`、`assets/` 下除 `template/` 和 `PERF.md` 外的文件和下载到 `external/` 的 SDK 不提交；manifest 中的文件
-  路径为绝对路径或相对于运行时工作目录。
+- 公开头文件放 `include/hrt/`，实现放 `source/`；私有头文件放 `source/include/<模块>/`，
+  按 `"include/<模块>/<文件>.hpp"` 引用，`source/<模块>/` 只放 .cpp。
+  SDK 查找脚本放 `cmake/module/`，第三方依赖配置放 `cmake/external/`。
+- `hrt::hrtc` 不依赖推理运行时。主机内存（含 Linux dma-buffer）及拷贝分发放
+  `source/memory/`，设备公共代码（context、memory、SDK 辅助）放
+  `source/backend/<device>/`，任务解码放 `source/postprocess/<task>/`。
+- 后端通过 SDK 根目录启用并定义 `HRT_USE_<BACKEND>`，见 `cmake/HybridrtBackends.cmake`；
+  SDK 头文件和类型不得出现在公开头文件。新增后端只扩展
+  `source/engine/<backend>_engine.*`、`source/CMakeLists.txt` 和 `Engine::create`；
+  新增设备扩展 `Memory::create`/`wrap`、`copy_memory`、`Context::create`、
+  `ImagePreprocessor::create`，上层流程不按后端分支。
+- 预处理流程只在 `ImagePreprocessor` 基类实现，设备子类只实现算子；
+  不支持的步骤由 `supports()` 返回 false 并回退 CPU。后处理只在主机执行，按 `postprocess.type` 注册。
+- `ImageModel` 的 algo 只描述模型（preprocess、postprocess），引擎只读取自己的 config。
+  各阶段实例数只通过 create 的 `ImageModelOptions` 传入，不写入模型包。
+  自定义算子库从引擎 config 加载（ORT/RKNN 的 `custom_op_libraries`、
+  TensorRT 的 `plugin_libraries`），可选，加载失败只警告并跳过。
+- `source/include/hrtc/hrtc_generated.h` 随仓库提交，不手改；修改 `fbs/hrtc.fbs` 后用
+  `HYBRIDRT_BUILD_FLATC` 启用 flatc 并构建 `hrtc_schema` 重新生成。
+  字段只在表末尾追加；不兼容改动更换 `file_identifier` 并重新打包。
 
-## 文件头与头文件保护
+## 模板与资源
 
-- 自有文件使用下列英文文件头：`File` 为从仓库根目录开始的路径，`Description` 简述职责，
-  续行对齐；不写作者、日期和修改历史。
-- 使用 include guard（禁止 `#pragma once`），宏名 `HRT_<目录>_<文件名>_HPP`，全部大写，点换
-  下划线，冲突时再加一级目录；`.hpp.in` 按生成的 `.hpp` 命名，模板的 `@变量@` 保持完整（必要时
-  用 `// clang-format off/on`）；末尾 `#endif` 注释标明宏名。
+- `assets/` 只提交 `template/` 和 `PERF.md`；模型、.hrtc、图片、夹具 manifest、输出结果、
+  下载到 `external/` 的 SDK 均不提交。测试资源统一放本地 `assets/test/`，ONNX 放其 onnx 子目录；
+  不另建夹具 README、manifest 或 sources 文件。manifest 路径为绝对路径或相对运行时工作目录。
+- `assets/template/hrtc_template.json` 展示模型参数，每种 postprocess 至少一个 algo，不要求每个模型都有 algo。
+  有测试模型时以模型命名，使用其真实前后处理配置及仓库根目录相对模型路径，测试和基准从模板读取。
+  引擎专用 config 示例放 `hrtc_device_config.json`。
+- `assets/template/README.md` 说明每种 preprocess、engine、postprocess 的作用、全部参数、
+  默认值、可选值及平台必需参数（如 RKNN 的 `image_input`、`dst_image_format`）。
+  类型、参数、默认值或平台行为变化时，同一提交同步文档及相关 JSON 模板。
+  同类型模型的变体、导出方式、输出列含义在此说明；Test models 记录来源、导出或转换方式、
+  sha256 和验证结论，转换脚本只放本地 assets/test/scripts/，不提交。
+- 前处理、后处理或 ImageModel pipeline 性能优化在同一提交更新 `assets/PERF.md`，最新在前：
+  记录瓶颈与定位、改动、测量条件（平台、模型、输入、线程、次数、工具）、前后数据及剩余问题。
+  普通功能不写入。引擎推理耗时只用 `tools/hrt-model-bench` 测量；
+  benchmarks/ 只保留 preprocess_bench、postprocess_bench、pipeline_bench。
 
-```cpp
-// -----------------------------------------------------------------------------
-// HybridRT | C++20 Model Inference Framework
-// File: include/hrt/engine/engine.hpp
-// Description: Declares the inference engine interface.
-// -----------------------------------------------------------------------------
+## 文件、格式与命名
 
-#ifndef HRT_ENGINE_ENGINE_HPP
-#define HRT_ENGINE_ENGINE_HPP
+- 自有文件使用以下英文文件头；File 为仓库根目录相对路径，Description 简述职责，续行对齐，
+  不写作者、日期和修改历史：
 
-#endif // HRT_ENGINE_ENGINE_HPP
-```
+  ```cpp
+  // -----------------------------------------------------------------------------
+  // HybridRT | C++20 Model Inference Framework
+  // File: include/hrt/engine/engine.hpp
+  // Description: Declares the inference engine interface.
+  // -----------------------------------------------------------------------------
+  ```
 
-## 格式与函数
-
-- 用根目录 `.clang-format` 格式化（`clang-format -i`），检查用 `--dry-run --Werror`；clang-format 版本不低于 19
-  （18 对尾置返回类型的换行不同，系统自带版本过低时用 `pip install "clang-format==21.*"`）；静态检查
-  用 `.clang-tidy`（需 `build/` 下的 `compile_commands.json`）。include 分组顺序为 `<hrt/...>`、
-  `<kitzoo/...>`、其他 `<...>`、`"..."`；限定符写在类型左侧。非 C++ 文本用 LF，`.bat`、`.cmd` 用 CRLF。
-- 函数声明之间空一行，相关重载可成组；函数和有返回值的 lambda 用尾置返回类型。
-- 只读的大对象传 `const T&`，修改调用方对象传 `T&`，转移所有权按值或 `T&&`；数值、指针、
-  `std::string_view`、`std::span` 按值传递。
-- 注释只写代码无法表达的约束、原因、数据布局和选项，不描述改动过程或显而易见的逻辑。
-- 不抛异常、不用 `try`/`catch`（含工具、示例和测试）：
-  - 初始化（`ImageModel::create`、`create_*_postprocessor` 等）的配置错误、无可用引擎等用
-    `KZ_CHECK_MSG` 记录后 abort；
-  - 推理过程失败用 `KZ_CHECK_RETURN` 记录后返回空结果（`std::nullopt`、`false`）；
-  - 用于挑选的接口（`Engine::create`/`initialize`、`Context::create`、
-    `ImagePreprocessor::create`）和 `hrtc::load` 返回空值，由调用方决定；
-  - SDK 状态码直接写进上述宏，错误信息取自 SDK；SDK 类型不泄漏到上层；优先用 SDK 的不抛异常
-    接口（如 ONNX Runtime C API）；资源回滚用 RAII 或 `KZ_SCOPE_FAIL`；测试用 `EXPECT_DEATH`
-    验证 abort。
-- 输出只用 `KZ_LOG_*`，不用 `std::cout`、`printf` 或 spdlog；推理热路径不输出常规日志，
-  缓冲区在加载或首次运行时分配并复用。
-- 头文件只做声明，实现放 `.cpp`；模板和 constexpr 除外。
-
-## 命名
-
-- 命名空间按模块目录：`hrt::core`、`engine`、`preprocess`、`postprocess`、`model`、`hrtc`，
-  `source/` 内部的 `memory`、`backend`；跨模块写模块前缀（`core::Image`）；不用 `detail`，
+- 使用 include guard，禁止 pragma once。宏名 `HRT_<目录>_<文件名>_HPP`，全大写、点换下划线，
+  冲突时增加一级目录；末尾 endif 注释标明宏名。.hpp.in 按生成的 .hpp 命名，
+  保持 `@变量@` 完整，必要时用 clang-format off/on。
+- 遵循根目录 `.clang-format`，clang-format >=19，检查用 `--dry-run --Werror`；
+  静态检查用 `.clang-tidy` 和 build/ 下的 compile_commands.json。
+  include 顺序为 hrt、kitzoo、其他尖括号头、双引号头；限定符在类型左侧。
+  非 C++ 文本用 LF，.bat、.cmd 用 CRLF。
+- 命名空间按模块：`hrt::core`、engine、preprocess、postprocess、model、hrtc；
+  内部另有 memory、backend。跨模块写模块前缀（如 `core::Image`），不用 detail，
   文件内私有代码放匿名命名空间。
-- 类型大驼峰，函数和变量小写下划线，常量 `kName`，宏 `HRT_` 前缀；第三方接口遵循原有约定。
-- 枚举用 `enum class`，枚举项大驼峰（`DataType::Float32`），最后一项保留逗号；底层类型和数值
-  只在序列化、ABI 等需要时指定。
-- 只有持有进程级共享状态的对象才用单例（继承 `kitzoo::core::Singleton<T>`）；无状态工具用自由函数。
+- 类型大驼峰，函数和变量小写下划线，常量 `kName`，宏 `HRT_` 前缀；第三方接口沿用原约定。
+- 枚举用 enum class，枚举项大驼峰，最后一项保留逗号；只在序列化、ABI 等必要场景指定底层类型和数值。
+  枚举项和结构体成员的简短说明统一放在声明后的行尾，与声明保持同一行：
+
+  ```cpp
+  enum class CopyPolicy {
+    KeepSrcStride, // dst takes src's shape and stride.
+    AutoDstStride, // dst takes src's shape with a packed stride.
+    DirectCopy,    // dst already has src's shape; only data is copied.
+  };
+
+  struct ObjectBox {
+    core::Rect2f rect;           // Bounding box.
+    float score = 0.0F;          // Confidence score.
+    std::int64_t type = 0;       // Class ID.
+    std::int64_t track_id = -1;  // Track ID; -1 means unassigned.
+  };
+  ```
+
+- 注释只解释代码无法表达的约束、原因、数据布局和选项，不描述改动过程或显然逻辑；
+  上述行尾形式用于需要说明的成员，不要求逐项添加重复注释。
+- 只有持有进程级共享状态的对象才继承 `kitzoo::core::Singleton<T>`；无状态工具用自由函数。
+
+## 函数与错误处理
+
+- 头文件只声明，实现放 .cpp，模板和 constexpr 除外。函数声明间空一行，相关重载可成组；
+  函数和有返回值的 lambda 用尾置返回类型。
+- 只读大对象传 `const T&`，修改调用方对象传 `T&`，转移所有权按值或 `T&&`；
+  数值、指针、std::string_view、std::span 按值传递。
+- 所有代码（含工具、示例、测试）不抛异常、不用 try/catch：
+  初始化配置错误或无可用引擎等用 `KZ_CHECK_MSG` 记录后 abort；
+  推理失败用 `KZ_CHECK_RETURN` 记录后返回空结果（std::nullopt、false）。
+  用于挑选的 `Engine::create`/initialize、`Context::create`、
+  `ImagePreprocessor::create` 和 `hrtc::load` 返回空值，由调用方决定。
+- SDK 状态码直接传检查宏，错误信息取自 SDK；优先用不抛异常的 SDK 接口（如 ORT C API），
+  SDK 类型不泄漏到上层。资源回滚用 RAII 或 `KZ_SCOPE_FAIL`，abort 用 `EXPECT_DEATH` 测试。
+- 输出只用 `KZ_LOG_*`，不用 cout、printf、spdlog；推理热路径不输出常规日志，
+  缓冲区在加载或首次运行时分配并复用。
 
 ## README、示例与测试
 
-- README 用英文、保持简略，依次只保留项目介绍、`Build and test`、`Use in another CMake project`、
-  `Modules` 和 `Backends`，后端名称链接到各自项目；表格只列现有内容，变化时同步更新。
-- 示例 `examples/<name>.cpp` 对应 `hybridrt_example_<name>`，展示典型用法；资源通过命令行参数
-  传入，用 OpenCV imgcodecs 读写图片。
-- 测试放 `tests/<module>/<源文件>_test.cpp`（根目录只留构建入口），同一源文件的场景合并到一个
-  测试文件；用例组以源文件大驼峰名加 `Test` 命名，目标为 `hybridrt_test_<源文件>`（重名时加目录前缀，如
-  `hybridrt_test_example_image_model`）。命令行程序和示例用黑盒测试：运行构建出的程序，检查退出码、
-  输出和生成的文件（`tests/tools/run_tool.hpp`）。前后处理用构造的小数据验证；跑真实模型的测试用
-  `tests/engine/template_config.hpp` 的 `template_algo()` 读取模板中的模型 algo，由 `hybridrt_enable_model_test()`
-  启用，模型、图片或 SDK 缺失时 `GTEST_SKIP()`。
-- 新增、合并或删除示例和测试时同步更新 CMake 与文档。
+- 根 README 用英文且简略，依次只保留项目介绍、Build and test、Use in another CMake project、
+  Modules、Backends；后端名称链接到各自项目，表格只列现有内容并随变化更新。
+- `examples/<name>.cpp` 对应 `hybridrt_example_<name>`，展示典型用法；
+  资源通过命令行传入，图片用 OpenCV imgcodecs 读写。
+- 测试放 `tests/<模块>/<源文件>_test.cpp`，根目录只留构建入口，同源场景合并。
+  用例组为源文件大驼峰名加 Test，目标为 `hybridrt_test_<源文件>`，重名时加目录前缀。
+  命令行程序和示例用 `tests/tools/run_tool.hpp` 做黑盒测试，检查退出码、输出、产物；
+  前后处理用构造的小数据验证。
+- 真实模型测试用 `tests/engine/template_config.hpp` 的 `template_algo()` 读取模板，
+  由 `hybridrt_enable_model_test()` 启用；缺模型、图片或 SDK 时 GTEST_SKIP。
+  新增、合并、删除示例或测试时同步 CMake 和文档。
 
 ## 提交与验证
 
-- 标题 `<type>: <summary>`，简洁英文、动词开头、不超过 72 字符、无句号；类型为 `feat`、`fix`、
-  `perf`（正文记录基准前后数据）、`chore`、`doc`、`test`、`ci`，不混用。
-- 提交围绕完整目的，含调用方、构建配置、测试、示例和规则更新，能独立构建；较大提交在正文说明
-  改动原因、已授权的接口变化、构建测试结果及未验证的平台和后端。
-- 提交前检查差异，不含生成文件、临时文件、第三方代码、模型文件、`assets/` 下除 `template/` 和 `PERF.md` 外的文件或 `docs/`；执行
-  `git diff --check`（有暂存时加 `--cached`）。
-- 只有用户明确要求时才提交或推送；推送不强制覆盖远程历史。
-- 修改后同步更新受影响的 CMake、调用方、示例和文档，运行相关构建和测试，报告未验证的平台和后端。
-
-## 远程 TensorRT/CUDA 验证
-
-- GPU 远程主机 SSH 名称为 `gpu4090`，验证工作目录固定为 `/root/WorkSpace/AgentValidation`，源码在其下的 `HybridRT/`；验证过程只使用该目录，不创建临时源码副本或在其他目录构建。
-- 每次验证前，从本地仓库根目录将当前工作树同步到远程目录；保留远端 `build/` 和 `deps/` 缓存（排除规则以 `/` 开头，只匹配根目录，避免误排除
-  `cmake/external/`）：
-
-  ```sh
-  rsync -a --delete --exclude='/.git/' --exclude='/build/' --exclude='/deps/' --exclude='/external/' --exclude='/deps.cmake' --exclude='/spdlog-1.17.0/' ./ gpu4090:/root/WorkSpace/AgentValidation/HybridRT
-  ```
-
-- 远端使用 `/root/.local/bin/cmake`（当前为 4.4.3；系统默认 CMake 可能低于项目要求），先检查版本至少为 3.25，再从固定目录配置；TensorRT SDK 根目录为 `/opt/nvidia/TensorRT-10.16.1.11`：
-
-  ```sh
-  ssh gpu4090 'cd /root/WorkSpace/AgentValidation/HybridRT && /root/.local/bin/cmake -S . -B build -DTensorRT_ROOT=/opt/nvidia/TensorRT-10.16.1.11 -DHYBRIDRT_BUILD_TESTS=ON'
-  ```
-
-- 远端访问 GitHub 不稳定；FetchContent 拉取失败时，在本地按 `cmake/external/` 中的版本克隆，同步到
-  `/root/WorkSpace/AgentValidation/deps-local/<name>`，配置时加 `-DFETCHCONTENT_SOURCE_DIR_<NAME>=<该目录>`。
-
-- 构建并重复运行 CUDA 预处理并发回归，然后运行完整 CTest；运行 TensorRT 测试时设置 SDK 库路径：
-
-  ```sh
-  ssh gpu4090 'cd /root/WorkSpace/AgentValidation/HybridRT && /root/.local/bin/cmake --build build --target hybridrt_test_image_model -j2'
-  ssh gpu4090 'cd /root/WorkSpace/AgentValidation/HybridRT && LD_LIBRARY_PATH=/opt/nvidia/TensorRT-10.16.1.11/lib:$LD_LIBRARY_PATH ./build/tests/hybridrt_test_image_model --gtest_filter=ImageModelTest.KeepsCudaPreprocessorScratchAliveUntilStreamCompletes --gtest_repeat=20 --gtest_break_on_failure'
-  ssh gpu4090 'cd /root/WorkSpace/AgentValidation/HybridRT && LD_LIBRARY_PATH=/opt/nvidia/TensorRT-10.16.1.11/lib:$LD_LIBRARY_PATH ctest --test-dir build --output-on-failure'
-  ```
-
-- 不降低项目或依赖的 CMake 最低版本来绕过配置失败。若远端 CMake 低于 3.25，先安装或选择符合要求的 CMake，再重新配置和构建；不能把旧 build 中已有的测试二进制运行结果当作当前源码的验证结果。
-
-## RK3588 RKNN 板端验证
-
-- 板端为 Radxa Rock 5B+（Debian 12，librknnrt 2.3.2），SSH `radxa@192.168.5.11`，密码向用户确认，不写进仓库；
-  验证目录固定为 `~/hybridrt-test`：`bin/` 放程序，`lib/` 放 `librga.so`，`assets/` 放清单、图片和模型。板端
-  Python 只有 numpy 和 `rknnlite`，没有 OpenCV。
-- 本地交叉编译使用 Arm GNU Toolchain 12.2 的 `/Users/krisw/Env/rk3588/toolchains/rk3588-gcc12.toolchain.cmake`
-  （GCC 10.2 的 `rk3588.toolchain.cmake` 编不过 kitzoo）；第三方依赖用 `external/deps/` 的本地副本：
-
-  ```sh
-  E=/Users/krisw/Env/rk3588; D=$PWD/external/deps
-  cmake -S . -B build/rk3588-gcc12 -G Ninja -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_TOOLCHAIN_FILE=$E/toolchains/rk3588-gcc12.toolchain.cmake \
-      -DRKNN_ROOT=$E/rknpu2 -DRKNN_PLATFORM=RK3588 -DRGA_ROOT=$E/RGA -DOpenCV_DIR=$E/OpenCV/lib/cmake/opencv4 \
-      -DHYBRIDRT_BUILD_TESTS=ON -DHYBRIDRT_TOOLS_OUTPUT_DIR=build/rk3588-gcc12/tools \
-      -DFETCHCONTENT_SOURCE_DIR_KITZOO=$D/kitzoo-0.5.1 -DFETCHCONTENT_SOURCE_DIR_FLATBUFFERS=$D/flatbuffers-25.2.10 \
-      -DFETCHCONTENT_SOURCE_DIR_GOOGLETEST=$D/googletest-1.18.0 -DFETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON=$D/json-3.12.0 \
-      -DFETCHCONTENT_SOURCE_DIR_SPDLOG=$D/spdlog-1.17.0 -DFETCHCONTENT_SOURCE_DIR_MIMALLOC=$D/mimalloc-3.5.3 \
-      -DFETCHCONTENT_SOURCE_DIR_CXXOPTS=$D/cxxopts-3.3.1 -DFETCHCONTENT_SOURCE_DIR_THREAD_POOL=$D/thread-pool-5.1.0 \
-      -DFETCHCONTENT_SOURCE_DIR_CONCURRENTQUEUE=$D/concurrentqueue-1.0.5
-  cmake --build build/rk3588-gcc12 --parallel
-  ```
-
-- 每次验证都重新构建，再用 tar 经 SSH 同步当前产物，不运行板端旧二进制；模型放 `assets/<名称>/`，清单由模板中
-  该模型的 algo 生成（`rknn` 后端），路径相对 `~/hybridrt-test`；从该目录运行并设置 `LD_LIBRARY_PATH=lib`：
-
-  ```sh
-  tar czf - -C build/rk3588-gcc12 tests/hybridrt_test_general_keypoint tools/hrt-validate examples/hybridrt_example_image_model \
-      | ssh radxa@192.168.5.11 'mkdir -p ~/hybridrt-test/bin && tar xzf - --strip-components=1 -C ~/hybridrt-test/bin'
-  ssh radxa@192.168.5.11 'cd ~/hybridrt-test && LD_LIBRARY_PATH=lib ./bin/hybridrt_test_general_keypoint'
-  ssh radxa@192.168.5.11 'cd ~/hybridrt-test && LD_LIBRARY_PATH=lib ./bin/hrt-validate -m assets/<名称>/<清单>.json -n <algo> -i assets/yolo/images -r drawn/'
-  ```
-
-- 测试程序内嵌源码路径，读取仓库文件的测试需在板端保持相同目录结构；接入新模型前先在板端用 `librknnrt.so` 的
-  `rknn_query`（Python ctypes）查询输入输出形状和量化参数，RKNN 模型内置的 mean/std 与 `rgb2bgr` 可用 `strings <模型>.rknn | grep "'mean'"` 查看。
-- 模型转换环境在 `/home/krisw/work/RKNN`（uv 管理的 `.venv`，Python 3.10，rknn-toolkit2 2.3.2，与板端
-  librknnrt 一致；`requirements.lock` 锁定版本，onnx 固定 1.16.1、setuptools 低于 81）；用 `assets/template/rknn_convert.py`
-  从 ONNX 导出 RK3588 模型（不带 `--dataset` 为 fp16，带校准图片列表为 int8），mean/std 写进模型，HybridRT 侧配
-  `image_input: true` 与 `inter_rgb`。
+- 只有用户明确要求时才提交或推送，不强制覆盖远程历史。
+- 标题为 `<type>: <summary>`，简洁英文、动词开头、最多 72 字符、无句号；
+  type 只选 feat、fix、perf、chore、doc、test、ci，perf 正文记录前后基准数据。
+- 每次提交围绕完整目的，包含相关调用方、构建、测试、示例、文档和规则，能独立构建。
+  较大提交正文说明原因、获授权的接口变化、验证结果及未验证平台和后端。
+- 提交前审查差异，排除临时文件、第三方代码、模型、docs/、不允许提交的 assets 内容及生成文件
+  （上述 hrtc_generated.h 除外）；执行 `git diff --check`，有暂存时也检查 --cached。
+- 修改后同步所有受影响文件，运行相关构建和测试，报告未验证的平台和后端。
+- 远程验证前同步当前工作树，保留构建和依赖缓存，排除规则只匹配预期目录，避免遗漏源码。
+  使用固定验证工作目录，不另建源码副本；重新配置和构建后测试，不以旧二进制结果代替当前源码验证。
+  不降低项目或依赖的 CMake 最低版本来绕过失败；依赖下载失败时使用版本匹配的本地副本。
+- CUDA 预处理并发相关改动需重复运行
+  `ImageModelTest.KeepsCudaPreprocessorScratchAliveUntilStreamCompletes` 20 次，再运行完整 CTest；
+  TensorRT 测试设置正确的 SDK 库路径。
+- RKNN 板端验证先重新交叉构建，再同步当前产物；从验证目录运行并配置动态库路径。
+  需读取源码文件的测试保持相同目录结构；密码向用户确认，不写入仓库。
+  新模型先用 rknn_query 查询输入输出形状及量化参数，并确认模型内置 mean/std、rgb2bgr。
+  转换工具包与板端运行时版本保持一致；使用 `assets/test/scripts/rknn_convert.py`，
+  无 --dataset 为 fp16，带校准图片列表为 int8，mean/std 写入模型，HybridRT 配 image_input 和 inter_rgb。

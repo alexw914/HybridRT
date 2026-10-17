@@ -192,7 +192,7 @@ YOLOv8. Columns, in network-input pixels:
 `RtmoKeypoint` decodes one-stage RTMO pose models with fixed outputs, boxes `[1, M, 5]` (x1, y1, x2,
 y2, score) and keypoints `[1, M, K, 3]` (x, y, visibility) in network-input pixels, in either output
 order. The mmpose export selects instances with NMS inside the model, so its output size depends on
-the image; `rtmo_fix_outputs.py` next to this file (needs `onnx` and `numpy`) replaces that NMS
+the image; `rtmo_fix_outputs.py` in the local assets/test/scripts/ directory (needs `onnx` and `numpy`) replaces that NMS
 with the M best pre-NMS candidates (`--candidates`, 300), and `RtmoKeypoint` thresholds and
 suppresses them. RTMO takes BGR, keep-ratio top-left resize, padding 114 and no normalization.
 
@@ -275,6 +275,8 @@ Sources and export steps:
 
 - Decoded YOLOv8 detection, segmentation, pose, OBB and classification models come from
   [unileon-robotics/YOLO8-ONNX](https://huggingface.co/unileon-robotics/YOLO8-ONNX).
+Conversion scripts are local, untracked files in assets/test/scripts/ and are not distributed with the repository.
+
 - Raw YOLOv8/YOLO26 models use `yolo_export_raw.py` with Ultralytics 8.4.178 and the
   corresponding official `.pt` weights. YOLO26 end-to-end models use `export(format="onnx",
   imgsz=640, opset=17, simplify=True, nms=False)`, with 1024 inputs for OBB.
@@ -303,11 +305,11 @@ Sources and export steps:
 Recreate transformed files from downloaded source exports, outside the model collection:
 
 ```sh
-python assets/template/yolov5_export_raw.py yolov5n.onnx assets/test/onnx/YoloV5Detect.onnx
-python assets/template/rtmo_fix_outputs.py rtmo-end2end.onnx rtmo-fixed.onnx --candidates 300
-python assets/template/onnx_fix_shapes.py rtdetr-l.onnx assets/test/onnx/DetrDetect.onnx --input images=1,3,640,640
-python assets/template/onnx_fix_shapes.py rtmo-fixed.onnx assets/test/onnx/RtmoKeypoint.onnx --input input=1,3,640,640
-python assets/template/onnx_fix_shapes.py rtmpose-end2end.onnx assets/test/onnx/GeneralKeypoint.onnx --input input=1,3,256,192
+python assets/test/scripts/yolov5_export_raw.py yolov5n.onnx assets/test/onnx/YoloV5Detect.onnx
+python assets/test/scripts/rtmo_fix_outputs.py rtmo-end2end.onnx rtmo-fixed.onnx --candidates 300
+python assets/test/scripts/onnx_fix_shapes.py rtdetr-l.onnx assets/test/onnx/DetrDetect.onnx --input images=1,3,640,640
+python assets/test/scripts/onnx_fix_shapes.py rtmo-fixed.onnx assets/test/onnx/RtmoKeypoint.onnx --input input=1,3,640,640
+python assets/test/scripts/onnx_fix_shapes.py rtmpose-end2end.onnx assets/test/onnx/GeneralKeypoint.onnx --input input=1,3,256,192
 ```
 
 Run any template algo directly, for example:
@@ -350,7 +352,7 @@ Results checked against independent references on bus.jpg (ONNX Runtime 1.31.0, 
 
 ### RKNN on RK3588
 
-`rknn_convert.py` next to this file (rknn-toolkit2 2.3.2, matching the board runtime) converts each ONNX test model to
+`rknn_convert.py` in the local assets/test/scripts/ directory (rknn-toolkit2 2.3.2, matching the board runtime) converts each ONNX test model to
 an fp16 `.rknn` beside it, with the model's mean/std built in. Its algo then runs on RKNN with the same
 `postprocess`; `preprocess` drops `mean`/`std` and takes `dst_image_format: "inter_rgb"` (`inter_bgr` for
 RTMO), and the backend is `{"engine_type": "rknn", "config": {"image_input": true}}`. A raw-head pose model
