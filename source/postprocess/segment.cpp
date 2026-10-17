@@ -16,13 +16,15 @@ namespace hrt::postprocess {
 auto make_segment(std::string_view type) -> UniquePtr<SegmentPostprocessor> {
   if (type == "InstanceSegment")
     return make_instance_segment();
+  if (type == "E2eSegment")
+    return make_e2e_segment();
   if (type == "SemanticSegment")
     return make_semantic_segment();
   return nullptr;
 }
 
-auto create_segment_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
-    -> UniquePtr<SegmentPostprocessor> {
+auto create_segment_postprocessor(std::string_view type, const kitzoo::json::Json& config,
+                                  const engine::Engine& engine) -> UniquePtr<SegmentPostprocessor> {
   return checked(make_segment(type), type, config, engine);
 }
 

@@ -1,14 +1,22 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: tests/postprocess/segment_test.cpp
-// Description: Tests instance mask and semantic label decoding.
+// Description: Tests instance mask, end-to-end instance mask and semantic
+//              label decoding.
 // -----------------------------------------------------------------------------
 
+#include <hrt/model/image_model.hpp>
 #include <hrt/postprocess/segment.hpp>
 
 #include <gtest/gtest.h>
 
 #include "fake_engine.hpp"
+
+#ifdef HRT_ORT_MODEL_TEST
+#include <opencv2/imgcodecs.hpp>
+
+#include "../engine/template_config.hpp"
+#endif
 
 namespace {
 
@@ -166,5 +174,69 @@ TEST(SegmentTest, PreservesInputRegionAndIntegerClassIds) {
     EXPECT_EQ(object.mask.data, expected);
   }
 }
+
+TEST(SegmentTest, DecodesEndToEndRowsWithoutNms) {
+  const auto detections = proto(DataType::Float32, {1, 3, 8});
+  const auto masks = proto(DataType::Float32, {1, 2, 4, 4});
+  FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {masks, detections});
+  const auto config = Json::parse(R"({"class_num": 2, "confidence_threshold": [0.5]})");
+  auto postprocessor = hrt::postprocess::create_segment_postprocessor("E2eSegment", config, engine);
+  ASSERT_NE(postprocessor, nullptr);
+  // x1, y1, x2, y2, score, class, coefficient 0, coefficient 1: the left-half
+  // mask of class 0, a class 1 row below its threshold and a padding row.
+  const hrt::Vector<float> rows{
+      4, 4, 12, 12, 0.9F, 0, 1, 0, 4, 4, 12, 12, 0.4F, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  };
+  hrt::postprocess::SegmentResultMap result;
+  result[99].emplace_back();
+  ASSERT_TRUE(postprocessor->process(
+      result, {hrt::test::buffer_of(masks, prototypes()), hrt::test::buffer_of(detections, rows)},
+      hrt::test::identity(16, 16)));
+  ASSERT_EQ(result.size(), 1U);
+  expect_left_half_mask(result);
+  EXPECT_EQ(hrt::model::task_of("E2eSegment"), hrt::model::Task::Segment);
+}
+
+TEST(SegmentTest, AbortsOnMismatchedEndToEndOutputs) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  const auto input = proto(DataType::Float32, {1, 3, 16, 16});
+  const auto masks = proto(DataType::Float32, {1, 2, 4, 4});
+  const auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5]})");
+  for (const auto& outputs :
+       hrt::Vector<hrt::Vector<hrt::core::BufferProto>>{{proto(DataType::Float32, {1, 3, 8})},
+                                                        {proto(DataType::Float32, {1, 3, 9}), masks},
+                                                        {proto(DataType::Float32, {1, 7, 1}), masks}}) {
+    FakeEngine engine({input}, outputs);
+    EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("E2eSegment", config, engine), "");
+  }
+  FakeEngine valid({input}, {proto(DataType::Float32, {1, 3, 8}), masks});
+  EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor(
+                   "E2eSegment", Json::parse(R"({"class_num": 1, "iou_threshold": [0.5]})"), valid),
+               "");
+}
+
+#ifdef HRT_ORT_MODEL_TEST
+TEST(SegmentTest, RunsUltralyticsEndToEndExportWhenAvailable) {
+  const auto algo = hrt::test::template_algo("yolo26n_e2e_segment");
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/bus.jpg").string());
+  if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
+    GTEST_SKIP() << "YOLO26n end-to-end segment ONNX fixture or bus.jpg is unavailable";
+  const auto model = hrt::model::ImageModel<hrt::postprocess::SegmentResultMap>::create(algo);
+  const auto image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, bgr.data, hrt::core::ImageFormat::InterBgr,
+                                            {bgr.cols, bgr.rows}, hrt::core::DataType::Uint8, bgr.step);
+  ASSERT_TRUE(image);
+  const auto result = model->process_sync(*image);
+  ASSERT_TRUE(result);
+  // bus.jpg: three people and the bus, as Ultralytics reports for the same export.
+  ASSERT_TRUE(result->contains(0));
+  EXPECT_EQ(result->at(0).size(), 3U);
+  ASSERT_TRUE(result->contains(5));
+  EXPECT_EQ(result->at(5).size(), 1U);
+  for (const auto& [cls, objects] : *result) {
+    for (const auto& object : objects)
+      EXPECT_FALSE(object.mask.data.empty());
+  }
+}
+#endif
 
 } // namespace

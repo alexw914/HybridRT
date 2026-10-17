@@ -118,6 +118,14 @@
       }
     },
     {
+      "name": "yolo26n_e2e_obb",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/e2e/models/yolo26n-obb.onnx"}]},
+        "postprocess": {"type": "E2eRotated", "class_num": 15, "confidence_threshold": [0.25]}
+      }
+    },
+    {
       "name": "yolov8_rotated",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
@@ -179,6 +187,20 @@
       }
     },
     {
+      "name": "yolo26n_e2e_pose",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/e2e/models/yolo26n-pose.onnx"}]},
+        "postprocess": {
+          "type": "E2eKeypoint",
+          "class_num": 1,
+          "keypoint_num": 17,
+          "keypoint_threshold": 0.5,
+          "confidence_threshold": [0.25]
+        }
+      }
+    },
+    {
       "name": "rtmo_s_pose",
       "config": {
         "preprocess": {"resize_type": "keep_ratio", "dst_image_format": "planar_bgr", "default_color": [114, 114, 114]},
@@ -233,6 +255,14 @@
           "confidence_threshold": [0.25],
           "iou_threshold": [0.45]
         }
+      }
+    },
+    {
+      "name": "yolo26n_e2e_segment",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/e2e/models/yolo26n-seg.onnx"}]},
+        "postprocess": {"type": "E2eSegment", "class_num": 80, "mask_threshold": 0.5, "confidence_threshold": [0.25]}
       }
     },
     {

@@ -2,10 +2,12 @@
 
 `hrtc_template.json` lists every manifest field. The first algo shows all preprocess keys
 and one backend of each engine type with all of its config keys; each following algo shows
-one postprocessor type. Algos named after a model (`yolov8n_detect`, `rtmo_s_pose`, ...) are the
-configs the tests and benchmarks run, with the model's own preprocessing; their `data` points at
-a local fixture under `assets/` (see [Test models](#test-models)), relative to the repository
-root. The others are type references whose model files do not exist. Values are defaults, or
+one postprocessor type, to show how its parameters are set. Where a type has a test model, its
+algo is named after it (`yolov8n_detect`, `rtmo_s_pose`, ...), uses that model's preprocessing and
+is what the tests and benchmarks run; its `data` points at a local fixture under `assets/` (see
+[Test models](#test-models)), relative to the repository root. Other models of the same type are
+described in this file rather than given algos of their own. The remaining algos are type
+references whose model files do not exist. Values are defaults, or
 typical YOLO values where the default would not fit. Check a manifest with
 `hrt-compress -c -j <manifest>`; the ORT, ncnn and MNN engine tests load the backend configs
 of the first algo.
@@ -84,11 +86,14 @@ each in [0, 1].
 | `YoloV5Detect`, `YoloV5Rotated` | `class_num`, `strides` (one per output head), `anchors` (one list per head: w0, h0, w1, h1, ...), thresholds |
 | `GeneralDetect`, `GeneralRotated` | `class_num`, thresholds; decoded `[1, 4 + classes (+ angle), N]` output |
 | `E2eDetect` | `class_num`, `confidence_threshold`; Ultralytics end-to-end `[1, N, 6]` output, no NMS |
+| `E2eRotated` | `class_num`, `confidence_threshold`; end-to-end OBB `[1, N, 7]` |
 | `DetrDetect` | `class_num`, `confidence_threshold` (0.25), `output_format` (`combined`/`separate`), `score_activation` (`none`/`sigmoid`/`softmax`), `background_class` (-1: none), `boxes_output` (0), `scores_output` (1) |
 | `YoloKeypoint` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), thresholds |
+| `E2eKeypoint` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), `confidence_threshold`; end-to-end pose `[1, N, 6 + K x (2 \| 3)]` |
 | `RtmoKeypoint` | `confidence_threshold` ([0.15]), `iou_threshold` ([0.65]), `keypoint_threshold` (0.3); one class |
 | `GeneralKeypoint` | `general_keypoint_type` (`heatmap`/`simcc`/`point_with_visible`/`point_channel_first`/`point_channel_last`), `heatmap_refine` (`dark`/`none`), `score_activation` (`none`/`sigmoid`), `keypoint_threshold` (0) |
 | `InstanceSegment` | `class_num`, `mask_threshold` (0.5), thresholds |
+| `E2eSegment` | `class_num`, `mask_threshold` (0.5), `confidence_threshold`; end-to-end `[1, N, 6 + masks]` plus prototypes |
 | `SemanticSegment` | none |
 | `GeneralClassify` | `classify_postprocess_type`: `none`, `sigmoid`, `softmax` |
 
@@ -113,11 +118,19 @@ Use the model's own preprocessing; Ultralytics RT-DETR needs direct resize
 embedded class selection and global multi-label top-k require a matching export
 or a different decoder; the family name alone does not guarantee compatibility.
 
-`E2eDetect` reads the single `[1, N, 6]` output of Ultralytics end-to-end exports: YOLOv10 and
-YOLO26 by default (`nms=False`), other generations with `nms=True`. Each row is x1, y1, x2, y2 in
-network-input pixels, score and class id; rows are already deduplicated, so no NMS runs, and padding
-rows score 0. `iou_threshold` is not accepted. Only six-column detection rows are read; outputs with
-more columns per row are rejected.
+Ultralytics end-to-end exports have one row per kept object, already deduplicated, so no NMS runs
+and `iou_threshold` is not accepted; padding rows score 0. Ultralytics 8.4 writes them with
+`export(format="onnx", nms=False)` for one-to-one heads (YOLOv10, YOLO26) and `nms=True` for any
+generation; without `nms` it exports the raw `[1, 4 + classes + extra, anchors]` heads, which
+`GeneralDetect`, `YoloKeypoint`, `InstanceSegment` and `GeneralRotated` decode for YOLO26 as for
+YOLOv8. Columns, in network-input pixels:
+
+| Type | Row |
+| --- | --- |
+| `E2eDetect` | x1, y1, x2, y2, score, class id |
+| `E2eKeypoint` | x1, y1, x2, y2, score, class id, then x, y (and visibility) per keypoint |
+| `E2eSegment` | x1, y1, x2, y2, score, class id, mask coefficients; a second `[1, masks, mh, mw]` prototype output, in either order |
+| `E2eRotated` | center x, center y, width, height, score, class id, angle in radians |
 
 `RtmoKeypoint` decodes one-stage RTMO pose models with fixed outputs, boxes `[1, M, 5]` (x1, y1, x2,
 y2, score) and keypoints `[1, M, K, 3]` (x, y, visibility) in network-input pixels, in either output
@@ -180,7 +193,8 @@ hrt-validate -m yolov8n_detect.json -n yolov8n_detect -e ort -i assets/yolo/imag
 | `yolov8n_obb` | `assets/yolo/models/yolov8n-obb.onnx` | same repository, `yolov8n-obb.onnx` | `d87f86b2...` |
 | `yolov8n_classify` | `assets/yolo/models/yolov8n-cls.onnx` | same repository, `yolov8n-cls.onnx` | `29e1963b...` |
 | `rtdetr_l_detect` | `assets/rtdetr/models/rtdetr-l.onnx` | [rtdetr-l.pt](https://github.com/ultralytics/assets/releases/download/v8.1.0/rtdetr-l.pt), Ultralytics 8.1.4 `export(format="onnx", imgsz=640, opset=17)` | `8090814f...` |
-| `yolo26n_e2e_detect` | `assets/e2e/models/yolo26n.onnx`; also `yolov10n.onnx`, `yolov8n-nms.onnx` | Ultralytics 8.4.178 `export(format="onnx", imgsz=640, opset=17, simplify=True)`; `nms=True` for YOLOv8 | `08727943...`, `1fb68e28...`, `979da5db...` |
+| `yolo26n_e2e_detect` | `assets/e2e/models/yolo26n.onnx`; also `yolov10n.onnx`, `yolov8n-nms.onnx` | Ultralytics 8.4.178 `export(format="onnx", imgsz=640, opset=17, simplify=True, nms=False)`; `nms=True` for YOLOv8 | `08727943...`, `1fb68e28...`, `979da5db...` |
+| `yolo26n_e2e_pose`, `_segment`, `_obb` | `assets/e2e/models/yolo26n-pose.onnx`, `-seg.onnx`, `-obb.onnx`; also `yolov8n-{pose,seg,obb}-nms.onnx` | as above from `yolo26n-{pose,seg,obb}.pt` and `yolov8n-{pose,seg,obb}.pt`; OBB at `imgsz=1024` | `ecd85eb3...`, `10106049...`, `0dc04234...`, `84dbdb8f...`, `ac2d7015...`, `8cea4b4c...` |
 | `rtmpose_m_pose` | `assets/rtmpose/models/rtmpose-m_simcc-body7_256x192.onnx` | `end2end.onnx` of the [RTMPose-m body7 SDK](https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504.zip) | `5c0a4bf6...` |
 | `rtmo_s_pose` | `assets/rtmo/models/rtmo-s_body7_640x640.onnx` | `end2end.onnx` of the [RTMO-s body7 SDK](https://download.openmmlab.com/mmpose/v1/projects/rtmo/onnx_sdk/rtmo-s_8xb32-600e_body7-640x640-dac2bf74_20231211.zip) through `rtmo_fix_outputs.py` (300 candidates) | `86aefe58...` |
 
@@ -194,6 +208,13 @@ Results checked against independent references on bus.jpg (ONNX Runtime 1.31.0, 
   identical to the ONNX output decoded in Python with the same letterbox. HybridRT rounds the
   scaled size down, Ultralytics to nearest, so a side ending in .5 gets one row less and low
   scores can differ.
+- `yolo26n_e2e_pose`, `_segment`, `_obb` and their YOLOv8 `nms=True` variants against Ultralytics
+  `predict` on the same ONNX files: identical boxes, scores, classes, keypoints and angles on bus.jpg
+  and airport.jpg; mask IoU 0.966 to 0.997 against `retina_masks=True`. On airport.jpg the YOLO26
+  segment export keeps one more box at score 0.253 because of the rounding above.
+- Raw YOLO26 pose, segment and OBB exports (no `nms`) through `YoloKeypoint`, `InstanceSegment` and
+  `GeneralRotated`: the same objects and scores as Ultralytics `predict`, except one borderline
+  airport.jpg segment box from the same rounding. These exports are not template algos.
 - `rtmo_s_pose`: identical boxes, scores and visible keypoints to the original model's in-graph NMS.
   300 candidates cost 0.22 s against 0.09 s for the original on an x86 CPU (100: 0.12 s), as each
   candidate decodes its keypoints; bus.jpg has 63 candidates above 0.15 for 5 people. Its graph

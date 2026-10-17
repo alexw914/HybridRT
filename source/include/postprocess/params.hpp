@@ -112,6 +112,8 @@ auto make_yolov8_rotated() -> UniquePtr<RotatedPostprocessor>;
 
 auto make_general_rotated() -> UniquePtr<RotatedPostprocessor>;
 
+auto make_e2e_rotated() -> UniquePtr<RotatedPostprocessor>;
+
 auto make_general_classify() -> UniquePtr<ClassifyPostprocessor>;
 
 auto make_general_keypoint() -> UniquePtr<KeypointPostprocessor>;
@@ -120,12 +122,20 @@ auto make_yolo_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
 auto make_rtmo_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
+auto make_e2e_keypoint() -> UniquePtr<KeypointPostprocessor>;
+
 auto make_instance_segment() -> UniquePtr<SegmentPostprocessor>;
+
+auto make_e2e_segment() -> UniquePtr<SegmentPostprocessor>;
 
 auto make_semantic_segment() -> UniquePtr<SegmentPostprocessor>;
 
 auto finish_detect(DetectResultMap& result, const Vector<float>& iou_threshold,
                    const preprocess::ImageTransform& transform) -> void;
+
+// Maps network-space rotated boxes back to the source; fails without uniform
+// scaling.
+auto map_rotated(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool;
 
 auto finish_rotated(RotatedResultMap& result, const Vector<float>& iou_threshold,
                     const preprocess::ImageTransform& transform) -> bool;

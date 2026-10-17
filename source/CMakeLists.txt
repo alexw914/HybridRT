@@ -51,8 +51,10 @@ add_library(hybridrt STATIC
     postprocess/rotated/yolov5_rotated.cpp
     postprocess/rotated/yolov8_rotated.cpp
     postprocess/rotated/general_rotated.cpp
+    postprocess/rotated/e2e_rotated.cpp
     postprocess/classify/general_classify.cpp
     postprocess/keypoint/general_keypoint.cpp
+    postprocess/keypoint/e2e_keypoint.cpp
     postprocess/keypoint/rtmo_keypoint.cpp
     postprocess/keypoint/yolo_keypoint.cpp
     postprocess/segment.cpp

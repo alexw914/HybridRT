@@ -1,8 +1,9 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/postprocess/segment/instance_segment.cpp
-// Description: Implements instance segmentation decoding: boxes with mask
-//              coefficients plus mask prototypes.
+// Description: Implements instance segmentation decoding, boxes with mask
+//              coefficients plus mask prototypes, for raw heads and
+//              Ultralytics end-to-end exports.
 // -----------------------------------------------------------------------------
 
 #include <kitzoo/core/macro.hpp>
@@ -28,88 +29,9 @@ struct InstanceSegmentParam {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(InstanceSegmentParam, class_num, confidence_threshold, iou_threshold,
                                                 mask_threshold)
 
-// Outputs: detections [1, 4 + classes + masks, N] and prototypes
-// [1, masks, mh, mw], identified by rank.
-class InstanceSegment final : public SegmentPostprocessor {
+// Mask decoding shared by both formats; keeps its scratch images.
+class MaskDecoder {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    return check_section<InstanceSegmentParam>(config);
-  }
-
-  auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    param_ = config.get<InstanceSegmentParam>();
-    if (param_.class_num == 0 ||
-        !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
-        !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
-      return false;
-    const auto& outputs = engine.output_protos();
-    if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 2 || !engine_input_size(engine)) {
-      KZ_LOG_ERROR("instance_segment: needs one image input and two NCHW outputs");
-      return false;
-    }
-    detections_ = outputs[0].shape.size() == 3 ? 0 : 1;
-    prototypes_ = 1 - detections_;
-    const auto& det = outputs[detections_].shape;
-    const auto& proto = outputs[prototypes_].shape;
-    if (det.size() != 3 || proto.size() != 4 || det[0] != 1 || proto[0] != 1 ||
-        det[1] != static_cast<std::int64_t>(param_.class_num) + 4 + proto[1]) {
-      KZ_LOG_ERROR("instance_segment: outputs must be [1, 4 + class_num + masks, N] and [1, masks, h, w]");
-      return false;
-    }
-    mask_logit_ = logit(param_.mask_threshold);
-    return true;
-  }
-
-protected:
-  auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool override {
-    const auto* det = float_data(*outputs[detections_], scratch_[0]);
-    const auto* proto = float_data(*outputs[prototypes_], scratch_[1]);
-    if (det == nullptr || proto == nullptr)
-      return false;
-    const auto count = static_cast<std::size_t>(outputs[detections_]->shape()[2]);
-    const auto& proto_shape = outputs[prototypes_]->shape();
-    const Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
-                                static_cast<int>(proto_shape[3])};
-
-    const auto classes = param_.class_num;
-    Vector<Vector<core::Rect2f>> rects(classes);
-    Vector<Vector<float>> scores(classes);
-    Vector<Vector<std::size_t>> anchors(classes);
-    for (std::size_t i = 0; i < count; ++i) {
-      const auto [l, t, r, b] = center_box(det[i], det[count + i], det[count * 2 + i], det[count * 3 + i]);
-      if (!(r - l > 0.0F && b - t > 0.0F))
-        continue;
-      for (std::size_t cls = 0; cls < classes; ++cls) {
-        const auto score = det[(4 + cls) * count + i];
-        if (!(score > param_.confidence_threshold[cls]))
-          continue;
-        rects[cls].push_back(core::Rect2f::from_points({l, t}, {r, b}));
-        scores[cls].push_back(score);
-        anchors[cls].push_back(i);
-      }
-    }
-
-    const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
-                              static_cast<float>(transform.src_roi.width),
-                              static_cast<float>(transform.src_roi.height)};
-    Vector<float> coefficients(static_cast<std::size_t>(prototypes.channels));
-    for (std::size_t cls = 0; cls < classes; ++cls) {
-      for (auto k : nms_keep(rects[cls], scores[cls], param_.iou_threshold[cls])) {
-        const auto box = core::intersect(to_source(rects[cls][k], transform), bounds);
-        if (box.empty())
-          continue;
-        for (std::size_t j = 0; j < coefficients.size(); ++j)
-          coefficients[j] = det[(4 + classes + j) * count + anchors[cls][k]];
-        auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
-        object.box = {box, scores[cls][k], static_cast<std::int64_t>(cls), -1};
-        object.mask = make_mask(prototypes, coefficients, rects[cls][k], box, transform);
-      }
-    }
-    return true;
-  }
-
-private:
   struct Prototypes {
     const float* data;
     int channels;
@@ -119,8 +41,8 @@ private:
 
   // Mask = coefficients . prototypes inside the box, sampled bilinearly into
   // the box's source pixels and thresholded as a logit.
-  auto make_mask(const Prototypes& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
-                 const core::Rect2f& source_box, const preprocess::ImageTransform& transform) -> Mask {
+  auto make(const Prototypes& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
+            const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit) -> Mask {
     Mask mask;
     const auto x0 = static_cast<int>(std::floor(source_box.x));
     const auto y0 = static_cast<int>(std::floor(source_box.y));
@@ -165,22 +87,198 @@ private:
                    cv::INTER_LINEAR | cv::WARP_INVERSE_MAP, cv::BORDER_REPLICATE);
     mask.data.resize(static_cast<std::size_t>(mask.rect.width) * static_cast<std::size_t>(mask.rect.height));
     cv::Mat bits(mask.rect.height, mask.rect.width, CV_8U, mask.data.data());
-    cv::compare(sampled_, static_cast<double>(mask_logit_), bits, cv::CMP_GT);
+    cv::compare(sampled_, static_cast<double>(mask_logit), bits, cv::CMP_GT);
     cv::bitwise_and(bits, cv::Scalar(1), bits);
     return mask;
   }
 
+private:
+  cv::Mat logits_;
+  cv::Mat sampled_;
+};
+
+struct E2eSegmentParam {
+  unsigned int class_num = 0;
+  Vector<float> confidence_threshold;
+  float mask_threshold = 0.5F;
+};
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2eSegmentParam, class_num, confidence_threshold, mask_threshold)
+
+// Outputs: detections [1, 4 + classes + masks, N] and prototypes
+// [1, masks, mh, mw], identified by rank.
+class InstanceSegment final : public SegmentPostprocessor {
+public:
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    return check_section<InstanceSegmentParam>(config);
+  }
+
+  auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    param_ = config.get<InstanceSegmentParam>();
+    if (param_.class_num == 0 ||
+        !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
+        !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
+      return false;
+    const auto& outputs = engine.output_protos();
+    if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 2 || !engine_input_size(engine)) {
+      KZ_LOG_ERROR("instance_segment: needs one image input and two NCHW outputs");
+      return false;
+    }
+    detections_ = outputs[0].shape.size() == 3 ? 0 : 1;
+    prototypes_ = 1 - detections_;
+    const auto& det = outputs[detections_].shape;
+    const auto& proto = outputs[prototypes_].shape;
+    if (det.size() != 3 || proto.size() != 4 || det[0] != 1 || proto[0] != 1 ||
+        det[1] != static_cast<std::int64_t>(param_.class_num) + 4 + proto[1]) {
+      KZ_LOG_ERROR("instance_segment: outputs must be [1, 4 + class_num + masks, N] and [1, masks, h, w]");
+      return false;
+    }
+    mask_logit_ = logit(param_.mask_threshold);
+    return true;
+  }
+
+protected:
+  auto decode(SegmentResultMap& result, const core::Buffers& outputs,
+              const preprocess::ImageTransform& transform) -> bool override {
+    const auto* det = float_data(*outputs[detections_], scratch_[0]);
+    const auto* proto = float_data(*outputs[prototypes_], scratch_[1]);
+    if (det == nullptr || proto == nullptr)
+      return false;
+    const auto count = static_cast<std::size_t>(outputs[detections_]->shape()[2]);
+    const auto& proto_shape = outputs[prototypes_]->shape();
+    const MaskDecoder::Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
+                                             static_cast<int>(proto_shape[3])};
+
+    const auto classes = param_.class_num;
+    Vector<Vector<core::Rect2f>> rects(classes);
+    Vector<Vector<float>> scores(classes);
+    Vector<Vector<std::size_t>> anchors(classes);
+    for (std::size_t i = 0; i < count; ++i) {
+      const auto [l, t, r, b] = center_box(det[i], det[count + i], det[count * 2 + i], det[count * 3 + i]);
+      if (!(r - l > 0.0F && b - t > 0.0F))
+        continue;
+      for (std::size_t cls = 0; cls < classes; ++cls) {
+        const auto score = det[(4 + cls) * count + i];
+        if (!(score > param_.confidence_threshold[cls]))
+          continue;
+        rects[cls].push_back(core::Rect2f::from_points({l, t}, {r, b}));
+        scores[cls].push_back(score);
+        anchors[cls].push_back(i);
+      }
+    }
+
+    const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
+                              static_cast<float>(transform.src_roi.width),
+                              static_cast<float>(transform.src_roi.height)};
+    Vector<float> coefficients(static_cast<std::size_t>(prototypes.channels));
+    for (std::size_t cls = 0; cls < classes; ++cls) {
+      for (auto k : nms_keep(rects[cls], scores[cls], param_.iou_threshold[cls])) {
+        const auto box = core::intersect(to_source(rects[cls][k], transform), bounds);
+        if (box.empty())
+          continue;
+        for (std::size_t j = 0; j < coefficients.size(); ++j)
+          coefficients[j] = det[(4 + classes + j) * count + anchors[cls][k]];
+        auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
+        object.box = {box, scores[cls][k], static_cast<std::int64_t>(cls), -1};
+        object.mask = masks_.make(prototypes, coefficients, rects[cls][k], box, transform, mask_logit_);
+      }
+    }
+    return true;
+  }
+
+private:
   InstanceSegmentParam param_;
   std::size_t detections_ = 0;
   std::size_t prototypes_ = 1;
   float mask_logit_ = 0.0F;
   Array<core::Buffer, 2> scratch_{core::Buffer(core::MemoryType::Cpu, core::DataType::Float32),
                                   core::Buffer(core::MemoryType::Cpu, core::DataType::Float32)};
-  cv::Mat logits_;
-  cv::Mat sampled_;
+  MaskDecoder masks_;
+};
+
+// One detection output [1, N, 6 + masks]: per row x1, y1, x2, y2 in
+// network-input pixels, score, class id and mask coefficients, as YOLO26
+// (nms=False) and YOLOv8 (nms=True) segment exports write them, plus the
+// prototypes [1, masks, mh, mw]. Rows are already deduplicated; unused rows
+// score 0.
+class E2eSegment final : public SegmentPostprocessor {
+public:
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    return check_section<E2eSegmentParam>(config);
+  }
+
+  auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    param_ = config.get<E2eSegmentParam>();
+    if (param_.class_num == 0 ||
+        !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
+      return false;
+    const auto& outputs = engine.output_protos();
+    KZ_CHECK_RETURN(engine.proto().output_layout == engine::DataLayout::Nchw && outputs.size() == 2 &&
+                        engine_input_size(engine),
+                    false, "e2e_segment: needs one image input and two NCHW outputs");
+    detections_ = outputs[0].shape.size() == 3 ? 0 : 1;
+    prototypes_ = 1 - detections_;
+    const auto& det = outputs[detections_].shape;
+    const auto& proto = outputs[prototypes_].shape;
+    KZ_CHECK_RETURN(det.size() == 3 && proto.size() == 4 && det[0] == 1 && proto[0] == 1 && det[1] > 0 &&
+                        det[2] == 6 + proto[1],
+                    false, "e2e_segment: outputs must be [1, N, 6 + masks] and [1, masks, h, w]");
+    mask_logit_ = logit(param_.mask_threshold);
+    return true;
+  }
+
+protected:
+  auto decode(SegmentResultMap& result, const core::Buffers& outputs,
+              const preprocess::ImageTransform& transform) -> bool override {
+    const auto* det = float_data(*outputs[detections_], scratch_[0]);
+    const auto* proto = float_data(*outputs[prototypes_], scratch_[1]);
+    if (det == nullptr || proto == nullptr)
+      return false;
+    const auto count = static_cast<std::size_t>(outputs[detections_]->shape()[1]);
+    const auto columns = static_cast<std::size_t>(outputs[detections_]->shape()[2]);
+    const auto& proto_shape = outputs[prototypes_]->shape();
+    const MaskDecoder::Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
+                                             static_cast<int>(proto_shape[3])};
+    const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
+                              static_cast<float>(transform.src_roi.width),
+                              static_cast<float>(transform.src_roi.height)};
+    for (std::size_t i = 0; i < count; ++i) {
+      const auto* row = det + i * columns;
+      const auto label = row[5];
+      // Also skips NaN class ids, scores and boxes.
+      if (!(label >= 0.0F && label < static_cast<float>(param_.class_num)))
+        continue;
+      const auto cls = static_cast<std::size_t>(label);
+      if (!(row[4] > param_.confidence_threshold[cls]) || !(row[2] - row[0] > 0.0F && row[3] - row[1] > 0.0F))
+        continue;
+      const auto net_box = core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]});
+      const auto box = core::intersect(to_source(net_box, transform), bounds);
+      if (box.empty())
+        continue;
+      coefficients_.assign(row + 6, row + columns);
+      auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
+      object.box = {box, row[4], static_cast<std::int64_t>(cls), -1};
+      object.mask = masks_.make(prototypes, coefficients_, net_box, box, transform, mask_logit_);
+    }
+    return true;
+  }
+
+private:
+  E2eSegmentParam param_;
+  std::size_t detections_ = 0;
+  std::size_t prototypes_ = 1;
+  float mask_logit_ = 0.0F;
+  Vector<float> coefficients_;
+  Array<core::Buffer, 2> scratch_{core::Buffer(core::MemoryType::Cpu, core::DataType::Float32),
+                                  core::Buffer(core::MemoryType::Cpu, core::DataType::Float32)};
+  MaskDecoder masks_;
 };
 
 } // namespace
+
+auto make_e2e_segment() -> UniquePtr<SegmentPostprocessor> {
+  return std::make_unique<E2eSegment>();
+}
 
 auto make_instance_segment() -> UniquePtr<SegmentPostprocessor> {
   return std::make_unique<InstanceSegment>();

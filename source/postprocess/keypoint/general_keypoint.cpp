@@ -295,6 +295,8 @@ auto make_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor> {
     return make_yolo_keypoint();
   if (type == "RtmoKeypoint")
     return make_rtmo_keypoint();
+  if (type == "E2eKeypoint")
+    return make_e2e_keypoint();
   return nullptr;
 }
 

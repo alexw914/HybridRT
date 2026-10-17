@@ -64,16 +64,17 @@ auto make_rotated(std::string_view type) -> UniquePtr<RotatedPostprocessor> {
     return make_yolov5_rotated();
   if (type == "GeneralRotated")
     return make_general_rotated();
+  if (type == "E2eRotated")
+    return make_e2e_rotated();
   return nullptr;
 }
 
-auto create_rotated_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
-    -> UniquePtr<RotatedPostprocessor> {
+auto create_rotated_postprocessor(std::string_view type, const kitzoo::json::Json& config,
+                                  const engine::Engine& engine) -> UniquePtr<RotatedPostprocessor> {
   return checked(make_rotated(type), type, config, engine);
 }
 
-auto finish_rotated(RotatedResultMap& result, const Vector<float>& iou_threshold,
-                    const preprocess::ImageTransform& transform) -> bool {
+auto map_rotated(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool {
   const auto& src = transform.src_roi;
   const auto& dst = transform.dst_roi;
   // Letterbox dimensions are rounded to integer pixels.
@@ -85,7 +86,6 @@ auto finish_rotated(RotatedResultMap& result, const Vector<float>& iou_threshold
     result.clear();
   KZ_CHECK_RETURN(uniform, false, "rotated: source mapping requires uniform scaling and nonempty regions");
   for (auto& [cls, boxes] : result) {
-    nms_rotated(boxes, iou_threshold[cls]);
     for (auto& box : boxes) {
       const auto mapped = to_source(
           core::Rect2f{box.rect.center.x, box.rect.center.y, box.rect.size.width, box.rect.size.height}, transform);
@@ -95,6 +95,13 @@ auto finish_rotated(RotatedResultMap& result, const Vector<float>& iou_threshold
     std::erase_if(boxes, [](const RotatedBox& box) -> bool { return box.rect.size.empty(); });
   }
   return true;
+}
+
+auto finish_rotated(RotatedResultMap& result, const Vector<float>& iou_threshold,
+                    const preprocess::ImageTransform& transform) -> bool {
+  for (auto& [cls, boxes] : result)
+    nms_rotated(boxes, iou_threshold[cls]);
+  return map_rotated(result, transform);
 }
 
 } // namespace hrt::postprocess
