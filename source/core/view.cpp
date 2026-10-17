@@ -7,6 +7,7 @@
 #include <hrt/core/view.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <opencv2/imgproc.hpp>
 
 namespace hrt::core {
@@ -16,6 +17,30 @@ namespace {
 auto color(std::size_t cls) -> cv::Scalar {
   return {static_cast<double>(64 + (cls * 67) % 192), static_cast<double>(64 + (cls * 131 + 64) % 192),
           static_cast<double>(64 + (cls * 173 + 128) % 192)};
+}
+
+// Distinct colors for any keypoint count: hues a golden angle apart, with
+// three alternating brightness levels so neighbours also differ in value.
+auto keypoint_color(std::size_t index) -> cv::Scalar {
+  const auto hue = std::fmod(static_cast<double>(index) * 137.508, 360.0) / 60.0;
+  const auto value = 255.0 - static_cast<double>(index % 3) * 50.0;
+  const auto x = value * (1.0 - std::abs(std::fmod(hue, 2.0) - 1.0));
+  const auto sector = static_cast<int>(hue);
+  // OpenCV order: blue, green, red.
+  switch (sector) {
+  case 0:
+    return {0.0, x, value};
+  case 1:
+    return {0.0, value, x};
+  case 2:
+    return {x, value, 0.0};
+  case 3:
+    return {value, x, 0.0};
+  case 4:
+    return {value, 0.0, x};
+  default:
+    return {x, 0.0, value};
+  }
 }
 
 auto draw_label(cv::Mat& canvas, std::size_t cls, float score, cv::Point at) -> void {
@@ -114,7 +139,7 @@ auto draw(cv::Mat& canvas, const postprocess::KeypointResultMap& result) -> void
       }
       for (std::size_t i = 0; i < points.size(); ++i) {
         if (visible(points[i]))
-          cv::circle(canvas, pixel(points[i]), 4, color(i), cv::FILLED);
+          cv::circle(canvas, pixel(points[i]), 4, keypoint_color(i), cv::FILLED);
       }
     }
   }

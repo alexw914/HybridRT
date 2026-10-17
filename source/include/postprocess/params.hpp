@@ -104,6 +104,8 @@ auto make_general_detect() -> UniquePtr<DetectPostprocessor>;
 
 auto make_detr_detect() -> UniquePtr<DetectPostprocessor>;
 
+auto make_e2e_detect() -> UniquePtr<DetectPostprocessor>;
+
 auto make_yolov5_rotated() -> UniquePtr<RotatedPostprocessor>;
 
 auto make_yolov8_rotated() -> UniquePtr<RotatedPostprocessor>;
@@ -115,6 +117,8 @@ auto make_general_classify() -> UniquePtr<ClassifyPostprocessor>;
 auto make_general_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
 auto make_yolo_keypoint() -> UniquePtr<KeypointPostprocessor>;
+
+auto make_rtmo_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
 auto make_instance_segment() -> UniquePtr<SegmentPostprocessor>;
 

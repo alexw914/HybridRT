@@ -40,11 +40,13 @@ auto make_detect(std::string_view type) -> UniquePtr<DetectPostprocessor> {
     return make_general_detect();
   if (type == "DetrDetect")
     return make_detr_detect();
+  if (type == "E2eDetect")
+    return make_e2e_detect();
   return nullptr;
 }
 
-auto create_detect_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
-    -> UniquePtr<DetectPostprocessor> {
+auto create_detect_postprocessor(std::string_view type, const kitzoo::json::Json& config,
+                                 const engine::Engine& engine) -> UniquePtr<DetectPostprocessor> {
   return checked(make_detect(type), type, config, engine);
 }
 
