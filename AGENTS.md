@@ -44,11 +44,12 @@
 - `assets/template/README.md` 说明每种 preprocess、engine、postprocess 类型的作用、全部参数及默认值和可选值，
   以及各平台需要传入的参数（如 RKNN 的 `image_input`、`dst_image_format`）；代码中类型、参数、默认值或平台行为
   变化时，在同一提交中同步更新它和 `hrtc_template.json`。
-- `assets/` 下只提交 `template/`。测试、基准和验证用到的每个模型在 `hrtc_template.json` 中有一个以模型命名的
-  algo（如 `yolov8n_detect`、`rtmpose_m_pose`），写明该模型的预处理和后处理配置，`data` 为 `assets/<夹具>/` 下的本地
-  文件（相对仓库根目录）；其来源、导出或转换方式、sha256 和验证结论写进 `template/README.md` 的 Test models，
-  转换脚本放在 `template/`。测试模型、图片、夹具 manifest 和输出结果只放本地、不提交，不另建夹具目录的 README、
-  manifest 或 sources 文件；新增或改动模型、测试时只更新 template。
+- `assets/` 下只提交 `template/`。`hrtc_template.json` 的作用是说明参数如何设置：每种 postprocess 类型至少一个 algo，
+  不要求每个模型都有对应 algo。类型有测试模型时，该 algo 以模型命名（如 `yolov8n_detect`、`rtmo_s_pose`），写该模型的
+  预处理和后处理，`data` 为 `assets/<夹具>/` 下的本地文件（相对仓库根目录），测试和基准从这里读取配置；同类型的其他模型
+  （变体、导出方式、输出列含义）写在 `template/README.md` 的文字或表格中。测试模型的来源、导出或转换方式、sha256 和
+  验证结论写进 `template/README.md` 的 Test models，转换脚本放在 `template/`。测试模型、图片、夹具 manifest 和输出结果
+  只放本地、不提交，不另建夹具目录的 README、manifest 或 sources 文件。
 - 引擎推理耗时只由 `tools/hrt-model-bench` 测量；`benchmarks/` 只保留 `preprocess_bench`、
   `postprocess_bench`、`pipeline_bench`。
 - 模型文件、`.hrtc`、`assets/` 下除 `template/` 外的文件和下载到 `external/` 的 SDK 不提交；manifest 中的文件
