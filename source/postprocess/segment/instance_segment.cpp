@@ -76,25 +76,67 @@ public:
                    static_cast<double>(coefficients[j]), logits_, logits_);
     }
 
-    // Source pixel center -> network coordinate -> prototype pixel in region.
+    // Source pixel center -> network coordinate -> prototype pixel in region:
+    // p = a * index + b per axis. Bilinear sampling is separable since the map
+    // only scales and shifts: each region row is interpolated across once,
+    // then each mask row blends two of them and thresholds in the same pass.
+    // Coordinates outside the region repeat its edge.
     const auto& dst = transform.dst_roi;
     const auto& src = transform.src_roi;
     const auto rw = static_cast<double>(dst.width) / src.width;
     const auto rh = static_cast<double>(dst.height) / src.height;
-    const cv::Matx23d inverse(rw * sx, 0.0, ((mask.rect.x + 0.5 - src.x) * rw + dst.x) * sx - 0.5 - region.x, 0.0,
-                              rh * sy, ((mask.rect.y + 0.5 - src.y) * rh + dst.y) * sy - 0.5 - region.y);
-    cv::warpAffine(logits_, sampled_, inverse, {mask.rect.width, mask.rect.height},
-                   cv::INTER_LINEAR | cv::WARP_INVERSE_MAP, cv::BORDER_REPLICATE);
-    mask.data.resize(static_cast<std::size_t>(mask.rect.width) * static_cast<std::size_t>(mask.rect.height));
-    cv::Mat bits(mask.rect.height, mask.rect.width, CV_8U, mask.data.data());
-    cv::compare(sampled_, static_cast<double>(mask_logit), bits, cv::CMP_GT);
-    cv::bitwise_and(bits, cv::Scalar(1), bits);
+    const auto width = mask.rect.width;
+    const auto height = mask.rect.height;
+    taps(columns_, width, rw * sx, ((mask.rect.x + 0.5 - src.x) * rw + dst.x) * sx - 0.5 - region.x, region.width);
+    taps(rows_, height, rh * sy, ((mask.rect.y + 0.5 - src.y) * rh + dst.y) * sy - 0.5 - region.y, region.height);
+    across_.resize(static_cast<std::size_t>(region.height) * static_cast<std::size_t>(width));
+    for (int y = 0; y < region.height; ++y) {
+      const auto* in = logits_.ptr<float>(y);
+      auto* out = across_.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(width);
+      for (int x = 0; x < width; ++x) {
+        const auto& tap = columns_[static_cast<std::size_t>(x)];
+        out[x] = in[tap.first] + (in[tap.second] - in[tap.first]) * tap.weight;
+      }
+    }
+    mask.data.resize(static_cast<std::size_t>(width) * static_cast<std::size_t>(height));
+    for (int y = 0; y < height; ++y) {
+      const auto& tap = rows_[static_cast<std::size_t>(y)];
+      const auto* top = across_.data() + static_cast<std::size_t>(tap.first) * static_cast<std::size_t>(width);
+      const auto* bottom = across_.data() + static_cast<std::size_t>(tap.second) * static_cast<std::size_t>(width);
+      auto* bits = mask.data.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(width);
+      for (int x = 0; x < width; ++x)
+        bits[x] = top[x] + (bottom[x] - top[x]) * tap.weight > mask_logit ? 1 : 0;
+    }
     return mask;
   }
 
 private:
+  // Bilinear neighbors and the weight of the second along one axis.
+  struct Tap {
+    int first = 0;
+    int second = 0;
+    float weight = 0.0F;
+  };
+
+  static auto taps(Vector<Tap>& out, int count, double scale, double offset, int size) -> void {
+    out.resize(static_cast<std::size_t>(count));
+    for (int i = 0; i < count; ++i) {
+      const auto position = scale * i + offset;
+      const auto first = static_cast<int>(std::floor(position));
+      auto& tap = out[static_cast<std::size_t>(i)];
+      if (first < 0 || size == 1)
+        tap = {0, 0, 0.0F};
+      else if (first >= size - 1)
+        tap = {size - 1, size - 1, 0.0F};
+      else
+        tap = {first, first + 1, static_cast<float>(position - first)};
+    }
+  }
+
   cv::Mat logits_;
-  cv::Mat sampled_;
+  Vector<Tap> columns_;
+  Vector<Tap> rows_;
+  Vector<float> across_;
 };
 
 struct E2ESegmentParam {
@@ -153,16 +195,19 @@ protected:
     Vector<Vector<core::Rect2f>> rects(classes);
     Vector<Vector<float>> scores(classes);
     Vector<Vector<std::size_t>> anchors(classes);
-    for (std::size_t i = 0; i < count; ++i) {
-      const auto [l, t, r, b] = center_box(det[i], det[count + i], det[count * 2 + i], det[count * 3 + i]);
-      if (!(r - l > 0.0F && b - t > 0.0F))
-        continue;
-      for (std::size_t cls = 0; cls < classes; ++cls) {
-        const auto score = det[(4 + cls) * count + i];
-        if (!(score > param_.confidence_threshold[cls]))
+    // Class rows are read in order; walking anchors first strides every row
+    // per anchor. Boxes are only built for scores above the threshold.
+    for (std::size_t cls = 0; cls < classes; ++cls) {
+      const auto* row = det + (4 + cls) * count;
+      const auto threshold = param_.confidence_threshold[cls];
+      for (std::size_t i = 0; i < count; ++i) {
+        if (!(row[i] > threshold))
+          continue;
+        const auto [l, t, r, b] = center_box(det[i], det[count + i], det[count * 2 + i], det[count * 3 + i]);
+        if (!(r - l > 0.0F && b - t > 0.0F))
           continue;
         rects[cls].push_back(core::Rect2f::from_points({l, t}, {r, b}));
-        scores[cls].push_back(score);
+        scores[cls].push_back(row[i]);
         anchors[cls].push_back(i);
       }
     }

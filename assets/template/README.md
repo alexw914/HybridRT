@@ -280,15 +280,15 @@ preprocessing from a host image, 100 runs):
 | --- | --- | --- | --- | --- |
 | `yolov8n_detect` (640 x 480) | 1.8 | 38.5 | 0.7 | 43.0 |
 | raw detect heads (640) | 1.8 | 43.9 | 1.7 | 51.9 |
-| `yolov8n_segment` (640 x 480) | 1.8 | 48.6 | 11.4 | 59.8 |
+| `yolov8n_segment` (640 x 480) | 1.8 | 48.6 | 1.2 | 49.9 |
 | `yolov8n_pose` (640 x 480) | 1.8 | 45.1 | 0.05 | 44.8 |
 | raw pose heads (640) | 1.9 | 45.3 | 0.07 | 50.0 |
 | `yolov8n_obb` (640 x 480) | 1.6 | 38.2 | 0.5 | 39.0 |
 | `yolov8n_obb_raw` (1024) | 2.3 | 108.7 | 1.6 | 111.6 |
 | `yolov8n_classify` (640 x 480) | 1.6 | 21.3 | 0.0 | 22.3 |
-| `lraspp_voc_segment` (512) | 1.5 | 66.5 | 56.9 | 117.3 |
+| `lraspp_voc_segment` (512) | 1.5 | 66.5 | 8.7 | 70.5 |
 | `yolov8n_face` (640) | 1.7 | 45.4 | 0.06 | 47.3 |
 | `rtmpose_m_pose` (192 x 256 crop) | 0.8 | 18.6 | 0.06 | 20.4 |
 
 A dma-buffer source saves 0.4 to 0.8 ms of preprocessing. int8 models, not measured here, cut the
-inference time. `SemanticSegment` spends its time on the per-class source-resolution masks.
+inference time. Optimization history and measurements are in `assets/PERF.md`.

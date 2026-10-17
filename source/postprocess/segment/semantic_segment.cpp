@@ -97,26 +97,46 @@ private:
       }
       return true;
     }
+    auto* out = labels_.ptr<std::uint16_t>();
+    // Quantized scores keep their order for a positive scale, so int8 maps
+    // skip dequantization.
+    if (channels > 1 && output.data_type() == core::DataType::Int8 && output.is_contiguous() && output.scale > 0.0F) {
+      argmax_channels(static_cast<const std::int8_t*>(output.memory()->cpu()), channels, plane, out);
+      return true;
+    }
     const auto* data = float_data(output, scratch_);
     if (data == nullptr)
       return false;
-    auto* out = labels_.ptr<std::uint16_t>();
-    for (std::size_t i = 0; i < plane; ++i) {
-      if (channels == 1) {
+    if (channels == 1) {
+      for (std::size_t i = 0; i < plane; ++i)
         out[i] = static_cast<std::uint16_t>(std::lround(data[i]));
-        continue;
-      }
-      std::size_t best = 0;
-      for (std::size_t c = 1; c < static_cast<std::size_t>(channels); ++c) {
-        if (data[c * plane + i] > data[best * plane + i])
-          best = c;
-      }
-      out[i] = static_cast<std::uint16_t>(best);
+      return true;
     }
+    argmax_channels(data, channels, plane, out);
     return true;
   }
 
+  // Channel-major argmax: each pass reads one channel plane in order against
+  // the running maximum, instead of striding a plane per channel per pixel.
+  template <typename T>
+  auto argmax_channels(const T* data, int channels, std::size_t plane, std::uint16_t* out) -> void {
+    best_.assign(data, data + plane);
+    std::fill(out, out + plane, std::uint16_t{0});
+    auto* best = best_.data();
+    for (int c = 1; c < channels; ++c) {
+      const auto* channel = data + static_cast<std::size_t>(c) * plane;
+      const auto label = static_cast<std::uint16_t>(c);
+      for (std::size_t i = 0; i < plane; ++i) {
+        const auto value = static_cast<float>(channel[i]);
+        const auto greater = value > best[i];
+        best[i] = greater ? value : best[i];
+        out[i] = greater ? label : out[i];
+      }
+    }
+  }
+
   core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
+  Vector<float> best_;
   cv::Mat labels_;
   cv::Mat source_labels_;
 };

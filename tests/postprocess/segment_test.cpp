@@ -150,6 +150,35 @@ TEST(SegmentTest, DecodesSemanticLabels) {
   }
 }
 
+TEST(SegmentTest, DecodesInt8SemanticScoresWithoutDequantizing) {
+  const auto output = proto(DataType::Int8, {1, 3, 2, 2});
+  FakeEngine engine({proto(DataType::Float32, {1, 3, 4, 4})}, {output});
+  auto postprocessor = hrt::postprocess::create_segment_postprocessor("SemanticSegment", Json::object(), engine);
+  // Quantized scores keep their order; ties go to the lower class: 0, 1 / 2, 0.
+  auto buffer = hrt::test::buffer_of<std::int8_t>(output, {
+                                                              90,
+                                                              -5,
+                                                              0,
+                                                              7, // class 0
+                                                              -10,
+                                                              9,
+                                                              0,
+                                                              7, // class 1
+                                                              -10,
+                                                              -5,
+                                                              90,
+                                                              7, // class 2
+                                                          });
+  buffer->scale = 0.1F;
+  buffer->zero_point = -100;
+  hrt::postprocess::SegmentResultMap result;
+  ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(2, 2)));
+  ASSERT_EQ(result.size(), 3U);
+  EXPECT_EQ(result.at(0)[0].mask.data, (hrt::Vector<std::uint8_t>{1, 0, 0, 1}));
+  EXPECT_EQ(result.at(1)[0].mask.data, (hrt::Vector<std::uint8_t>{0, 1, 0, 0}));
+  EXPECT_EQ(result.at(2)[0].mask.data, (hrt::Vector<std::uint8_t>{0, 0, 1, 0}));
+}
+
 TEST(SegmentTest, PreservesInputRegionAndIntegerClassIds) {
   const auto output = proto(DataType::Int32, {1, 2, 2});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 2, 2})}, {output});
