@@ -120,6 +120,8 @@ auto make_general_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
 auto make_general_yolo_pose() -> UniquePtr<KeypointPostprocessor>;
 
+auto make_yolov8_keypoint() -> UniquePtr<KeypointPostprocessor>;
+
 auto make_rtmo_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
 auto make_e2e_keypoint() -> UniquePtr<KeypointPostprocessor>;

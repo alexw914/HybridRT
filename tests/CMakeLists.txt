@@ -97,6 +97,8 @@ hybridrt_enable_model_test(e2e_keypoint)
 hybridrt_add_unit_test(rtmo_keypoint SOURCES postprocess/rtmo_keypoint_test.cpp DEPENDS hrt::hybridrt)
 hybridrt_enable_model_test(rtmo_keypoint)
 hybridrt_add_unit_test(general_yolo_pose SOURCES postprocess/general_yolo_pose_test.cpp DEPENDS hrt::hybridrt)
+hybridrt_add_unit_test(yolov8_keypoint SOURCES postprocess/yolov8_keypoint_test.cpp DEPENDS hrt::hybridrt)
+hybridrt_enable_model_test(yolov8_keypoint)
 
 if(HRT_USE_NCNN)
     hybridrt_add_unit_test(ncnn_engine SOURCES engine/ncnn_engine_test.cpp DEPENDS hrt::hybridrt)

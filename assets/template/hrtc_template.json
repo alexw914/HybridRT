@@ -70,6 +70,36 @@
       }
     },
     {
+      "name": "person_head_detect",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "dst_image_format": "inter_rgb", "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "rknn", "config": {"image_input": true}, "data": "assets/rknn/models/yolov8_person_head_1280_int8.rknn"}]},
+        "postprocess": {
+          "type": "YoloV8Detect",
+          "class_num": 2,
+          "strides": [8, 16, 32],
+          "reg_max": 16,
+          "confidence_threshold": [0.4],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
+      "name": "fire_detect",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "dst_image_format": "inter_rgb", "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "rknn", "config": {"image_input": true}, "data": "assets/rknn/models/yolov8_fire_1280_int8.rknn"}]},
+        "postprocess": {
+          "type": "YoloV8Detect",
+          "class_num": 1,
+          "strides": [8, 16, 32],
+          "reg_max": 16,
+          "confidence_threshold": [0.4],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
       "name": "yolov5_detect",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
@@ -187,6 +217,23 @@
       }
     },
     {
+      "name": "yolov8n_face",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/face/models/yolov8n-face.onnx"}]},
+        "postprocess": {
+          "type": "YoloV8Keypoint",
+          "class_num": 1,
+          "keypoint_num": 5,
+          "strides": [16, 32, 8],
+          "reg_max": 16,
+          "keypoint_threshold": 0.5,
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
       "name": "yolo26n_e2e_pose",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
@@ -230,16 +277,24 @@
       }
     },
     {
-      "name": "general_keypoint",
+      "name": "person_heatmap_keypoint",
       "config": {
-        "preprocess": {"resize_type": "pad_outside", "pad_scale": 1.25, "mean": [123.675, 116.28, 103.53], "std": [58.395, 57.12, 57.375]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "models/general_keypoint.onnx"}]},
+        "preprocess": {"resize_type": "pad_outside", "pad_scale": 1.25, "dst_image_format": "inter_rgb"},
+        "engine": {
+          "backends": [
+            {
+              "engine_type": "rknn",
+              "config": {"image_input": true},
+              "data": "assets/rknn/models/person_heatmap_keypoint_256x256_int8.rknn"
+            }
+          ]
+        },
         "postprocess": {
           "type": "GeneralKeypoint",
           "general_keypoint_type": "heatmap",
           "heatmap_refine": "dark",
           "score_activation": "none",
-          "keypoint_threshold": 0.3
+          "keypoint_threshold": 0.0
         }
       }
     },

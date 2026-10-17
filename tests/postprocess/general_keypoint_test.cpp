@@ -195,6 +195,36 @@ TEST(GeneralKeypointTest, RefinesHeatmapToSubpixelPeak) {
   }
 }
 
+TEST(GeneralKeypointTest, DecodesUdpHeatmapsAgainstCornerCells) {
+  // UDP maps cell 0 and cell W - 1 onto the input edges: 48 x 64 maps of a
+  // 192 x 256 input scale by 192 / 47 and 256 / 63.
+  const auto output = proto(DataType::Float32, {1, 2, 64, 48});
+  hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 256, 192})}, {output});
+  auto heatmap = gaussian_map(48, 64, 20.3F, 30.7F, 0.9F);
+  const auto corner = gaussian_map(48, 64, 47.0F, 63.0F, 0.9F);
+  heatmap.insert(heatmap.end(), corner.begin(), corner.end());
+  for (const auto* refine : {"dark", "none"}) {
+    const kitzoo::json::Json config{{"general_keypoint_type", "heatmap_udp"}, {"heatmap_refine", refine}};
+    auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("GeneralKeypoint", config, engine);
+    hrt::postprocess::KeypointResultMap result;
+    ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, heatmap)}, hrt::test::identity(192, 256)));
+    const auto& points = result.at(0)[0].keypoints;
+    ASSERT_EQ(points.size(), 2U);
+    if (refine == hrt::String("dark")) {
+      EXPECT_NEAR(points[0].point.x, 20.3F * 192.0F / 47.0F, 0.1F);
+      EXPECT_NEAR(points[0].point.y, 30.7F * 256.0F / 63.0F, 0.1F);
+    } else {
+      EXPECT_FLOAT_EQ(points[0].point.x, 20.0F * 192.0F / 47.0F);
+      EXPECT_FLOAT_EQ(points[0].point.y, 31.0F * 256.0F / 63.0F);
+    }
+    // The corner cell is the input corner; DARK may move an edge peak by less
+    // than one cell, as mmpose's edge-padded expansion does.
+    const auto tolerance = refine == hrt::String("dark") ? 192.0F / 47.0F : 0.0F;
+    EXPECT_NEAR(points[1].point.x, 192.0F, tolerance);
+    EXPECT_NEAR(points[1].point.y, 256.0F, tolerance * 256.0F / 192.0F);
+  }
+}
+
 TEST(GeneralKeypointTest, KeepsArgmaxAndHidesLogitHeatmapPeaks) {
   // Logit heatmaps are mostly negative: the blurred map has no positive log
   // to expand, so the peak stays, and a peak at or below 0 is not visible.

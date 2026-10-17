@@ -88,8 +88,9 @@ target_link_libraries(app PRIVATE hrt::hybridrt)
 | `hrt::hybridrt` | Model execution with memory, contexts, engines, image preprocessing, task postprocessing, and OpenCV result drawing in `core/view`. |
 
 Detection supports YOLO and DETR query outputs, and detection, pose, segmentation and OBB read Ultralytics
-end-to-end exports (`nms=False`/`nms=True`). Top-down keypoints decode heatmap (HRNet), SimCC (RTMPose) and
-point outputs, and one-stage RTMO runs with fixed candidates; the template algos show each type's config.
+end-to-end exports (`nms=False`/`nms=True`). Keypoints decode raw YOLOv8 pose heads with any keypoint count
+(e.g. 5 face landmarks), top-down heatmaps (HRNet, HRNet-UDP), SimCC (RTMPose) and point outputs, and one-stage
+RTMO with fixed candidates; the template algos show each type's config.
 
 `tools/hrt-compress` packs a JSON manifest (every field: `assets/template/hrtc_template.json`) into a
 `.hrtc` file, prints or extracts existing packages, and checks their configs:

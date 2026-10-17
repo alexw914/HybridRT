@@ -24,6 +24,9 @@ namespace {
 enum class KeypointOutput {
   // One heatmap per keypoint: [.., K, H, W] (HRNet, SimpleBaseline, ViTPose).
   Heatmap,
+  // Heatmaps of UDP-trained models (HRNet-UDP), whose corner cells align
+  // with the input corners.
+  HeatmapUdp,
   // SimCC x and y distributions: [1, K, W * r] and [1, K, H * r] (RTMPose).
   Simcc,
   // SimCC-style x, y and visibility distributions: three [1, K, bins].
@@ -36,6 +39,7 @@ enum class KeypointOutput {
 
 NLOHMANN_JSON_SERIALIZE_ENUM(KeypointOutput, {
                                                  {KeypointOutput::Heatmap, "heatmap"},
+                                                 {KeypointOutput::HeatmapUdp, "heatmap_udp"},
                                                  {KeypointOutput::Simcc, "simcc"},
                                                  {KeypointOutput::PointWithVisible, "point_with_visible"},
                                                  {KeypointOutput::PointChannelFirst, "point_channel_first"},
@@ -99,7 +103,8 @@ public:
                     "general_keypoint: point_with_visible needs 3 outputs");
     for (const auto& output : outputs) {
       const auto& shape = output.shape;
-      const std::size_t dimensions = type == KeypointOutput::Heatmap ? 3 : 2;
+      const auto heatmap = type == KeypointOutput::Heatmap || type == KeypointOutput::HeatmapUdp;
+      const std::size_t dimensions = heatmap ? 3 : 2;
       KZ_CHECK_RETURN(
           shape.size() >= dimensions &&
               std::all_of(shape.begin(), shape.end(), [](std::int64_t value) -> bool { return value > 0; }) &&
@@ -108,9 +113,12 @@ public:
           false, "general_keypoint: needs positive dimensions and one keypoint set per output");
       switch (type) {
       case KeypointOutput::Heatmap:
+      case KeypointOutput::HeatmapUdp:
         KZ_CHECK_RETURN(shape[shape.size() - 2] <= std::numeric_limits<int>::max() &&
                             shape.back() <= std::numeric_limits<int>::max(),
                         false, "general_keypoint: heatmap dimensions exceed OpenCV limits");
+        KZ_CHECK_RETURN(type != KeypointOutput::HeatmapUdp || (shape[shape.size() - 2] > 1 && shape.back() > 1), false,
+                        "general_keypoint: heatmap_udp needs at least 2 x 2 maps");
         break;
       case KeypointOutput::PointChannelFirst:
         KZ_CHECK_RETURN(shape[shape.size() - 2] == 2, false, "general_keypoint: needs [..., 2, K] coordinates");
@@ -131,8 +139,8 @@ public:
   }
 
 protected:
-  auto decode(KeypointResultMap& result, const core::Buffers& outputs,
-              const preprocess::ImageTransform& transform) -> bool override {
+  auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
+      -> bool override {
     while (scratch_.size() < outputs.size())
       scratch_.emplace_back(core::MemoryType::Cpu, core::DataType::Float32);
     Vector<const float*> data(outputs.size());
@@ -145,6 +153,7 @@ protected:
     const auto type = param_.general_keypoint_type;
     switch (type) {
     case KeypointOutput::Heatmap:
+    case KeypointOutput::HeatmapUdp:
       for (std::size_t i = 0; i < outputs.size(); ++i)
         decode_heatmaps(objects.emplace_back().keypoints, data[i], outputs[i]->shape());
       break;
@@ -169,7 +178,8 @@ protected:
       }
       break;
     }
-    const auto scored = type == KeypointOutput::Heatmap || type == KeypointOutput::Simcc;
+    const auto scored =
+        type == KeypointOutput::Heatmap || type == KeypointOutput::HeatmapUdp || type == KeypointOutput::Simcc;
     const auto width = static_cast<float>(transform.input_size.width);
     const auto height = static_cast<float>(transform.input_size.height);
     for (auto& object : objects) {
@@ -194,7 +204,8 @@ protected:
 
 private:
   // Argmax per map; peak cells normalized by the map size, as the MSRA codec
-  // scales them by input / heatmap size.
+  // scales them by input / heatmap size, or by size - 1 for UDP, whose codec
+  // scales them by input / (heatmap - 1).
   auto decode_heatmaps(Vector<Keypoint>& points, const float* data, const core::Shape& shape) -> void {
     const auto height = shape[shape.size() - 2];
     const auto width = shape.back();
@@ -204,10 +215,14 @@ private:
       const auto index = argmax(map, height * width);
       auto x = static_cast<float>(index % width);
       auto y = static_cast<float>(index / width);
-      if (param_.heatmap_refine == HeatmapRefine::Dark)
+      const auto udp = param_.general_keypoint_type == KeypointOutput::HeatmapUdp;
+      if (param_.heatmap_refine == HeatmapRefine::Dark && udp)
+        refine_dark_udp(x, y, map, height, width);
+      else if (param_.heatmap_refine == HeatmapRefine::Dark)
         refine_dark(x, y, map, height, width);
-      points.push_back(
-          {{x / static_cast<float>(width), y / static_cast<float>(height)}, KeypointVisible::Visible, map[index]});
+      const auto cells_x = static_cast<float>(udp ? width - 1 : width);
+      const auto cells_y = static_cast<float>(udp ? height - 1 : height);
+      points.push_back({{x / cells_x, y / cells_y}, KeypointVisible::Visible, map[index]});
     }
   }
 
@@ -241,10 +256,50 @@ private:
     y -= offset_y;
   }
 
+  // DARK as in mmpose refine_keypoints_dark_udp: the blurred map rescaled to
+  // the raw peak, clipped to [1e-3, 50] before the log, edge-padded by one
+  // cell and expanded with unit-step differences. Offsets of one cell or more
+  // keep the argmax, as for refine_dark().
+  auto refine_dark_udp(float& x, float& y, const float* map, std::int64_t height, std::int64_t width) -> void {
+    const auto px = static_cast<int>(x);
+    const auto py = static_cast<int>(y);
+    const auto rows = static_cast<int>(height);
+    const auto cols = static_cast<int>(width);
+    const cv::Mat raw(rows, cols, CV_32FC1, const_cast<float*>(map));
+    cv::GaussianBlur(raw, blurred_, cv::Size(11, 11), 0.0, 0.0, cv::BORDER_CONSTANT);
+    double raw_max = 0.0;
+    double blurred_max = 0.0;
+    cv::minMaxLoc(raw, nullptr, &raw_max);
+    cv::minMaxLoc(blurred_, nullptr, &blurred_max);
+    const auto scale = static_cast<float>(raw_max / blurred_max);
+    auto at = [&](int dy, int dx) -> float {
+      const auto value = blurred_.at<float>(std::clamp(py + dy, 0, rows - 1), std::clamp(px + dx, 0, cols - 1));
+      return std::log(std::clamp(value * scale, 1e-3F, 50.0F));
+    };
+    const auto center = at(0, 0);
+    const auto dx = 0.5F * (at(0, 1) - at(0, -1));
+    const auto dy = 0.5F * (at(1, 0) - at(-1, 0));
+    const auto dxx = at(0, 1) - 2.0F * center + at(0, -1);
+    const auto dyy = at(1, 0) - 2.0F * center + at(-1, 0);
+    const auto dxy = 0.5F * (at(1, 1) - at(0, 1) - at(1, 0) + 2.0F * center - at(0, -1) - at(-1, 0) + at(-1, -1));
+    const auto epsilon = std::numeric_limits<float>::epsilon();
+    const auto a = dxx + epsilon;
+    const auto d = dyy + epsilon;
+    const auto det = a * d - dxy * dxy;
+    if (!(std::abs(det) > 0.0F))
+      return;
+    const auto offset_x = (d * dx - dxy * dy) / det;
+    const auto offset_y = (a * dy - dxy * dx) / det;
+    if (!(std::abs(offset_x) < 1.0F && std::abs(offset_y) < 1.0F))
+      return;
+    x -= offset_x;
+    y -= offset_y;
+  }
+
   // Bins normalized by the bin count, as mmpose divides them by the split
   // ratio (bins = input size * ratio); score min(max x, max y).
-  static auto decode_simcc(Vector<Keypoint>& points, const Vector<const float*>& data,
-                           const core::Buffers& outputs) -> void {
+  static auto decode_simcc(Vector<Keypoint>& points, const Vector<const float*>& data, const core::Buffers& outputs)
+      -> void {
     const auto count = outputs[0]->shape()[1];
     const auto x_bins = outputs[0]->shape()[2];
     const auto y_bins = outputs[1]->shape()[2];
@@ -293,6 +348,8 @@ auto make_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor> {
     return make_general_keypoint();
   if (type == "GeneralYoloPose")
     return make_general_yolo_pose();
+  if (type == "YoloV8Keypoint")
+    return make_yolov8_keypoint();
   if (type == "RtmoKeypoint")
     return make_rtmo_keypoint();
   if (type == "E2EKeypoint")

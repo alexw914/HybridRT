@@ -89,13 +89,25 @@ each in [0, 1].
 | `E2ERotated` | `class_num`, `confidence_threshold`; end-to-end OBB `[1, N, 7]` |
 | `DetrDetect` | `class_num`, `confidence_threshold` (0.25), `output_format` (`combined`/`separate`), `score_activation` (`none`/`sigmoid`/`softmax`), `background_class` (-1: none), `boxes_output` (0), `scores_output` (1) |
 | `GeneralYoloPose` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), thresholds |
+| `YoloV8Keypoint` | `class_num`, `keypoint_num`, `strides` (one per output head), `reg_max` (16), `keypoint_threshold` (0.5), thresholds |
 | `E2EKeypoint` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), `confidence_threshold`; end-to-end pose `[1, N, 6 + K x (2 \| 3)]` |
 | `RtmoKeypoint` | `confidence_threshold` ([0.15]), `iou_threshold` ([0.65]), `keypoint_threshold` (0.3); one class |
-| `GeneralKeypoint` | `general_keypoint_type` (`heatmap`/`simcc`/`point_with_visible`/`point_channel_first`/`point_channel_last`), `heatmap_refine` (`dark`/`none`), `score_activation` (`none`/`sigmoid`), `keypoint_threshold` (0) |
+| `GeneralKeypoint` | `general_keypoint_type` (`heatmap`/`heatmap_udp`/`simcc`/`point_with_visible`/`point_channel_first`/`point_channel_last`), `heatmap_refine` (`dark`/`none`), `score_activation` (`none`/`sigmoid`), `keypoint_threshold` (0) |
 | `InstanceSegment` | `class_num`, `mask_threshold` (0.5), thresholds |
 | `E2ESegment` | `class_num`, `mask_threshold` (0.5), `confidence_threshold`; end-to-end `[1, N, 6 + masks]` plus prototypes |
 | `SemanticSegment` | none |
 | `GeneralClassify` | `classify_postprocess_type`: `none`, `sigmoid`, `softmax` |
+
+Engines report outputs sorted by name, the same on every backend, so `strides`, `anchors` and
+output indices follow that order rather than the model's: a YOLOv8 export with outputs
+`output0` (80 x 80), `393` (40 x 40) and `401` (20 x 20) takes `"strides": [16, 32, 8]`.
+
+`GeneralYoloPose` reads the decoded single output `[1, 4 + classes + K x (2 | 3), N]` of the default
+Ultralytics export (boxes, sigmoid scores and keypoints already in input pixels). `YoloV8Keypoint`
+reads the raw heads, one `[1, 4 x reg_max + classes + K x (2 | 3), h, w]` output per stride, as NPU
+exports keep them for quantization: boxes from the distance bins, scores from logits, keypoints at
+`((raw * 2 + cell) * stride)` with sigmoid visibility. Both take any `keypoint_num`, e.g. 5 face
+landmarks; drawing joins a skeleton only for 17 COCO keypoints.
 
 `DetrDetect` reads batch-1 normalized center-x, center-y, width and height boxes.
 It selects the highest-scoring foreground class of each query and does not apply
@@ -146,6 +158,10 @@ follows the outputs:
 - `heatmap`: `[1, K, H, W]` maps (HRNet, SimpleBaseline, ViTPose); peak cell times
   input / heatmap size, score the peak. `dark` refines as mmpose DARK (11 x 11 blur,
   sigma 2) at interior maxima of positive heatmaps and keeps the argmax otherwise.
+- `heatmap_udp`: the same maps from UDP-trained models (HRNet-UDP); peak cell times
+  input / (heatmap size - 1), as mmpose `UDPHeatmap`. `dark` refines as mmpose
+  `refine_keypoints_dark_udp`. Its `combined` offset maps are not supported, and the crop is the
+  `pad_outside` resize rather than UDP's unbiased affine, a difference below one input pixel.
 - `simcc`: x `[1, K, W * r]` and y `[1, K, H * r]` distributions (RTMPose); bin / r,
   score min(max x, max y).
 - `point_with_visible`: x, y and `[1, K, 3]` visibility distributions; the argmax state
@@ -195,6 +211,8 @@ hrt-validate -m yolov8n_detect.json -n yolov8n_detect -e ort -i assets/yolo/imag
 | `rtdetr_l_detect` | `assets/rtdetr/models/rtdetr-l.onnx` | [rtdetr-l.pt](https://github.com/ultralytics/assets/releases/download/v8.1.0/rtdetr-l.pt), Ultralytics 8.1.4 `export(format="onnx", imgsz=640, opset=17)` | `8090814f...` |
 | `yolo26n_e2e_detect` | `assets/e2e/models/yolo26n.onnx`; also `yolov10n.onnx`, `yolov8n-nms.onnx` | Ultralytics 8.4.178 `export(format="onnx", imgsz=640, opset=17, simplify=True, nms=False)`; `nms=True` for YOLOv8 | `08727943...`, `1fb68e28...`, `979da5db...` |
 | `yolo26n_e2e_pose`, `_segment`, `_obb` | `assets/e2e/models/yolo26n-pose.onnx`, `-seg.onnx`, `-obb.onnx`; also `yolov8n-{pose,seg,obb}-nms.onnx` | as above from `yolo26n-{pose,seg,obb}.pt` and `yolov8n-{pose,seg,obb}.pt`; OBB at `imgsz=1024` | `ecd85eb3...`, `10106049...`, `0dc04234...`, `84dbdb8f...`, `ac2d7015...`, `8cea4b4c...` |
+| `yolov8n_face` | `assets/face/models/yolov8n-face.onnx`; image `assets/face/images/zidane.jpg` | `yolov8n-face-derronqi.onnx` of [clibdev/yolov8-face 1.0.0](https://github.com/clibdev/yolov8-face/releases/tag/1.0.0); [zidane.jpg](https://github.com/ultralytics/assets/raw/refs/heads/main/im/zidane.jpg) | `af09683b...`, `16d73869...` |
+| `person_head_detect`, `fire_detect`, `person_heatmap_keypoint` | `assets/rknn/models/yolov8_person_head_1280_int8.rknn`, `yolov8_fire_1280_int8.rknn`, `person_heatmap_keypoint_256x256_int8.rknn` | private RKNN models (RK3588, int8, mean 0 / std 255 built in); use your own with the same outputs | `73745b16...`, `91290dc2...`, `7a0f60b4...` |
 | `rtmpose_m_pose` | `assets/rtmpose/models/rtmpose-m_simcc-body7_256x192.onnx` | `end2end.onnx` of the [RTMPose-m body7 SDK](https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504.zip) | `5c0a4bf6...` |
 | `rtmo_s_pose` | `assets/rtmo/models/rtmo-s_body7_640x640.onnx` | `end2end.onnx` of the [RTMO-s body7 SDK](https://download.openmmlab.com/mmpose/v1/projects/rtmo/onnx_sdk/rtmo-s_8xb32-600e_body7-640x640-dac2bf74_20231211.zip) through `rtmo_fix_outputs.py` (300 candidates) | `86aefe58...` |
 
@@ -219,5 +237,14 @@ Results checked against independent references on bus.jpg (ONNX Runtime 1.31.0, 
   300 candidates cost 0.22 s against 0.09 s for the original on an x86 CPU (100: 0.12 s), as each
   candidate decodes its keypoints; bus.jpg has 63 candidates above 0.15 for 5 people. Its graph
   keeps a TopK; RKNN and TensorRT conversion has not been tried.
+- `yolov8n_face`: boxes, scores, landmarks and visibility identical to a Python decode of the
+  same heads on zidane.jpg (2 faces, 5 landmarks each).
+- `heatmap_udp`: keypoints identical to mmpose's `refine_keypoints_dark_udp` and `UDPHeatmap`
+  scaling on constructed 48 x 64 maps, edge peaks included.
+- RKNN algos on the RK3588 board (librknnrt 2.3.2): `person_head_detect` finds 4 people and 3
+  heads on bus.jpg; `person_heatmap_keypoint` after it runs on each person box. Its heatmaps are
+  logits, so DARK keeps the argmax and keypoints scoring 0 or less are hidden; neighbors inside
+  the square crop can take a narrow box's keypoints. `fire_detect` runs but its accuracy is
+  unchecked for lack of a fire image.
 - `rtmpose_m_pose` after `yolov8n_detect`: visible keypoints within 5 px of mmpose's affine crop
   and SimCC decoding, visibility 17/17 for all 4 people.
