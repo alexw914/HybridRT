@@ -138,8 +138,8 @@ jobs:
         run: |
           python -c "from ultralytics import YOLO; YOLO('external/yolov8n.pt').export(format='onnx', imgsz=(480,640), opset=17, simplify=False, dynamic=False)"
           if ($LASTEXITCODE -ne 0) { throw 'ONNX export failed' }
-          New-Item -ItemType Directory -Force assets/yolo/images | Out-Null
-          Invoke-WebRequest https://github.com/ultralytics/assets/raw/refs/heads/main/im/bus.jpg -OutFile assets/yolo/images/bus.jpg
+          New-Item -ItemType Directory -Force assets/test/images | Out-Null
+          Invoke-WebRequest https://github.com/ultralytics/assets/raw/refs/heads/main/im/bus.jpg -OutFile assets/test/images/bus.jpg
           python -c "import json; from pathlib import Path; m=json.loads(Path('assets/template/hrtc_template.json').read_text()); m['algos']=[a for a in m['algos'] if a['name']=='yolov8n_detect']; m['algos'][0]['name']='detect'; m['algos'][0]['config']['engine']['backends'][0]['data']='external/yolov8n.onnx'; Path('build/yolo.json').write_text(json.dumps(m))"
 
       - name: Test ONNX model CLI workflow
@@ -149,7 +149,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Model packaging failed' }
           build/tools/hrt-model-bench.exe -m build/yolo.hrtc -n detect -e ort -i 3 -w 1
           if ($LASTEXITCODE -ne 0) { throw 'ONNX inference failed' }
-          build/tools/hrt-validate.exe -m build/yolo.hrtc -n detect -e ort -i assets/yolo/images -o build/detect.json -r build/drawn
+          build/tools/hrt-validate.exe -m build/yolo.hrtc -n detect -e ort -i assets/test/images -o build/detect.json -r build/drawn
           if ($LASTEXITCODE -ne 0) { throw 'Image validation failed' }
           python -c "import json; from pathlib import Path; r=json.loads(Path('build/detect.json').read_text()); bus=next(i for i in r['images'] if i['file'].endswith('bus.jpg')); assert all(i['error'] is None for i in r['images']); assert bus['results']; assert Path('build/drawn/bus.jpg').is_file()"
 
@@ -158,11 +158,13 @@ jobs:
         run: |
           python -c "from ultralytics import RTDETR; RTDETR('external/rtdetr-l.pt').export(format='onnx', imgsz=640, opset=17, simplify=False, dynamic=False)"
           if ($LASTEXITCODE -ne 0) { throw 'RT-DETR ONNX export failed' }
-          New-Item -ItemType Directory -Force assets/rtdetr/models | Out-Null
-          Copy-Item external/rtdetr-l.onnx assets/rtdetr/models/
+          New-Item -ItemType Directory -Force assets/test/onnx | Out-Null
+          Copy-Item external/rtdetr-l.onnx assets/test/onnx/DetrDetect.onnx
+          python -c "import json; from pathlib import Path; m=json.loads(Path('assets/template/hrtc_template.json').read_text()); a=next(a for a in m['algos'] if a['name']=='rtdetr_l_detect'); assert Path(a['config']['engine']['backends'][0]['data']).is_file(); assert Path('assets/test/images/bus.jpg').is_file()"
+          if ($LASTEXITCODE -ne 0) { throw 'RT-DETR test fixtures are missing' }
           ctest --test-dir build/debug --output-on-failure -R DetrDetectTest
           if ($LASTEXITCODE -ne 0) { throw 'DETR postprocessing tests failed' }
           python -c "import json; from pathlib import Path; m=json.loads(Path('assets/template/hrtc_template.json').read_text()); m['algos']=[a for a in m['algos'] if a['name']=='rtdetr_l_detect']; Path('build/rtdetr.json').write_text(json.dumps(m))"
-          build/tools/hrt-validate.exe -m build/rtdetr.json -n rtdetr_l_detect -e ort -i assets/yolo/images -o build/rtdetr-results.json
+          build/tools/hrt-validate.exe -m build/rtdetr.json -n rtdetr_l_detect -e ort -i assets/test/images -o build/rtdetr-results.json
           if ($LASTEXITCODE -ne 0) { throw 'RT-DETR image validation failed' }
           python -c "import json; from pathlib import Path; r=json.loads(Path('build/rtdetr-results.json').read_text()); assert all(i['error'] is None for i in r['images']); bus=next(i for i in r['images'] if i['file']=='bus.jpg'); assert any(x['class_id']==5 for x in bus['results'])"
