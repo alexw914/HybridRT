@@ -50,7 +50,7 @@ from the repository root:
 
 ```sh
 build/debug/examples/hybridrt_example_image_model -m assets/template/hrtc_template.json -a yolov8n_segment \
-    -i assets/yolo/images/bus.jpg -o segment.jpg
+    -i assets/test/images/bus.jpg -o segment.jpg
 ```
 
 Benchmarks (Release, `-DHYBRIDRT_BUILD_BENCHMARKS=ON`) run the `yolov8n_*` template algos:

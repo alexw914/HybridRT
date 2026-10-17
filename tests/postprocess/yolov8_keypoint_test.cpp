@@ -200,7 +200,7 @@ TEST(YoloV8KeypointTest, AbortsOnHeadsThatDoNotFit) {
 #ifdef HRT_ORT_MODEL_TEST
 TEST(YoloV8KeypointTest, RunsFaceLandmarkModelWhenAvailable) {
   const auto algo = hrt::test::template_algo("yolov8n_face");
-  auto bgr = cv::imread((hrt::test::source_root() / "assets/face/images/zidane.jpg").string());
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/test/images/zidane.jpg").string());
   if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
     GTEST_SKIP() << "YOLOv8n-face ONNX fixture or zidane.jpg is unavailable";
   const auto model = hrt::model::ImageModel<hrt::postprocess::KeypointResultMap>::create(algo);

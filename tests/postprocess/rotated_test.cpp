@@ -180,7 +180,7 @@ TEST(RotatedTest, E2EAbortsOnInvalidConfigOrOutputs) {
 #ifdef HRT_ORT_MODEL_TEST
 TEST(RotatedTest, RunsUltralyticsEndToEndExportWhenAvailable) {
   const auto algo = hrt::test::template_algo("yolo26n_e2e_obb");
-  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/airport.jpg").string());
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/test/images/airport.jpg").string());
   if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
     GTEST_SKIP() << "YOLO26n end-to-end OBB ONNX fixture or airport.jpg is unavailable";
   const auto model = hrt::model::ImageModel<hrt::postprocess::RotatedResultMap>::create(algo);
@@ -198,7 +198,7 @@ TEST(RotatedTest, RunsUltralyticsEndToEndExportWhenAvailable) {
 
 TEST(RotatedTest, RunsRawObbHeadsWhenAvailable) {
   const auto algo = hrt::test::template_algo("yolov8n_obb_raw");
-  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/airport.jpg").string());
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/test/images/airport.jpg").string());
   if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
     GTEST_SKIP() << "YOLOv8n-obb raw-head ONNX fixture or airport.jpg is unavailable";
   const auto model = hrt::model::ImageModel<hrt::postprocess::RotatedResultMap>::create(algo);
@@ -214,7 +214,7 @@ TEST(RotatedTest, RunsRawObbHeadsWhenAvailable) {
 
 TEST(RotatedTest, RunsYolo26RawHeadsWhenAvailable) {
   const auto algo = hrt::test::template_algo("yolo26n_obb_raw");
-  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/airport.jpg").string());
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/test/images/airport.jpg").string());
   if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
     GTEST_SKIP() << "YOLO26n-obb raw-head ONNX fixture or airport.jpg is unavailable";
   const auto model = hrt::model::ImageModel<hrt::postprocess::RotatedResultMap>::create(algo);

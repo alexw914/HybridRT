@@ -22,7 +22,7 @@ function(hybridrt_add_benchmark name)
 endfunction()
 
 # preprocess and postprocess time one stage, pipeline the whole ImageModel call,
-# on the assets/yolo models; engine speed alone is tools/hrt-model-bench.
+# on the template models in assets/test/onnx; engine speed alone is tools/hrt-model-bench.
 if(TARGET opencv_imgcodecs)
     hybridrt_add_benchmark(preprocess SOURCES preprocess_bench.cpp DEPENDS hrt::hybridrt opencv_imgcodecs)
 endif()

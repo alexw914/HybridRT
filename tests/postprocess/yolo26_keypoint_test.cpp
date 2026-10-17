@@ -73,7 +73,7 @@ TEST(Yolo26KeypointTest, AbortsOnHeadsThatDoNotFit) {
 #ifdef HRT_ORT_MODEL_TEST
 TEST(Yolo26KeypointTest, RunsRawHeadsWhenAvailable) {
   const auto algo = hrt::test::template_algo("yolo26n_pose_raw");
-  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/bus.jpg").string());
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/test/images/bus.jpg").string());
   if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
     GTEST_SKIP() << "YOLO26n-pose raw-head ONNX fixture or bus.jpg is unavailable";
   const auto model = hrt::model::ImageModel<hrt::postprocess::KeypointResultMap>::create(algo);

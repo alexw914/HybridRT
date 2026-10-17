@@ -56,7 +56,7 @@ inline auto algo_entry(std::size_t task, Provider provider = Provider::Cpu, bool
 // The test image of `task` as BGR: the airport for OBB, the bus otherwise.
 inline auto task_image(std::size_t task) -> cv::Mat {
   const auto name = std::string_view(kTasks.at(task)) == "obb" ? "airport.jpg" : "bus.jpg";
-  return cv::imread((std::filesystem::path(HRT_SOURCE_DIR) / "assets/yolo/images" / name).string(), cv::IMREAD_COLOR);
+  return cv::imread((std::filesystem::path(HRT_SOURCE_DIR) / "assets/test/images" / name).string(), cv::IMREAD_COLOR);
 }
 
 inline auto wrap_bgr(const cv::Mat& bgr) -> std::optional<core::Image> {

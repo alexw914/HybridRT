@@ -22,7 +22,7 @@ auto BM_Convert(benchmark::State& state) -> void {
   using namespace hrt::core;
   using namespace hrt::preprocess;
   cv::setNumThreads(1);
-  const auto bgr = cv::imread((std::filesystem::path(HRT_SOURCE_DIR) / "assets/yolo/images/bus.jpg").string());
+  const auto bgr = cv::imread((std::filesystem::path(HRT_SOURCE_DIR) / "assets/test/images/bus.jpg").string());
   if (bgr.empty()) {
     state.SkipWithError("bus.jpg is missing");
     return;
@@ -102,7 +102,7 @@ auto BM_Task(benchmark::State& state) -> void {
   const auto bgr = hrt::bench::task_image(task);
   const auto source = hrt::bench::wrap_bgr(bgr);
   if (!entry.is_object() || !source) {
-    state.SkipWithError("assets/yolo/images is missing");
+    state.SkipWithError("assets/test/images is missing");
     return;
   }
   const auto param = entry["config"]["preprocess"].get<hrt::preprocess::ImagePreprocessorParam>();

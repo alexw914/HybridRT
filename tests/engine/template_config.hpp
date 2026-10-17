@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: tests/engine/template_config.hpp
-// Description: Reads backend configs and model algos from the reference
-//              manifest assets/template/hrtc_template.json.
+// Description: Reads device configs and model algos from the reference
+//              manifests in assets/template.
 // -----------------------------------------------------------------------------
 
 #ifndef HRT_ENGINE_TEMPLATE_CONFIG_HPP
@@ -22,9 +22,9 @@ inline auto source_root() -> std::filesystem::path {
   return std::filesystem::path(HRT_TEMPLATE_DIR).parent_path().parent_path();
 }
 
-// The "config" of the first algo's backend of `engine_type`, as JSON text.
+// The backend config of engine_type in hrtc_device_config.json, as JSON text.
 inline auto template_config(std::string_view engine_type) -> String {
-  const kitzoo::json::Reader reader(std::filesystem::path(HRT_TEMPLATE_DIR) / "hrtc_template.json");
+  const kitzoo::json::Reader reader(std::filesystem::path(HRT_TEMPLATE_DIR) / "hrtc_device_config.json");
   for (const auto& backend : reader.raw()["algos"][0]["config"]["engine"]["backends"]) {
     if (backend["engine_type"].is_string() && backend["engine_type"].get_ref<const String&>() == engine_type)
       return backend.value("config", kitzoo::json::Json::object()).dump();

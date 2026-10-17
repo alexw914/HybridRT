@@ -111,7 +111,7 @@ TEST(RtmoKeypointTest, AbortsOnInvalidConfigOrOutputs) {
 #ifdef HRT_ORT_MODEL_TEST
 TEST(RtmoKeypointTest, RunsFixedRtmoModelWhenAvailable) {
   const auto algo = hrt::test::template_algo("rtmo_s_pose");
-  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/bus.jpg").string());
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/test/images/bus.jpg").string());
   if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
     GTEST_SKIP() << "RTMO-s ONNX fixture with fixed outputs or bus.jpg is unavailable";
   const auto model = hrt::model::ImageModel<hrt::postprocess::KeypointResultMap>::create(algo);

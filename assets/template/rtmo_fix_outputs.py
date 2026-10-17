@@ -6,7 +6,7 @@ anchors instead, giving fixed outputs dets [1, M, 5] and keypoints
 [1, M, K, 3]; RtmoKeypoint applies the score threshold and NMS.
 
     python assets/template/rtmo_fix_outputs.py end2end.onnx \
-        assets/rtmo/models/rtmo-s_body7_640x640.onnx [--candidates 300]
+        rtmo-fixed.onnx [--candidates 300]
 """
 
 import argparse

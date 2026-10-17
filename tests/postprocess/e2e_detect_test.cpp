@@ -114,35 +114,24 @@ TEST(E2EDetectTest, AbortsOnInvalidConfigOrOutputs) {
 }
 
 #ifdef HRT_ORT_MODEL_TEST
-TEST(E2EDetectTest, RunsUltralyticsExportsWhenAvailable) {
-  auto algo = hrt::test::template_algo("yolo26n_e2e_detect");
-  const auto dir = hrt::test::template_model(algo).parent_path();
-  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/bus.jpg").string());
-  if (bgr.empty())
-    GTEST_SKIP() << "bus.jpg is unavailable";
+TEST(E2EDetectTest, RunsTemplateModelWhenAvailable) {
+  const auto algo = hrt::test::template_algo("yolo26n_e2e_detect");
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/test/images/bus.jpg").string());
+  if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
+    GTEST_SKIP() << "Template end-to-end ONNX fixture or bus.jpg is unavailable";
   const auto image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, bgr.data, hrt::core::ImageFormat::InterBgr,
                                             {bgr.cols, bgr.rows}, hrt::core::DataType::Uint8, bgr.step);
   ASSERT_TRUE(image);
-  bool ran = false;
-  // YOLOv10 and YOLOv8 with nms=True share the YOLO26 config.
-  for (const char* name : {"yolo26n.onnx", "yolov10n.onnx", "yolov8n-nms.onnx"}) {
-    const auto path = dir / name;
-    if (!std::filesystem::is_regular_file(path))
-      continue;
-    algo["config"]["engine"]["backends"][0]["data"] = path.string();
-    const auto model = hrt::model::ImageModel<hrt::postprocess::DetectResultMap>::create(algo);
-    const auto result = model->process_sync(*image);
-    ASSERT_TRUE(result) << name;
-    // bus.jpg: four people and the bus.
-    ASSERT_TRUE(result->contains(0)) << name;
-    EXPECT_EQ(result->at(0).size(), 4U) << name;
-    ASSERT_TRUE(result->contains(5)) << name;
-    EXPECT_EQ(result->at(5).size(), 1U) << name;
-    ran = true;
-  }
-  if (!ran)
-    GTEST_SKIP() << "Ultralytics end-to-end ONNX fixtures are unavailable";
+  const auto model = hrt::model::ImageModel<hrt::postprocess::DetectResultMap>::create(algo);
+  const auto result = model->process_sync(*image);
+  ASSERT_TRUE(result);
+  // bus.jpg: four people and the bus.
+  ASSERT_TRUE(result->contains(0));
+  EXPECT_EQ(result->at(0).size(), 4U);
+  ASSERT_TRUE(result->contains(5));
+  EXPECT_EQ(result->at(5).size(), 1U);
 }
+
 #endif
 
 } // namespace

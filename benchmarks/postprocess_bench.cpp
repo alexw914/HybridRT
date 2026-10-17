@@ -39,7 +39,7 @@ auto BM_Task(benchmark::State& state) -> void {
   const auto source = hrt::bench::wrap_bgr(bgr);
   const auto algo = entry.is_object() ? hrt::hrtc::load_algo(entry) : std::nullopt;
   if (!algo || !source) {
-    state.SkipWithError("assets/yolo model or image is missing");
+    state.SkipWithError("Template model or assets/test/images is missing");
     return;
   }
   auto engine = hrt::engine::Engine::create(algo->engines.front().engine_type);

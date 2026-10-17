@@ -1,7 +1,7 @@
 {
   "name": "reference",
   "version": "1.0.0",
-  "description": "Every manifest field; see README.md next to this file for allowed values.",
+  "description": "Model and postprocess reference; engine-specific settings are in hrtc_device_config.json.",
   "algos": [
     {
       "name": "yolov8_detect",
@@ -18,47 +18,7 @@
           "resize_short_size": -1,
           "pad_scale": 1.0
         },
-        "engine": {
-          "backends": [
-            {
-              "engine_type": "trt",
-              "config": {"plugin_libraries": [], "input_shapes": {}},
-              "data": "models/yolov8_detect.engine"
-            },
-            {
-              "engine_type": "rknn",
-              "config": {"image_input": true, "core_mask": "RKNN_NPU_CORE_AUTO", "custom_op_libraries": []},
-              "data": "models/yolov8_detect.rknn"
-            },
-            {
-              "engine_type": "cann",
-              "data": "models/yolov8_detect.om"
-            },
-            {
-              "engine_type": "mnn",
-              "config": {"forward_type": "cpu", "num_thread": 4, "cache_file": "", "cache_dir": ""},
-              "data": "models/yolov8_detect.mnn"
-            },
-            {
-              "engine_type": "ncnn",
-              "config": {"num_threads": 4},
-              "proto": "models/yolov8_detect.param",
-              "data": "models/yolov8_detect.bin"
-            },
-            {
-              "engine_type": "ort",
-              "config": {
-                "intra_op_num_threads": 0,
-                "inter_op_num_threads": 0,
-                "execution_provider": "cpu",
-                "provider_options": {},
-                "custom_op_libraries": [],
-                "input_shapes": {}
-              },
-              "data": "models/yolov8_detect.onnx"
-            }
-          ]
-        },
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/YoloV8Detect.onnx"}]},
         "postprocess": {
           "type": "YoloV8Detect",
           "class_num": 80,
@@ -68,36 +28,10 @@
       }
     },
     {
-      "name": "person_head_detect",
-      "config": {
-        "preprocess": {"resize_type": "letter_box", "dst_image_format": "inter_rgb", "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "rknn", "config": {"image_input": true}, "data": "assets/rknn/models/yolov8_person_head_1280_int8.rknn"}]},
-        "postprocess": {
-          "type": "YoloV8Detect",
-          "class_num": 2,
-          "confidence_threshold": [0.4],
-          "iou_threshold": [0.45]
-        }
-      }
-    },
-    {
-      "name": "fire_detect",
-      "config": {
-        "preprocess": {"resize_type": "letter_box", "dst_image_format": "inter_rgb", "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "rknn", "config": {"image_input": true}, "data": "assets/rknn/models/yolov8_fire_1280_int8.rknn"}]},
-        "postprocess": {
-          "type": "YoloV8Detect",
-          "class_num": 1,
-          "confidence_threshold": [0.4],
-          "iou_threshold": [0.45]
-        }
-      }
-    },
-    {
       "name": "yolo26n_detect_raw",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo26/models/yolo26n-raw.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/Yolo26Detect.onnx"}]},
         "postprocess": {"type": "Yolo26Detect", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
     },
@@ -105,7 +39,7 @@
       "name": "yolov5_detect",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "models/yolov5_detect.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/YoloV5Detect.onnx"}]},
         "postprocess": {
           "type": "YoloV5Detect",
           "class_num": 80,
@@ -119,7 +53,7 @@
       "name": "rtdetr_l_detect",
       "config": {
         "preprocess": {"resize_type": "normal", "std": [255, 255, 255]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/rtdetr/models/rtdetr-l.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/DetrDetect.onnx"}]},
         "postprocess": {
           "type": "DetrDetect",
           "class_num": 80,
@@ -134,7 +68,7 @@
       "name": "yolo26n_e2e_detect",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/e2e/models/yolo26n.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/E2EDetect.onnx"}]},
         "postprocess": {"type": "E2EDetect", "class_num": 80, "confidence_threshold": [0.25]}
       }
     },
@@ -142,7 +76,7 @@
       "name": "yolov8n_detect",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralDetect.onnx"}]},
         "postprocess": {"type": "GeneralDetect", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
     },
@@ -150,7 +84,7 @@
       "name": "yolo26n_e2e_obb",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/e2e/models/yolo26n-obb.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/E2ERotated.onnx"}]},
         "postprocess": {"type": "E2ERotated", "class_num": 15, "confidence_threshold": [0.25]}
       }
     },
@@ -158,7 +92,7 @@
       "name": "yolov8n_obb_raw",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-obb-raw.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/YoloV8Rotated.onnx"}]},
         "postprocess": {
           "type": "YoloV8Rotated",
           "class_num": 15,
@@ -171,7 +105,7 @@
       "name": "yolo26n_obb_raw",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo26/models/yolo26n-obb-raw.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/Yolo26Rotated.onnx"}]},
         "postprocess": {"type": "Yolo26Rotated", "class_num": 15, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
     },
@@ -179,10 +113,10 @@
       "name": "yolov5_rotated",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "models/yolov5_rotated.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/YoloV5Rotated.onnx"}]},
         "postprocess": {
           "type": "YoloV5Rotated",
-          "class_num": 15,
+          "class_num": 2,
           "anchors": [[10, 13, 16, 30, 33, 23], [30, 61, 62, 45, 59, 119], [116, 90, 156, 198, 373, 326]],
           "confidence_threshold": [0.25],
           "iou_threshold": [0.45]
@@ -193,7 +127,7 @@
       "name": "yolov8n_obb",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-obb.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralRotated.onnx"}]},
         "postprocess": {"type": "GeneralRotated", "class_num": 15, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
     },
@@ -201,7 +135,7 @@
       "name": "yolov8n_classify",
       "config": {
         "preprocess": {"std": [255, 255, 255]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-cls.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralClassify.onnx"}]},
         "postprocess": {"type": "GeneralClassify", "classify_postprocess_type": "none"}
       }
     },
@@ -209,7 +143,7 @@
       "name": "yolov8n_pose",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-pose.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralYoloPose.onnx"}]},
         "postprocess": {
           "type": "GeneralYoloPose",
           "class_num": 1,
@@ -223,7 +157,7 @@
       "name": "yolov8n_face",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/face/models/yolov8n-face.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/YoloV8Keypoint.onnx"}]},
         "postprocess": {
           "type": "YoloV8Keypoint",
           "class_num": 1,
@@ -239,7 +173,7 @@
       "name": "yolo26n_pose_raw",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo26/models/yolo26n-pose-raw.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/Yolo26Keypoint.onnx"}]},
         "postprocess": {
           "type": "Yolo26Keypoint",
           "class_num": 1,
@@ -253,7 +187,7 @@
       "name": "yolo26n_e2e_pose",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/e2e/models/yolo26n-pose.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/E2EKeypoint.onnx"}]},
         "postprocess": {
           "type": "E2EKeypoint",
           "class_num": 1,
@@ -266,7 +200,7 @@
       "name": "rtmo_s_pose",
       "config": {
         "preprocess": {"resize_type": "keep_ratio", "dst_image_format": "planar_bgr", "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/rtmo/models/rtmo-s_body7_640x640.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/RtmoKeypoint.onnx"}]},
         "postprocess": {"type": "RtmoKeypoint", "confidence_threshold": [0.15], "iou_threshold": [0.65], "keypoint_threshold": 0.3}
       }
     },
@@ -279,45 +213,15 @@
           "mean": [123.675, 116.28, 103.53],
           "std": [58.395, 57.12, 57.375]
         },
-        "engine": {
-          "backends": [
-            {
-              "engine_type": "ort",
-              "config": {"input_shapes": {"input": [1, 3, 256, 192]}},
-              "data": "assets/rtmpose/models/rtmpose-m_simcc-body7_256x192.onnx"
-            }
-          ]
-        },
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralKeypoint.onnx"}]},
         "postprocess": {"type": "GeneralKeypoint", "general_keypoint_type": "simcc", "keypoint_threshold": 0.3}
-      }
-    },
-    {
-      "name": "person_heatmap_keypoint",
-      "config": {
-        "preprocess": {"resize_type": "pad_outside", "pad_scale": 1.25, "dst_image_format": "inter_rgb"},
-        "engine": {
-          "backends": [
-            {
-              "engine_type": "rknn",
-              "config": {"image_input": true},
-              "data": "assets/rknn/models/person_heatmap_keypoint_256x256_int8.rknn"
-            }
-          ]
-        },
-        "postprocess": {
-          "type": "GeneralKeypoint",
-          "general_keypoint_type": "heatmap",
-          "heatmap_refine": "dark",
-          "score_activation": "none",
-          "keypoint_threshold": 0.0
-        }
       }
     },
     {
       "name": "yolov8n_segment",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-seg.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralYoloSegment.onnx"}]},
         "postprocess": {
           "type": "GeneralYoloSegment",
           "class_num": 80,
@@ -331,7 +235,7 @@
       "name": "yolov8n_segment_raw",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-seg-raw.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/YoloV8Segment.onnx"}]},
         "postprocess": {
           "type": "YoloV8Segment",
           "class_num": 80,
@@ -345,7 +249,7 @@
       "name": "yolo26n_segment_raw",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo26/models/yolo26n-seg-raw.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/Yolo26Segment.onnx"}]},
         "postprocess": {"type": "Yolo26Segment", "class_num": 80, "mask_threshold": 0.5, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
     },
@@ -353,7 +257,7 @@
       "name": "yolo26n_e2e_segment",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/e2e/models/yolo26n-seg.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/E2ESegment.onnx"}]},
         "postprocess": {"type": "E2ESegment", "class_num": 80, "mask_threshold": 0.5, "confidence_threshold": [0.25]}
       }
     },
@@ -361,7 +265,7 @@
       "name": "lraspp_voc_segment",
       "config": {
         "preprocess": {"mean": [123.675, 116.28, 103.53], "std": [58.395, 57.12, 57.375]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "assets/semantic/models/lraspp_mobilenet_v3_voc_512.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/SemanticSegment.onnx"}]},
         "postprocess": {"type": "SemanticSegment"}
       }
     }

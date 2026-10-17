@@ -1,16 +1,13 @@
 # Manifest reference
 
-`hrtc_template.json` lists every manifest field. The first algo shows all preprocess keys
-and one backend of each engine type with all of its config keys; each following algo shows
-one postprocessor type, to show how its parameters are set. Where a type has a test model, its
-algo is named after it (`yolov8n_detect`, `rtmo_s_pose`, ...), uses that model's preprocessing and
-is what the tests and benchmarks run; its `data` points at a local fixture under `assets/` (see
-[Test models](#test-models)), relative to the repository root. Other models of the same type are
-described in this file rather than given algos of their own. The remaining algos are type
-references whose model files do not exist. Values are defaults, or
-typical YOLO values where the default would not fit. Check a manifest with
-`hrt-compress -c -j <manifest>`; the ORT, ncnn and MNN engine tests load the backend configs
-of the first algo.
+`hrtc_template.json` contains one representative model for each postprocessor type. All 23
+algos use ONNX Runtime and `assets/test/onnx/<type>.onnx`, relative to the repository
+root. The first algo shows every preprocess key. Engine-specific `config` keys are
+collected in `hrtc_device_config.json`, using the same raw YOLOv8 detector as an example;
+`hrtc_template.json` omits them and uses engine defaults. Tests and benchmarks load these same algos. Model files
+and images stay local and untracked; only this directory and `assets/PERF.md` are committed.
+Values are defaults or model-specific values where the defaults do not fit. Check the whole
+manifest with `hrt-compress -c -j assets/template/hrtc_template.json`.
 
 ## Package and algos
 
@@ -49,6 +46,22 @@ detections with `hrt::core::pad_scale(box, scale_w, scale_h, image.rect())`. `ce
 leave a clipped box when `resize_short_size` is below the input size.
 
 ## Engine config
+
+`hrtc_device_config.json` shows `config` objects for ORT, TensorRT, MNN, ncnn, RKNN and CANN
+in one example algo. The ORT entry points to the existing fixed ONNX model; native backend
+paths are conversion examples, not additional bundled models. To run that file, keep the
+backend you need and provide its converted model files. Copy its `config` into a model
+manifest when overriding engine defaults. The two files are independent manifest examples;
+there is no automatic merge or extra runtime configuration file.
+
+ORT uses explicit single-thread settings in the device example; MNN and ncnn show four
+threads. `input_shapes`, custom operator/plugin libraries and OpenCL cache settings can be
+filled for a deployment. The engine tests read ORT/MNN/ncnn configs from this device example;
+model tests and benchmarks continue reading `hrtc_template.json`.
+
+The example's preprocessing targets the float32 ONNX input. For RKNN `image_input: true`,
+use the platform-specific preprocessing below (uint8 interleaved RGB with model-side
+normalization). Model conversion and preprocessing must match the selected backend.
 
 | Engine | Keys (all optional) |
 | --- | --- |
@@ -220,82 +233,90 @@ and `results`, whose items always carry every field, empty when the task has non
 
 ## Test models
 
-Only `assets/template/` is committed. Test models, images and their outputs stay in local,
-untracked directories under `assets/`, at the paths the template algos name; tests and
-benchmarks that need them skip when they are missing. `hybridrt_example_image_model` reads only the
-chosen algo (`-m assets/template/hrtc_template.json -a yolov8n_detect`). `hrt-validate`,
-`hrt-model-bench` and `hrt-compress` read every model file of a manifest, so copy one algo into its
-own manifest first; from the repository root:
-
-```sh
-python -c "import json, sys; m = json.load(open('assets/template/hrtc_template.json')); m['algos'] = [a for a in m['algos'] if a['name'] == sys.argv[1]]; json.dump(m, open(sys.argv[1] + '.json', 'w'))" yolov8n_detect
-hrt-validate -m yolov8n_detect.json -n yolov8n_detect -e ort -i assets/yolo/images -r drawn/
-```
-
-| Algo | Local file | Source | sha256 |
-| --- | --- | --- | --- |
-| images | `assets/yolo/images/bus.jpg`, `airport.jpg` | [bus.jpg](https://github.com/ultralytics/assets/raw/refs/heads/main/im/bus.jpg), [airport.jpg](https://github.com/ultralytics/assets/raw/refs/heads/main/im/airport.jpg) | `c02019c4...`, `7daff53a...` |
-| `yolov8n_detect` | `assets/yolo/models/yolov8n.onnx` | [unileon-robotics/YOLO8-ONNX](https://huggingface.co/unileon-robotics/YOLO8-ONNX/resolve/main/yolov8n.onnx) | `fa2c856b...` |
-| `yolov8n_segment` | `assets/yolo/models/yolov8n-seg.onnx` | same repository, `yolov8n-seg.onnx` | `9373c971...` |
-| `yolov8n_pose` | `assets/yolo/models/yolov8n-pose.onnx` | same repository, `yolov8n-pose.onnx` | `6fc546ff...` |
-| `yolov8n_obb` | `assets/yolo/models/yolov8n-obb.onnx` | same repository, `yolov8n-obb.onnx` | `d87f86b2...` |
-| `yolov8n_classify` | `assets/yolo/models/yolov8n-cls.onnx` | same repository, `yolov8n-cls.onnx` | `29e1963b...` |
-| `yolov8n_obb_raw`, `yolov8n_segment_raw`; also `yolov8n-raw.onnx`, `yolov8n-pose-raw.onnx` | `assets/yolo/models/yolov8n-obb-raw.onnx` (1024), `yolov8n-seg-raw.onnx`, `yolov8n-raw.onnx`, `yolov8n-pose-raw.onnx` (640) | `yolo_export_raw.py` next to this file from `yolov8n{-obb,-seg,,-pose}.pt` (Ultralytics 8.4.178) | `2a5de440...`, `a21888dd...`, `e2a57b77...`, `d87b2769...` |
-| `yolo26n_detect_raw`, `yolo26n_pose_raw`, `yolo26n_obb_raw`, `yolo26n_segment_raw` | `assets/yolo26/models/yolo26n-raw.onnx`, `yolo26n-pose-raw.onnx`, `yolo26n-seg-raw.onnx` (640), `yolo26n-obb-raw.onnx` (1024) | `yolo_export_raw.py` from `yolo26n{,-pose,-seg,-obb}.pt` | `2089cfdd...`, `513e12cd...`, `85e5ec69...`, `003dc108...` |
-| `lraspp_voc_segment` | `assets/semantic/models/lraspp_mobilenet_v3_voc_512.onnx` | torchvision 0.29 `lraspp_mobilenet_v3_large(weights=COCO_WITH_VOC_LABELS_V1)`, `out` exported at 512 x 512, opset 17 | `e610481d...` |
-| `rtdetr_l_detect` | `assets/rtdetr/models/rtdetr-l.onnx` | [rtdetr-l.pt](https://github.com/ultralytics/assets/releases/download/v8.1.0/rtdetr-l.pt), Ultralytics 8.1.4 `export(format="onnx", imgsz=640, opset=17)` | `8090814f...` |
-| `yolo26n_e2e_detect` | `assets/e2e/models/yolo26n.onnx`; also `yolov10n.onnx`, `yolov8n-nms.onnx` | Ultralytics 8.4.178 `export(format="onnx", imgsz=640, opset=17, simplify=True, nms=False)`; `nms=True` for YOLOv8 | `08727943...`, `1fb68e28...`, `979da5db...` |
-| `yolo26n_e2e_pose`, `_segment`, `_obb` | `assets/e2e/models/yolo26n-pose.onnx`, `-seg.onnx`, `-obb.onnx`; also `yolov8n-{pose,seg,obb}-nms.onnx` | as above from `yolo26n-{pose,seg,obb}.pt` and `yolov8n-{pose,seg,obb}.pt`; OBB at `imgsz=1024` | `ecd85eb3...`, `10106049...`, `0dc04234...`, `84dbdb8f...`, `ac2d7015...`, `8cea4b4c...` |
-| `yolov8n_face` | `assets/face/models/yolov8n-face.onnx`; image `assets/face/images/zidane.jpg` | `yolov8n-face-derronqi.onnx` of [clibdev/yolov8-face 1.0.0](https://github.com/clibdev/yolov8-face/releases/tag/1.0.0); [zidane.jpg](https://github.com/ultralytics/assets/raw/refs/heads/main/im/zidane.jpg) | `af09683b...`, `16d73869...` |
-| `person_head_detect`, `fire_detect`, `person_heatmap_keypoint` | `assets/rknn/models/yolov8_person_head_1280_int8.rknn`, `yolov8_fire_1280_int8.rknn`, `person_heatmap_keypoint_256x256_int8.rknn` | private RKNN models (RK3588, int8, mean 0 / std 255 built in); use your own with the same outputs | `73745b16...`, `91290dc2...`, `7a0f60b4...` |
-| `rtmpose_m_pose` | `assets/rtmpose/models/rtmpose-m_simcc-body7_256x192.onnx` | `end2end.onnx` of the [RTMPose-m body7 SDK](https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504.zip) | `5c0a4bf6...` |
-| `rtmo_s_pose` | `assets/rtmo/models/rtmo-s_body7_640x640.onnx` | `end2end.onnx` of the [RTMO-s body7 SDK](https://download.openmmlab.com/mmpose/v1/projects/rtmo/onnx_sdk/rtmo-s_8xb32-600e_body7-640x640-dac2bf74_20231211.zip) through `rtmo_fix_outputs.py` (300 candidates) | `86aefe58...` |
-
-### Fixed ONNX collection by postprocess type
-
-The local, untracked `assets/postprocess_onnx/` contains one `<type>.onnx` for each of the
-23 postprocess types in this template. It selects the representative ONNX above for each
-type, using `yolov8n-raw.onnx` for `YoloV8Detect` and RTMPose SimCC for `GeneralKeypoint`.
-Original fixed input sizes are retained; they are not all 640 x 640. The template paths
-remain the original fixture paths.
-
-`yolov5_export_raw.py` exposes the three convolution logits of the
-[official YOLOv5n v7.0 ONNX](https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5n.onnx)
-as `head0`, `head1`, `head2`, promoting the FP16 release asset to FP32 for `YoloV5Detect`.
-The represented weights are preserved. `YoloV5Rotated.onnx` is the user-provided
-`v0013_obbczs_detection_0808int8.onnx`, copied without modification: input `[1,3,1280,1280]`,
-heads `[1,24,160,160]`, `[1,24,80,80]`, `[1,24,40,40]`, internally INT8 Q/DQ with float32 I/O.
-Its channel layout fits 3 anchors and 2 classes, unlike the 15-class template demonstration.
-Its original anchors, preprocessing and angle convention were not confirmed; runtime
-validation used template anchors with `class_num: 2` and does not establish accuracy.
-
-`onnx_fix_shapes.py` fixes RT-DETR, RTMO and RTMPose inputs using onnxsim while preserving
-floating-point arithmetic (no algebraic optimization or constant folding). It verifies
-onnxsim equivalence and invariant output shapes on zero/random inputs before completing
-symbolic output annotations. RTMO already uses fixed TopK candidates from
-`rtmo_fix_outputs.py`; image-dependent NMS outputs cannot simply be annotated as fixed.
-
-```sh
-python assets/template/yolov5_export_raw.py yolov5n.onnx assets/postprocess_onnx/YoloV5Detect.onnx
-python assets/template/onnx_fix_shapes.py assets/rtdetr/models/rtdetr-l.onnx assets/postprocess_onnx/DetrDetect.onnx --input images=1,3,640,640
-python assets/template/onnx_fix_shapes.py assets/rtmo/models/rtmo-s_body7_640x640.onnx assets/postprocess_onnx/RtmoKeypoint.onnx --input input=1,3,640,640
-python assets/template/onnx_fix_shapes.py assets/rtmpose/models/rtmpose-m_simcc-body7_256x192.onnx assets/postprocess_onnx/GeneralKeypoint.onnx --input input=1,3,256,192
-```
+All template model files live in `assets/test/onnx/`, with one `<type>.onnx` per
+postprocessor and positive, fixed input/output dimensions. Previous model directories and
+extra variants were removed. Test resources share `assets/test/`: `images/` contains `bus.jpg`, `airport.jpg` and
+`zidane.jpg`; `calib/` contains calibration data; `onnx/` contains the 23 models.
+Models and test resources are not committed.
 
 The 23 files passed ONNX checker, ONNX Runtime zero/random-input runs and `hrt-validate`
-(45 image runs, no pipeline errors). This confirms fixed I/O and runnable postprocessing,
-not detection accuracy. Re-exported or newly supplied files have these SHA256 values;
-unchanged copies retain the source hashes listed above:
+(45 image runs, no pipeline errors). This verifies shape compatibility and runnable
+postprocessing, not detection accuracy. The user-provided `YoloV5Rotated` model has 2 classes;
+its anchors, normalization and angle convention remain unconfirmed. Template anchors and
+preprocessing allow pipeline checks only, as requested.
 
-| File | SHA256 |
-| --- | --- |
-| `YoloV5Detect.onnx` | `797416533eed5eb4c82098ec221bbe55368ad3c062f9d0217db87f129a78f172` |
-| `DetrDetect.onnx` | `599b9b7484cb831312f585d4ec4885a95ae10d1e84dada14833f5c570828c9b9` |
-| `YoloV5Rotated.onnx` | `afffc7a2813e15e9137648bc7655155827b1cdace2a0999b1919d1196be57dfb` |
-| `RtmoKeypoint.onnx` | `91d97d8251f7624d4da9cead6b2a8bd6ea36850cfe329122eebeb89b41f108d2` |
-| `GeneralKeypoint.onnx` | `81e1025f9c938450d2ef88c0fba274fb57b0f9b49711dc7a52fef99c7ea3548d` |
+| Algo | ONNX file in `assets/test/onnx/` | Input NCHW | SHA256 |
+| --- | --- | --- | --- |
+| `yolov8_detect` | `YoloV8Detect.onnx` | `1 x 3 x 640 x 640` | `e2a57b77d38a136a3ac07ddd17b81930c4680e0d464ee615488c3a47bfdef303` |
+| `yolo26n_detect_raw` | `Yolo26Detect.onnx` | `1 x 3 x 640 x 640` | `2089cfdd67660be0efec7477bbf2f6cabc2261c84bbd82c6a7e895b51bd8c49a` |
+| `yolov5_detect` | `YoloV5Detect.onnx` | `1 x 3 x 640 x 640` | `797416533eed5eb4c82098ec221bbe55368ad3c062f9d0217db87f129a78f172` |
+| `rtdetr_l_detect` | `DetrDetect.onnx` | `1 x 3 x 640 x 640` | `599b9b7484cb831312f585d4ec4885a95ae10d1e84dada14833f5c570828c9b9` |
+| `yolo26n_e2e_detect` | `E2EDetect.onnx` | `1 x 3 x 640 x 640` | `08727943f090f5e8472cae3c08bcbb7b93c927820d3104ef7792f1d31277ec77` |
+| `yolov8n_detect` | `GeneralDetect.onnx` | `1 x 3 x 480 x 640` | `fa2c856b0effedce4f49fffd121f438247a64c8f633bf0e6d5e5960e869ccc5a` |
+| `yolo26n_e2e_obb` | `E2ERotated.onnx` | `1 x 3 x 1024 x 1024` | `0dc04234b1d82d87b8aebe5c364b4c298de0e2380ce61b74f9b117478e690e41` |
+| `yolov8n_obb_raw` | `YoloV8Rotated.onnx` | `1 x 3 x 1024 x 1024` | `2a5de440d72ecb80cc4fbce50c59f6293e4bc89cb1fe8aaee8ca7d9ed3b89566` |
+| `yolo26n_obb_raw` | `Yolo26Rotated.onnx` | `1 x 3 x 1024 x 1024` | `003dc108ae1be9b94f7bbf3f154d871385224da96ca15fa0bc07bccb0bc2148f` |
+| `yolov5_rotated` | `YoloV5Rotated.onnx` | `1 x 3 x 1280 x 1280` | `afffc7a2813e15e9137648bc7655155827b1cdace2a0999b1919d1196be57dfb` |
+| `yolov8n_obb` | `GeneralRotated.onnx` | `1 x 3 x 480 x 640` | `d87f86b2e475deccfd57410fdcb6d2de3886fcab4f6395888ddca4c35a2c12ee` |
+| `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 480 x 640` | `29e1963b77c3d1e38d3c8772ecbce294e48aa3287c3f703c39bc4e8d0b1a0f1c` |
+| `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 480 x 640` | `6fc546ff26e38b25e29c047fcacd71d3607705c0b5a590f0bd97492aed459f94` |
+| `yolov8n_face` | `YoloV8Keypoint.onnx` | `1 x 3 x 640 x 640` | `af09683be4937ebe23e9da0346cbf46cd937b73ed5fac986e6205e6c7cdd2c25` |
+| `yolo26n_pose_raw` | `Yolo26Keypoint.onnx` | `1 x 3 x 640 x 640` | `513e12cd94482f799e2d1ad66fcb9603d7c3eb41ad38863e7ae566374e0eddc8` |
+| `yolo26n_e2e_pose` | `E2EKeypoint.onnx` | `1 x 3 x 640 x 640` | `ecd85eb31cf6889ab62600164d27698b881fcb27bd27c548b2dd4a67fb52c814` |
+| `rtmo_s_pose` | `RtmoKeypoint.onnx` | `1 x 3 x 640 x 640` | `91d97d8251f7624d4da9cead6b2a8bd6ea36850cfe329122eebeb89b41f108d2` |
+| `rtmpose_m_pose` | `GeneralKeypoint.onnx` | `1 x 3 x 256 x 192` | `81e1025f9c938450d2ef88c0fba274fb57b0f9b49711dc7a52fef99c7ea3548d` |
+| `yolov8n_segment` | `GeneralYoloSegment.onnx` | `1 x 3 x 480 x 640` | `9373c971598d799b54e6911e5a665b99653eb0be611471c28ae9dc3676a6a995` |
+| `yolov8n_segment_raw` | `YoloV8Segment.onnx` | `1 x 3 x 640 x 640` | `a21888dd7bc2e6d478ceb438a2ec520c60e5aa03ab898b1bc65fb3598d2afd83` |
+| `yolo26n_segment_raw` | `Yolo26Segment.onnx` | `1 x 3 x 640 x 640` | `85e5ec69cb0a06f82e6a27b4cdb6be36d91e041b3829d75887183f6506b18221` |
+| `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `101060498337592b2c671f479001ca725d92049f99118e5b666f4c2273d9f096` |
+| `lraspp_voc_segment` | `SemanticSegment.onnx` | `1 x 3 x 512 x 512` | `e610481d6dfedf62285bf7de02c1a67a786dc3abb342a5e5db108b67c89daf6b` |
 
-The `yolov8n_*` models have a 480 x 640 input; `yolov8n_classify` resizes directly instead of the
+Sources and export steps:
+
+- Decoded YOLOv8 detection, segmentation, pose, OBB and classification models come from
+  [unileon-robotics/YOLO8-ONNX](https://huggingface.co/unileon-robotics/YOLO8-ONNX).
+- Raw YOLOv8/YOLO26 models use `yolo_export_raw.py` with Ultralytics 8.4.178 and the
+  corresponding official `.pt` weights. YOLO26 end-to-end models use `export(format="onnx",
+  imgsz=640, opset=17, simplify=True, nms=False)`, with 1024 inputs for OBB.
+- `YoloV5Detect` uses the
+  [official YOLOv5n v7.0 ONNX](https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5n.onnx)
+  through `yolov5_export_raw.py`: three raw convolution heads, promoting FP16 values to FP32.
+- `YoloV5Rotated` is the user-provided `v0013_obbczs_detection_0808int8.onnx`, copied
+  unchanged. Its graph uses INT8 Q/DQ internally and float32 I/O, with outputs
+  `[1,24,160,160]`, `[1,24,80,80]`, `[1,24,40,40]`.
+- `YoloV8Keypoint` uses `yolov8n-face-derronqi.onnx` from
+  [clibdev/yolov8-face 1.0.0](https://github.com/clibdev/yolov8-face/releases/tag/1.0.0).
+- `DetrDetect` exports [rtdetr-l.pt](https://github.com/ultralytics/assets/releases/download/v8.1.0/rtdetr-l.pt)
+  with Ultralytics 8.1.4, `export(format="onnx", imgsz=640, opset=17)`.
+- `GeneralKeypoint` uses `end2end.onnx` from the
+  [RTMPose-m body7 SDK](https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504.zip).
+- `RtmoKeypoint` uses `end2end.onnx` from the
+  [RTMO-s body7 SDK](https://download.openmmlab.com/mmpose/v1/projects/rtmo/onnx_sdk/rtmo-s_8xb32-600e_body7-640x640-dac2bf74_20231211.zip),
+  then `rtmo_fix_outputs.py` with 300 candidates.
+- `SemanticSegment` exports torchvision 0.29
+  `lraspp_mobilenet_v3_large(weights=COCO_WITH_VOC_LABELS_V1)` at 512 x 512, opset 17.
+- `onnx_fix_shapes.py` fixes RT-DETR, RTMO and RTMPose input dimensions using onnxsim
+  without arithmetic optimization or constant folding. Equivalence checks and invariant
+  zero/random-input output sizes precede completion of symbolic output annotations.
+  Image-dependent NMS outputs must first be replaced by a fixed-output export.
+
+Recreate transformed files from downloaded source exports, outside the model collection:
+
+```sh
+python assets/template/yolov5_export_raw.py yolov5n.onnx assets/test/onnx/YoloV5Detect.onnx
+python assets/template/rtmo_fix_outputs.py rtmo-end2end.onnx rtmo-fixed.onnx --candidates 300
+python assets/template/onnx_fix_shapes.py rtdetr-l.onnx assets/test/onnx/DetrDetect.onnx --input images=1,3,640,640
+python assets/template/onnx_fix_shapes.py rtmo-fixed.onnx assets/test/onnx/RtmoKeypoint.onnx --input input=1,3,640,640
+python assets/template/onnx_fix_shapes.py rtmpose-end2end.onnx assets/test/onnx/GeneralKeypoint.onnx --input input=1,3,256,192
+```
+
+Run any template algo directly, for example:
+
+```sh
+hrt-validate -m assets/template/hrtc_template.json -n yolov8n_detect -e ort -i assets/test/images -o results.json
+```
+
+The decoded YOLOv8 detection, segment, pose, OBB and classification models have a 480 x 640 input; `yolov8n_classify` resizes directly instead of the
 square center crop, so it is a pipeline check, not an accuracy reference. `rtmpose_m_pose` runs on
 one person per call: pass each `yolov8n_detect` class 0 box as `src_rect`.
 
@@ -324,11 +345,6 @@ Results checked against independent references on bus.jpg (ONNX Runtime 1.31.0, 
   same heads on zidane.jpg (2 faces, 5 landmarks each).
 - `heatmap_udp`: keypoints identical to mmpose's `refine_keypoints_dark_udp` and `UDPHeatmap`
   scaling on constructed 48 x 64 maps, edge peaks included.
-- RKNN algos on the RK3588 board (librknnrt 2.3.2): `person_head_detect` finds 4 people and 3
-  heads on bus.jpg; `person_heatmap_keypoint` after it runs on each person box. Its heatmaps are
-  logits, so DARK keeps the argmax and keypoints scoring 0 or less are hidden; neighbors inside
-  the square crop can take a narrow box's keypoints. `fire_detect` runs but its accuracy is
-  unchecked for lack of a fire image.
 - `rtmpose_m_pose` after `yolov8n_detect`: visible keypoints within 5 px of mmpose's affine crop
   and SimCC decoding, visibility 17/17 for all 4 people.
 

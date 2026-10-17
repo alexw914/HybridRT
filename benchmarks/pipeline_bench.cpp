@@ -24,7 +24,7 @@ auto BM_Task(benchmark::State& state) -> void {
   const auto bgr = hrt::bench::task_image(task);
   const auto image = hrt::bench::wrap_bgr(bgr);
   if (!entry.is_object() || !image) {
-    state.SkipWithError("assets/yolo model or image is missing");
+    state.SkipWithError("Template model or assets/test/images is missing");
     return;
   }
   hrt::bench::with_result(task, [&]<typename Result>() -> void {
@@ -62,7 +62,7 @@ auto BM_Pooled(benchmark::State& state) -> void {
     model = slot.get();
   }
   if (model == nullptr) {
-    state.SkipWithError("assets/yolo model or image is missing");
+    state.SkipWithError("Template model or assets/test/images is missing");
     return;
   }
   for (auto _ : state)
