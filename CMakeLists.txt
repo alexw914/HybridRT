@@ -55,7 +55,7 @@ if(HYBRIDRT_BUILD_TESTS OR HYBRIDRT_BUILD_BENCHMARKS)
     enable_testing()
 endif()
 
-if(HYBRIDRT_BUILD_PYTHON)
+if(HYBRIDRT_BUILD_PYTHON OR HYBRIDRT_BUILD_RUST)
     add_subdirectory(bindings)
 endif()
 

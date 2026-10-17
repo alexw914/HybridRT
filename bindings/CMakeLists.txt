@@ -5,3 +5,7 @@
 if(HYBRIDRT_BUILD_PYTHON)
     add_subdirectory(python)
 endif()
+
+if(HYBRIDRT_BUILD_RUST)
+    add_subdirectory(rust)
+endif()

@@ -42,6 +42,8 @@ install/
 *.pyc
 __pycache__/
 .pytest_cache/
+/bindings/rust/Cargo.lock
+/bindings/rust/target/
 
 # Local documentation
 /docs/
