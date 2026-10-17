@@ -152,3 +152,16 @@ if(HRT_USE_MNN)
     endif()
     target_compile_definitions(hybridrt PRIVATE HRT_USE_MNN)
 endif()
+
+# -- hybridrt_c: C API for language bindings ----------------------------------
+if(HYBRIDRT_BUILD_C_API)
+    add_library(hybridrt_c SHARED hrt.cpp)
+    hybridrt_configure_target(hybridrt_c)
+    target_compile_definitions(hybridrt_c PRIVATE HRT_C_API_BUILD)
+    target_link_libraries(hybridrt_c PRIVATE hrt::hybridrt kitzoo::log)
+    # Only the hrt_ functions are exported; static dependencies stay private.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_options(hybridrt_c PRIVATE "LINKER:--exclude-libs,ALL")
+    endif()
+    hybridrt_deploy_runtime(hybridrt_c)
+endif()

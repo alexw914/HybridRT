@@ -40,6 +40,12 @@
   各阶段实例数只通过 create 的 `ImageModelOptions` 传入，不写入模型包。
   自定义算子库从引擎 config 加载（ORT/RKNN 的 `custom_op_libraries`、
   TensorRT 的 `plugin_libraries`），可选，加载失败只警告并跳过。
+- C API 声明在 `include/hrt.h`（C99 可编译），实现为 `source/hrt.cpp`，由 `HYBRIDRT_BUILD_C_API`
+  构建为共享库 `hybridrt_c`，只导出 `hrt_` 函数。类型用 `Hrt` 前缀大驼峰，函数用 `hrt_` 前缀，
+  枚举项为显式赋值的 `HRT_<类型>_<值>`；枚举值和库分配的结构体字段只在末尾追加，
+  调用方分配的结构体不改布局。可预先检查的错误返回 `HrtStatus`，信息由 `hrt_last_error` 给出；
+  C API 只接收主机内存输入，结果为主机数组。该共享库构建关闭 kitzoo 的 mimalloc 进程替换，
+  并使用可 dlopen 的 TLS 模型。
 - `source/include/hrtc/hrtc_generated.h` 随仓库提交，不手改；修改 `fbs/hrtc.fbs` 后用
   `HYBRIDRT_BUILD_FLATC` 启用 flatc 并构建 `hrtc_schema` 重新生成。
   字段只在表末尾追加；不兼容改动更换 `file_identifier` 并重新打包。
@@ -130,7 +136,8 @@
   Modules、Backends；后端名称链接到各自项目，表格只列现有内容并随变化更新。
 - `examples/<name>.cpp` 对应 `hybridrt_example_<name>`，展示典型用法；
   资源通过命令行传入，图片用 OpenCV imgcodecs 读写。
-- 测试放 `tests/<模块>/<源文件>_test.cpp`，根目录只留构建入口，同源场景合并。
+- 测试放 `tests/<模块>/<源文件>_test.cpp`，根目录只留构建入口，同源场景合并；
+  C API 测试放 `tests/c/`。
   用例组为源文件大驼峰名加 Test，目标为 `hybridrt_test_<源文件>`，重名时加目录前缀。
   命令行程序和示例用 `tests/tools/run_tool.hpp` 做黑盒测试，检查退出码、输出、产物；
   前后处理用构造的小数据验证。

@@ -19,7 +19,7 @@ DerivePointerAlignment: false
 SortIncludes: true
 IncludeBlocks: Regroup
 IncludeCategories:
-  - Regex: '^<hrt/'
+  - Regex: '^<hrt(/|\.h>)'
     Priority: 1
   - Regex: '^<kitzoo/'
     Priority: 2
