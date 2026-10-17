@@ -53,8 +53,8 @@ public:
   }
 
 protected:
-  auto decode(KeypointResultMap& result, const core::Buffers& outputs,
-              const preprocess::ImageTransform& transform) -> bool override {
+  auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
+      -> bool override {
     const auto* boxes = float_data(*outputs[boxes_index_], boxes_scratch_);
     const auto* points = float_data(*outputs[1 - boxes_index_], points_scratch_);
     if (boxes == nullptr || points == nullptr)

@@ -69,8 +69,8 @@ auto make_rotated(std::string_view type) -> UniquePtr<RotatedPostprocessor> {
   return nullptr;
 }
 
-auto create_rotated_postprocessor(std::string_view type, const kitzoo::json::Json& config,
-                                  const engine::Engine& engine) -> UniquePtr<RotatedPostprocessor> {
+auto create_rotated_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
+    -> UniquePtr<RotatedPostprocessor> {
   return checked(make_rotated(type), type, config, engine);
 }
 

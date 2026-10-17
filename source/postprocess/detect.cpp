@@ -45,8 +45,8 @@ auto make_detect(std::string_view type) -> UniquePtr<DetectPostprocessor> {
   return nullptr;
 }
 
-auto create_detect_postprocessor(std::string_view type, const kitzoo::json::Json& config,
-                                 const engine::Engine& engine) -> UniquePtr<DetectPostprocessor> {
+auto create_detect_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
+    -> UniquePtr<DetectPostprocessor> {
   return checked(make_detect(type), type, config, engine);
 }
 

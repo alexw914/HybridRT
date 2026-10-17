@@ -138,8 +138,8 @@ public:
   }
 
 protected:
-  auto decode(SegmentResultMap& result, const core::Buffers& outputs,
-              const preprocess::ImageTransform& transform) -> bool override {
+  auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
+      -> bool override {
     const auto* det = float_data(*outputs[detections_], scratch_[0]);
     const auto* proto = float_data(*outputs[prototypes_], scratch_[1]);
     if (det == nullptr || proto == nullptr)
@@ -228,8 +228,8 @@ public:
   }
 
 protected:
-  auto decode(SegmentResultMap& result, const core::Buffers& outputs,
-              const preprocess::ImageTransform& transform) -> bool override {
+  auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
+      -> bool override {
     const auto* det = float_data(*outputs[detections_], scratch_[0]);
     const auto* proto = float_data(*outputs[prototypes_], scratch_[1]);
     if (det == nullptr || proto == nullptr)

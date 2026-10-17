@@ -46,8 +46,8 @@ public:
   }
 
 protected:
-  auto decode(DetectResultMap& result, const core::Buffers& outputs,
-              const preprocess::ImageTransform& transform) -> bool override {
+  auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
+      -> bool override {
     const auto* data = float_data(*outputs[0], scratch_);
     if (data == nullptr)
       return false;

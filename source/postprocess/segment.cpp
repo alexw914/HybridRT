@@ -23,8 +23,8 @@ auto make_segment(std::string_view type) -> UniquePtr<SegmentPostprocessor> {
   return nullptr;
 }
 
-auto create_segment_postprocessor(std::string_view type, const kitzoo::json::Json& config,
-                                  const engine::Engine& engine) -> UniquePtr<SegmentPostprocessor> {
+auto create_segment_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
+    -> UniquePtr<SegmentPostprocessor> {
   return checked(make_segment(type), type, config, engine);
 }
 
