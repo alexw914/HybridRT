@@ -1,159 +1,125 @@
 # HybridRT
 
-HybridRT is a C++20 model inference framework. It runs the preprocess, infer
-and postprocess steps of a model across CPU, GPU and NPU backends, loading
-models and their configs from a single `.hrtc` package. It has no inference
-engine of its own: inference runs on the integrated frameworks listed under
-Backends. Foundation utilities come from [kitzoo](https://github.com/alexw914/kitzoo).
+HybridRT is a C++20 model inference framework for CPU, GPU and NPU deployment.
+It combines image preprocessing, inference and postprocessing behind one interface,
+with models and configuration stored in a single .hrtc package.
+
+Supported model families and tasks:
+
+| Task | Models and output formats |
+| --- | --- |
+| Object detection | YOLOv5, YOLOv8, YOLO26, RT-DETR / DETR, decoded YOLO outputs, end-to-end detection |
+| OBB (Oriented Bounding Box) detection | YOLOv5 OBB, YOLOv8 OBB, YOLO26 OBB, decoded and end-to-end OBB outputs |
+| Instance segmentation | YOLOv8-seg, YOLO26-seg, decoded YOLO segmentation, end-to-end segmentation |
+| Pose and landmarks | YOLOv8-pose, YOLO26-pose, RTMO, RTMPose / SimCC, HRNet / heatmaps, coordinate outputs, end-to-end pose |
+| Classification | Classification scores, including YOLO classification exports |
+| Semantic segmentation | Per-pixel class scores or labels |
+
+Model support depends on the exported output format. See the
+[model and configuration reference](assets/template/README.md) for compatible exports,
+parameters and test model sources.
 
 ## Build and test
 
-Requirements: CMake 3.25+, Ninja, Git, a C++20 compiler, and OpenCV (core,
-imgproc).
+Requirements: CMake 3.25+, Git, a C++20 compiler, and OpenCV with core and imgproc.
+Image examples and the validation tool also require imgcodecs.
+Install the SDK for each inference backend you want to enable.
+
+| Platform | Build toolchain | Verification coverage |
+| --- | --- | --- |
+| Linux x86_64 | Clang or GCC | CI with ONNX Runtime; additional NVIDIA CUDA / TensorRT validation |
+| Windows x64 | MSVC | CI with ONNX Runtime and real-model validation; additional MNN, ncnn and TensorRT tests |
+| macOS arm64 | Apple Clang | CI with ONNX Runtime; additional CoreML and MNN CPU validation |
+| Linux aarch64 / RK3588 | Native or cross-compilation with an aarch64 C++20 toolchain | RKNN / RGA, MNN and ncnn board validation |
+
+CI coverage does not imply that every backend is tested on every platform.
+CANN integration is available but has not been validated on Ascend hardware.
+
+Build with ONNX Runtime, using Ninja:
 
 ```sh
 cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug \
-    -DOpenCV_DIR=<opencv>/lib/cmake/opencv4 -DORT_ROOT=<onnxruntime-sdk>
+    -DORT_ROOT=<onnxruntime-sdk>
+cmake --build build/debug --parallel
+```
+
+The default build includes tools and examples; tests are opt-in. CMake searches for
+OpenCV in the system installation. Set OpenCV_DIR only when it cannot be found.
+On Windows, run from an MSVC developer shell and use the matching Windows SDKs.
+For cross-compilation, add -DCMAKE_TOOLCHAIN_FILE=<toolchain.cmake> and provide
+target-platform OpenCV and backend SDKs.
+
+| CMake option | Purpose | Default in a standalone build |
+| --- | --- | --- |
+| `HYBRIDRT_BUILD_TESTS` | Build tests | OFF |
+| `HYBRIDRT_BUILD_TOOLS` | Build command-line tools | ON |
+| `HYBRIDRT_BUILD_EXAMPLES` | Build image examples | ON |
+
+To enable and run tests:
+
+```sh
+cmake -S . -B build/debug -DHYBRIDRT_BUILD_TESTS=ON
 cmake --build build/debug --parallel
 ctest --test-dir build/debug --output-on-failure
 ```
 
-CI covers Linux, macOS and Windows, including an Ultralytics ONNX model smoke test on
-Windows. Platforms the tests last ran on:
+Dependencies are fetched during configuration; local checkouts can be supplied through
+CMake's FETCHCONTENT_SOURCE_DIR_<NAME> options. Tests that need unavailable models,
+images or SDKs are skipped. Test resources are local files under assets/test/ and
+are not included in the repository.
 
-| Platform | Compiler | Backends |
-| --- | --- | --- |
-| Linux x86_64 (CI) | Clang | ONNX Runtime 1.31.0 |
-| Linux x86_64, RTX 4090 | GCC 11.4 | TensorRT 10.16.1.11, ONNX Runtime 1.23.2 |
-| Linux x86_64 (WSL2, Ubuntu 24.04) | GCC 13.3 | none (CPU image operators and postprocessing) |
-| macOS arm64 | Apple Clang | ONNX Runtime 1.31.0 (CPU, CoreML), MNN 3.0.0 |
-| Windows x64 | MSVC 19.50 | ONNX Runtime 1.31.0 |
-| RK3588 (Radxa Rock 5B+, Debian 12) | Arm GNU Toolchain 12.2 (cross) | RKNN runtime 2.3.2 with librga 1.10.1; MNN 2.5.0, ncnn 20260526 |
-
-Cross-compile for RK3588 with an aarch64 toolchain file whose glibc and libstdc++ are not newer
-than the board's (Arm GNU Toolchain 12.2 matches Debian 12). Tools go to `build/tools` unless
-`HYBRIDRT_TOOLS_OUTPUT_DIR` is set. Test binaries embed source paths, so run them on the board
-from the same directory layout. Under WSL, keep CMake away from Windows packages on the inherited
-`PATH`, e.g. with `-DCMAKE_IGNORE_PREFIX_PATH=<windows-prefix>`.
+Run an image example after preparing the model referenced by the template:
 
 ```sh
-cmake -S . -B build/rk3588 -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=<aarch64-toolchain.cmake> \
-    -DRKNN_ROOT=<rknpu2> -DRKNN_PLATFORM=RK3588 -DRGA_ROOT=<librga> \
-    -DOpenCV_DIR=<aarch64-opencv>/lib/cmake/opencv4 -DHYBRIDRT_TOOLS_OUTPUT_DIR=build/rk3588/tools
-cmake --build build/rk3588 --parallel
+build/debug/examples/hybridrt_example_image_model -m assets/template/hrtc_template.json \
+    -a yolov8n_segment -i assets/test/images/bus.jpg -o segment.jpg
 ```
 
-Run an algorithm on an image from a package or straight from a manifest (examples need OpenCV
-imgcodecs). The model algos of `assets/template/hrtc_template.json` name local test fixtures under
-`assets/`, which are not committed; their sources are listed in `assets/template/README.md`. Run
-from the repository root:
-
-```sh
-build/debug/examples/hybridrt_example_image_model -m assets/template/hrtc_template.json -a yolov8n_segment \
-    -i assets/test/images/bus.jpg -o segment.jpg
-```
-
-Benchmarks (Release, `-DHYBRIDRT_BUILD_BENCHMARKS=ON`) run the `yolov8n_*` template algos:
-preprocessing, postprocessing, and the whole `ImageModel` call including pooled
-multi-threaded throughput:
-
-```sh
-build/release/benchmarks/hybridrt_bench_preprocess --benchmark_min_time=1s
-build/release/benchmarks/hybridrt_bench_postprocess --benchmark_min_time=1s
-build/release/benchmarks/hybridrt_bench_pipeline --benchmark_min_time=2s
-```
-
-kitzoo, flatbuffers, GoogleTest and Google Benchmark are fetched from git. Use local checkouts
-with `-DFETCHCONTENT_SOURCE_DIR_KITZOO=<path>` or
-`-DFETCHCONTENT_SOURCE_DIR_FLATBUFFERS=<path>`. After editing `fbs/hrtc.fbs`,
-configure with `-DHYBRIDRT_BUILD_FLATC=ON` and build the `hrtc_schema` target.
+Windows executables have the .exe suffix.
 
 ## Use in another CMake project
 
 ```cmake
 include(FetchContent)
 FetchContent_Declare(hybridrt
-    GIT_REPOSITORY <repository-url>
-    GIT_TAG <tag>)
+    GIT_REPOSITORY https://github.com/alexw914/HybridRT.git
+    GIT_TAG <tag-or-commit>)
 FetchContent_MakeAvailable(hybridrt)
 
 target_link_libraries(app PRIVATE hrt::hybridrt)
 ```
 
+Set the required backend SDK paths before configuring the parent project.
+
 ## Modules
 
-| Target | Functionality |
+| Component | Purpose |
 | --- | --- |
-| `hrt::hrtc` | The `.hrtc` model package: algorithms, configs, and per-backend model files. |
-| `hrt::hybridrt` | Model execution with memory, contexts, engines, image preprocessing, task postprocessing, and OpenCV result drawing in `core/view`. |
+| `hrt::hybridrt` | Image model inference, preprocessing, postprocessing and result drawing |
+| `hrt::hrtc` | Model packaging and configuration without an inference runtime dependency |
+| `hrt-compress` | Package, inspect, extract and validate model manifests |
+| `hrt-validate` | Run image-directory validation and save results and annotated images |
+| Image model example | Run a configured model on an image |
 
-Detection supports YOLO and DETR query outputs, and detection, pose, segmentation and OBB read Ultralytics
-end-to-end exports (`nms=False`/`nms=True`). Keypoints decode raw YOLOv8 pose heads with any keypoint count
-(e.g. 5 face landmarks), top-down heatmaps (HRNet, HRNet-UDP), SimCC (RTMPose) and point outputs, and one-stage
-RTMO with fixed candidates; the template algos show each type's config.
-
-`tools/hrt-compress` packs a JSON manifest (every field: `assets/template/hrtc_template.json`) into a
-`.hrtc` file, prints or extracts existing packages, and checks their configs:
-
-```sh
-hrt-compress -j manifest.json -o model.hrtc
-hrt-compress -i model.hrtc -x extracted/
-hrt-compress -c -j manifest.json
-```
-
-`tools/hrt-model-bench` times engine inference alone, on generated inputs, for every backend of
-one algo of a package or manifest, using each engine's config:
-
-```sh
-hrt-model-bench -m model.hrtc|manifest.json -n algo [-e ort] [-i 100] [-w 10]
-```
-
-`tools/hrt-validate` runs one algo on every image of a directory on 8 threads and writes the
-results of any task in one JSON layout (`assets/template/results.json`), by default to
-`<input>_<algo>.json` beside the directory; `-r` also saves the images with drawn results. It
-exits with 1 if any image fails:
-
-```sh
-hrt-validate -m model.hrtc|manifest.json -n algo -i images/ [-e ort] [-o images_algo.json] \
-             [-r drawn/] [--preprocess-num 3] [--engine-num 2] [--postprocess-num 3]
-```
+Start with the [model template](assets/template/hrtc_template.json) and
+[backend configuration examples](assets/template/hrtc_device_config.json).
+Model and backend parameters are in the [configuration reference](assets/template/README.md).
 
 ## Backends
 
-A backend is enabled by pointing CMake at its SDK. Version is the minimum supported release and,
-in parentheses, the version tests last ran on; `-` means no minimum is pinned.
-A row without a parenthesized version has not been tested.
+Enable one or more backends by providing their SDK paths at CMake configuration time.
 
-| Backend | Engine type | Image operators | CMake | Version |
-| --- | --- | --- | --- | --- |
-| [ONNX Runtime](https://github.com/microsoft/onnxruntime) | `ort` | CPU | `-DORT_ROOT=<sdk>` | 1.20+ (1.31.0) |
-| [ncnn](https://github.com/Tencent/ncnn) | `ncnn` | CPU | `-Dncnn_ROOT=<sdk>` | - (1.0.20261007) |
-| [MNN](https://github.com/alibaba/MNN) | `mnn` | CPU | `-DMNN_ROOT=<sdk>` | - (3.0.0) |
-| [TensorRT](https://docs.nvidia.com/deeplearning/tensorrt/latest/index.html) | `trt` | CUDA (NPP) | `-DTensorRT_ROOT=<sdk>` | 8.5+ (10.16.1) |
-| [RKNN Toolkit2](https://github.com/airockchip/rknn-toolkit2) | `rknn` | RGA | `-DRKNN_ROOT=<sdk> -DRGA_ROOT=<sdk>` | - (2.3.2) |
-| [CANN](https://www.hiascend.com/doc_center/source/en/CANNCommunityEdition/910/index/index.html) | `cann` | DVPP | `-DCANN_ROOT=<sdk>` | - |
+| Backend | Engine name | Model format | CMake settings |
+| --- | --- | --- | --- |
+| [ONNX Runtime](https://github.com/microsoft/onnxruntime) | ort | ONNX | `-DORT_ROOT=<sdk>` |
+| [TensorRT](https://github.com/NVIDIA/TensorRT) | trt | TensorRT engine | `-DTensorRT_ROOT=<sdk>`; CUDA Toolkit required |
+| [MNN](https://github.com/alibaba/MNN) | mnn | MNN | `-DMNN_ROOT=<sdk>` |
+| [ncnn](https://github.com/Tencent/ncnn) | ncnn | ncnn param + bin | `-Dncnn_ROOT=<sdk>` |
+| [RKNN](https://github.com/airockchip/rknn-toolkit2) | rknn | RKNN | `-DRKNN_ROOT=<sdk>` `-DRGA_ROOT=<sdk>` |
+| [CANN](https://www.hiascend.com/en/software/cann) | cann | Ascend OM | `-DCANN_ROOT=<sdk>` |
 
-MNN selects Metal with engine config `{"forward_type": "metal"}` and requires an SDK
-built with Metal support. The official macOS Metal packages for 3.0.0 and 3.6.1
-failed standalone ReLU inference on macOS 27.0.1 arm64 with shader compilation
-errors and a crash; CPU 3.0.0 remains the validated configuration.
-
-RKNN takes uint8 images with `{"image_input": true}`; set `dst_image_format` to `inter_rgb`, as
-the runtime applies the model's layout and normalization.
-
-`MemoryType::DmaBuffer` is a Linux dma-buf: a dma-heap allocation mapped into the process, whose fd
-(`device()`) media devices share without copies. Rows are padded to 16 elements unless a stride is
-given. On Linux builds:
-
-- RKNN inputs are dma-buffers bound to the NPU by fd. With RGA in the build and a usable dma-heap,
-  ncnn and MNN inputs are dma-buffers too, so `"device": "auto"` preprocesses on the RGA; they read
-  them through the mapping.
-- Wrap a decoder, camera or display frame without copying with
-  `Image::wrap(MemoryType::DmaBuffer, reinterpret_cast<void*>(fd), format, size, type, row_pitch)` or
-  `Memory::wrap(MemoryType::DmaBuffer, mapping_or_null, fd, size)`; the fd stays the caller's.
-- Host images are copied into a dma-buffer before the RGA reads them.
-- Buffers the RGA touches come from `system-dma32` or `cma`, as RGA2 only reaches memory below 4 GB.
-  When those heaps are exhausted they come from `system`, and the RGA leaves their work to the CPU.
-  Inputs only the CPU preprocessor writes come from `system` directly.
-- The RGA fills and resizes interleaved RGB/BGR uint8 images whose rows are a multiple of 16
-  pixels; other steps run on the CPU.
+ONNX Runtime supports CPU and optional CoreML execution. MNN acceleration depends on
+the selected SDK and platform; CPU is the validated macOS configuration.
+Image preprocessing supports CPU, CUDA, Apple Metal, Rockchip RGA and Ascend DVPP;
+postprocessing runs on the CPU. Backend availability depends on the target hardware
+and installed SDK, and models must be exported or converted to its required format.

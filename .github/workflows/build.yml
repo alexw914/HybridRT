@@ -88,7 +88,7 @@ jobs:
 
       - name: Configure
         if: runner.os != 'Windows'
-        run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DORT_ROOT="$ORT_ROOT"
+        run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DHYBRIDRT_BUILD_TESTS=ON -DORT_ROOT="$ORT_ROOT"
 
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
@@ -113,7 +113,7 @@ jobs:
 
       - name: Configure
         if: runner.os == 'Windows'
-        run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DORT_ROOT="$env:ORT_ROOT" -DOpenCV_DIR="$env:OpenCV_DIR"
+        run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DHYBRIDRT_BUILD_TESTS=ON -DORT_ROOT="$env:ORT_ROOT" -DOpenCV_DIR="$env:OpenCV_DIR"
 
       - name: Build
         run: cmake --build build/debug --parallel 4
