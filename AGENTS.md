@@ -78,7 +78,8 @@
 
 ## 格式与函数
 
-- 用根目录 `.clang-format` 格式化（`clang-format -i`），检查用 `--dry-run --Werror`；静态检查
+- 用根目录 `.clang-format` 格式化（`clang-format -i`），检查用 `--dry-run --Werror`；clang-format 版本不低于 19
+  （18 对尾置返回类型的换行不同，系统自带版本过低时用 `pip install "clang-format==21.*"`）；静态检查
   用 `.clang-tidy`（需 `build/` 下的 `compile_commands.json`）。include 分组顺序为 `<hrt/...>`、
   `<kitzoo/...>`、其他 `<...>`、`"..."`；限定符写在类型左侧。非 C++ 文本用 LF，`.bat`、`.cmd` 用 CRLF。
 - 函数声明之间空一行，相关重载可成组；函数和有返回值的 lambda 用尾置返回类型。
