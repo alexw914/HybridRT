@@ -44,15 +44,18 @@
 - `assets/template/README.md` 说明每种 preprocess、engine、postprocess 类型的作用、全部参数及默认值和可选值，
   以及各平台需要传入的参数（如 RKNN 的 `image_input`、`dst_image_format`）；代码中类型、参数、默认值或平台行为
   变化时，在同一提交中同步更新它和 `hrtc_template.json`。
-- `assets/` 下只提交 `template/`。`hrtc_template.json` 的作用是说明参数如何设置：每种 postprocess 类型至少一个 algo，
+- `assets/` 下只提交 `template/` 和 `PERF.md`。`hrtc_template.json` 的作用是说明参数如何设置：每种 postprocess 类型至少一个 algo，
   不要求每个模型都有对应 algo。类型有测试模型时，该 algo 以模型命名（如 `yolov8n_detect`、`rtmo_s_pose`），写该模型的
   预处理和后处理，`data` 为 `assets/<夹具>/` 下的本地文件（相对仓库根目录），测试和基准从这里读取配置；同类型的其他模型
   （变体、导出方式、输出列含义）写在 `template/README.md` 的文字或表格中。测试模型的来源、导出或转换方式、sha256 和
   验证结论写进 `template/README.md` 的 Test models，转换脚本放在 `template/`。测试模型、图片、夹具 manifest 和输出结果
   只放本地、不提交，不另建夹具目录的 README、manifest 或 sources 文件。
+- 性能优化（前处理、后处理、`ImageModel` pipeline 的提速）在同一提交中补充到 `assets/PERF.md`，最新的在前：
+  瓶颈及定位方法、改动、测量方式（平台、模型、输入、线程、次数、工具）和前后数据，以及尚未处理的部分；普通功能
+  实现不写入。
 - 引擎推理耗时只由 `tools/hrt-model-bench` 测量；`benchmarks/` 只保留 `preprocess_bench`、
   `postprocess_bench`、`pipeline_bench`。
-- 模型文件、`.hrtc`、`assets/` 下除 `template/` 外的文件和下载到 `external/` 的 SDK 不提交；manifest 中的文件
+- 模型文件、`.hrtc`、`assets/` 下除 `template/` 和 `PERF.md` 外的文件和下载到 `external/` 的 SDK 不提交；manifest 中的文件
   路径为绝对路径或相对于运行时工作目录。
 
 ## 文件头与头文件保护
@@ -129,7 +132,7 @@
   `perf`（正文记录基准前后数据）、`chore`、`doc`、`test`、`ci`，不混用。
 - 提交围绕完整目的，含调用方、构建配置、测试、示例和规则更新，能独立构建；较大提交在正文说明
   改动原因、已授权的接口变化、构建测试结果及未验证的平台和后端。
-- 提交前检查差异，不含生成文件、临时文件、第三方代码、模型文件、`assets/` 下除 `template/` 外的文件或 `docs/`；执行
+- 提交前检查差异，不含生成文件、临时文件、第三方代码、模型文件、`assets/` 下除 `template/` 和 `PERF.md` 外的文件或 `docs/`；执行
   `git diff --check`（有暂存时加 `--cached`）。
 - 只有用户明确要求时才提交或推送；推送不强制覆盖远程历史。
 - 修改后同步更新受影响的 CMake、调用方、示例和文档，运行相关构建和测试，报告未验证的平台和后端。
@@ -197,3 +200,7 @@
 
 - 测试程序内嵌源码路径，读取仓库文件的测试需在板端保持相同目录结构；接入新模型前先在板端用 `librknnrt.so` 的
   `rknn_query`（Python ctypes）查询输入输出形状和量化参数，RKNN 模型内置的 mean/std 与 `rgb2bgr` 可用 `strings <模型>.rknn | grep "'mean'"` 查看。
+- 模型转换环境在 `/home/krisw/work/RKNN`（uv 管理的 `.venv`，Python 3.10，rknn-toolkit2 2.3.2，与板端
+  librknnrt 一致；`requirements.lock` 锁定版本，onnx 固定 1.16.1、setuptools 低于 81）；用 `assets/template/rknn_convert.py`
+  从 ONNX 导出 RK3588 模型（不带 `--dataset` 为 fp16，带校准图片列表为 int8），mean/std 写进模型，HybridRT 侧配
+  `image_input: true` 与 `inter_rgb`。
