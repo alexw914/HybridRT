@@ -82,18 +82,22 @@ each in [0, 1].
 
 | `type` | Keys |
 | --- | --- |
-| `YoloV8Detect`, `YoloV8Rotated` | `class_num`, `strides` (one per output head), `reg_max` (16; 1 for YOLO26), thresholds; `YoloV8Rotated` also `head_version` (`yolov8`/`yolo26`) |
+| `YoloV8Detect`, `YoloV8Rotated` | `class_num`, `strides` (one per output head), `reg_max` (16), thresholds |
+| `Yolo26Detect`, `Yolo26Rotated` | `class_num`, `strides` (one per output head), thresholds |
 | `YoloV5Detect`, `YoloV5Rotated` | `class_num`, `strides` (one per output head), `anchors` (one list per head: w0, h0, w1, h1, ...), thresholds |
 | `GeneralDetect`, `GeneralRotated` | `class_num`, thresholds; decoded `[1, 4 + classes (+ angle), N]` output |
 | `E2EDetect` | `class_num`, `confidence_threshold`; Ultralytics end-to-end `[1, N, 6]` output, no NMS |
 | `E2ERotated` | `class_num`, `confidence_threshold`; end-to-end OBB `[1, N, 7]` |
 | `DetrDetect` | `class_num`, `confidence_threshold` (0.25), `output_format` (`combined`/`separate`), `score_activation` (`none`/`sigmoid`/`softmax`), `background_class` (-1: none), `boxes_output` (0), `scores_output` (1) |
 | `GeneralYoloPose` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), thresholds |
-| `YoloV8Keypoint` | `class_num`, `keypoint_num`, `strides` (one per output head), `reg_max` (16; 1 for YOLO26), `head_version` (`yolov8`/`yolo26`), `keypoint_threshold` (0.5), thresholds |
+| `YoloV8Keypoint` | `class_num`, `keypoint_num`, `strides` (one per output head), `reg_max` (16), `keypoint_threshold` (0.5), thresholds |
+| `Yolo26Keypoint` | `class_num`, `keypoint_num`, `strides` (one per output head), `keypoint_threshold` (0.5), thresholds |
 | `E2EKeypoint` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), `confidence_threshold`; end-to-end pose `[1, N, 6 + K x (2 \| 3)]` |
 | `RtmoKeypoint` | `confidence_threshold` ([0.15]), `iou_threshold` ([0.65]), `keypoint_threshold` (0.3); one class |
 | `GeneralKeypoint` | `general_keypoint_type` (`heatmap`/`heatmap_udp`/`simcc`/`point_with_visible`/`point_channel_first`/`point_channel_last`), `heatmap_refine` (`dark`/`none`), `score_activation` (`none`/`sigmoid`), `keypoint_threshold` (0) |
 | `GeneralYoloSegment` | `class_num`, `mask_threshold` (0.5), thresholds |
+| `YoloV8Segment` | `class_num`, `strides` (one per output head), `reg_max` (16), `mask_threshold` (0.5), thresholds |
+| `Yolo26Segment` | `class_num`, `strides` (one per output head), `mask_threshold` (0.5), thresholds |
 | `E2ESegment` | `class_num`, `mask_threshold` (0.5), `confidence_threshold`; end-to-end `[1, N, 6 + masks]` plus prototypes |
 | `SemanticSegment` | none |
 | `GeneralClassify` | `classify_postprocess_type`: `none`, `sigmoid`, `softmax` |
@@ -109,11 +113,13 @@ exports keep them for quantization: boxes from the distance bins, scores from lo
 `((raw * 2 + cell) * stride)` with sigmoid visibility. Both take any `keypoint_num`, e.g. 5 face
 landmarks; drawing joins a skeleton only for 17 COCO keypoints.
 
-Raw YOLO26 heads have no distance bins (`reg_max: 1`: the four box channels are the distances in
-cells) and decode keypoints at `(raw + cell + 0.5) * stride` and angles as radians;
-`"head_version": "yolo26"` selects that for `YoloV8Keypoint` and `YoloV8Rotated`, while YOLOv8 keeps
-`(raw * 2 + cell) * stride` and `(sigmoid(raw) - 0.25) * pi`. These heads come from the one-to-many
-branch that the default export decodes, so NMS still runs.
+Raw heads come from the one-to-many branch that the default export decodes, so NMS still runs.
+YOLOv8 heads (`YoloV8Detect`, `YoloV8Keypoint`, `YoloV8Rotated`, `YoloV8Segment`) carry 4 x `reg_max`
+distance bins, keypoints at `(raw * 2 + cell) * stride` and angles `(sigmoid(raw) - 0.25) * pi`. YOLO26
+heads (`Yolo26Detect`, `Yolo26Keypoint`, `Yolo26Rotated`, `Yolo26Segment`) carry the four distances in
+cells, keypoints at `(raw + cell + 0.5) * stride` and angles in radians. Segment heads add the mask
+coefficients after the classes, and the prototypes `[1, masks, mh, mw]` are a further output in any
+position.
 
 `DetrDetect` reads batch-1 normalized center-x, center-y, width and height boxes.
 It selects the highest-scoring foreground class of each query and does not apply
@@ -214,8 +220,8 @@ hrt-validate -m yolov8n_detect.json -n yolov8n_detect -e ort -i assets/yolo/imag
 | `yolov8n_pose` | `assets/yolo/models/yolov8n-pose.onnx` | same repository, `yolov8n-pose.onnx` | `6fc546ff...` |
 | `yolov8n_obb` | `assets/yolo/models/yolov8n-obb.onnx` | same repository, `yolov8n-obb.onnx` | `d87f86b2...` |
 | `yolov8n_classify` | `assets/yolo/models/yolov8n-cls.onnx` | same repository, `yolov8n-cls.onnx` | `29e1963b...` |
-| `yolov8n_obb_raw`; also `yolov8n-raw.onnx`, `yolov8n-pose-raw.onnx` | `assets/yolo/models/yolov8n-obb-raw.onnx` (1024), `yolov8n-raw.onnx`, `yolov8n-pose-raw.onnx` (640) | `yolo_export_raw.py` next to this file from `yolov8n{-obb,,-pose}.pt` (Ultralytics 8.4.178) | `2a5de440...`, `e2a57b77...`, `d87b2769...` |
-| YOLO26 raw heads (no algo; `yolov8n_*_raw` configs with `reg_max: 1`, `head_version: "yolo26"`) | `assets/yolo26/models/yolo26n-raw.onnx`, `yolo26n-pose-raw.onnx` (640), `yolo26n-obb-raw.onnx` (1024) | `yolo_export_raw.py` from `yolo26n{,-pose,-obb}.pt` | `2089cfdd...`, `513e12cd...`, `003dc108...` |
+| `yolov8n_obb_raw`, `yolov8n_segment_raw`; also `yolov8n-raw.onnx`, `yolov8n-pose-raw.onnx` | `assets/yolo/models/yolov8n-obb-raw.onnx` (1024), `yolov8n-seg-raw.onnx`, `yolov8n-raw.onnx`, `yolov8n-pose-raw.onnx` (640) | `yolo_export_raw.py` next to this file from `yolov8n{-obb,-seg,,-pose}.pt` (Ultralytics 8.4.178) | `2a5de440...`, `a21888dd...`, `e2a57b77...`, `d87b2769...` |
+| `yolo26n_detect_raw`, `yolo26n_pose_raw`, `yolo26n_obb_raw`, `yolo26n_segment_raw` | `assets/yolo26/models/yolo26n-raw.onnx`, `yolo26n-pose-raw.onnx`, `yolo26n-seg-raw.onnx` (640), `yolo26n-obb-raw.onnx` (1024) | `yolo_export_raw.py` from `yolo26n{,-pose,-seg,-obb}.pt` | `2089cfdd...`, `513e12cd...`, `85e5ec69...`, `003dc108...` |
 | `lraspp_voc_segment` | `assets/semantic/models/lraspp_mobilenet_v3_voc_512.onnx` | torchvision 0.29 `lraspp_mobilenet_v3_large(weights=COCO_WITH_VOC_LABELS_V1)`, `out` exported at 512 x 512, opset 17 | `e610481d...` |
 | `rtdetr_l_detect` | `assets/rtdetr/models/rtdetr-l.onnx` | [rtdetr-l.pt](https://github.com/ultralytics/assets/releases/download/v8.1.0/rtdetr-l.pt), Ultralytics 8.1.4 `export(format="onnx", imgsz=640, opset=17)` | `8090814f...` |
 | `yolo26n_e2e_detect` | `assets/e2e/models/yolo26n.onnx`; also `yolov10n.onnx`, `yolov8n-nms.onnx` | Ultralytics 8.4.178 `export(format="onnx", imgsz=640, opset=17, simplify=True, nms=False)`; `nms=True` for YOLOv8 | `08727943...`, `1fb68e28...`, `979da5db...` |
@@ -239,12 +245,13 @@ Results checked against independent references on bus.jpg (ONNX Runtime 1.31.0, 
   `predict` on the same ONNX files: identical boxes, scores, classes, keypoints and angles on bus.jpg
   and airport.jpg; mask IoU 0.966 to 0.997 against `retina_masks=True`. On airport.jpg the YOLO26
   segment export keeps one more box at score 0.253 because of the rounding above.
-- Raw YOLO26 pose, segment and OBB exports (no `nms`) through `GeneralYoloPose`, `GeneralYoloSegment` and
-  `GeneralRotated`: the same objects and scores as Ultralytics `predict`, except one borderline
-  airport.jpg segment box from the same rounding. These exports are not template algos.
-- YOLO26 raw heads through `YoloV8Detect`, `YoloV8Keypoint` and `YoloV8Rotated`: identical objects,
-  boxes, scores, keypoints and angles to `GeneralDetect`, `GeneralYoloPose` and `GeneralRotated` on
-  the default YOLO26 exports, which match Ultralytics.
+- Default YOLO26 pose, segment and OBB exports (no `nms`) through `GeneralYoloPose`,
+  `GeneralYoloSegment` and `GeneralRotated`: the same objects and scores as Ultralytics `predict`,
+  except one borderline airport.jpg segment box from the same rounding. These exports are not
+  template algos.
+- Raw heads through `Yolo26Detect`, `Yolo26Keypoint`, `Yolo26Rotated`, `Yolo26Segment` and
+  `YoloV8Segment`: identical objects, boxes, scores, keypoints, angles and masks (IoU 1.0) to the
+  decoded-output types on the default exports of the same weights, which match Ultralytics.
 - `rtmo_s_pose`: identical boxes, scores and visible keypoints to the original model's in-graph NMS.
   300 candidates cost 0.22 s against 0.09 s for the original on an x86 CPU (100: 0.12 s), as each
   candidate decodes its keypoints; bus.jpg has 63 candidates above 0.15 for 5 people. Its graph
@@ -280,7 +287,7 @@ Against the ORT results of the same models on bus.jpg, airport.jpg and zidane.jp
 | `GeneralClassify` | same top 1 on airport.jpg; bus.jpg's near-flat scores (0.02) differ |
 | `SemanticSegment` | same classes; mask IoU 0.956 or more |
 | `GeneralKeypoint` (`simcc`) after `yolov8n_detect` | same 4 people, visibility 17/17; keypoints within 7.3 px |
-| `YoloV8Detect`, `YoloV8Keypoint`, `YoloV8Rotated` on YOLO26 raw heads | same objects; boxes within 9.5 px, angles within 0.3 degrees; keypoints within 2 px at the median, one uncertain wrist off by 19.5 px |
+| `Yolo26Detect`, `Yolo26Keypoint`, `Yolo26Rotated` | same objects; boxes within 9.5 px, angles within 0.3 degrees; keypoints within 2 px at the median, one uncertain wrist off by 19.5 px |
 | `E2EDetect`, `E2EKeypoint`, `E2ESegment`, `E2ERotated` | YOLO26 exports convert but return no or wrong rows: the runtime reports GatherElements indexes out of range in the in-graph top-k; YOLOv8 `nms=True` exports do not convert (dynamic NonMaxSuppression) |
 | `DetrDetect`, `RtmoKeypoint` | RT-DETR-L and the fixed RTMO graph do not convert (shape errors in the toolkit's graph rewrites, also after onnxslim) |
 

@@ -60,6 +60,8 @@ auto nms_rotated(RotatedResult& boxes, float iou_threshold) -> void {
 auto make_rotated(std::string_view type) -> UniquePtr<RotatedPostprocessor> {
   if (type == "YoloV8Rotated")
     return make_yolov8_rotated();
+  if (type == "Yolo26Rotated")
+    return make_yolo26_rotated();
   if (type == "YoloV5Rotated")
     return make_yolov5_rotated();
   if (type == "GeneralRotated")

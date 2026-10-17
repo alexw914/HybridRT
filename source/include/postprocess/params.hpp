@@ -42,30 +42,16 @@ struct YoloV8Param {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8Param, class_num, strides, reg_max, confidence_threshold,
                                                 iou_threshold)
 
-// Generation of raw anchor-free heads where keypoint or angle decoding
-// differs: YOLOv8 keypoints at (raw * 2 + cell) and angles (sigmoid(raw) -
-// 0.25) * pi; YOLO26 keypoints at (raw + cell + 0.5) and raw angles in radians.
-enum class YoloHeadVersion {
-  YoloV8,
-  Yolo26,
-};
-
-NLOHMANN_JSON_SERIALIZE_ENUM(YoloHeadVersion, {
-                                                  {YoloHeadVersion::YoloV8, "yolov8"},
-                                                  {YoloHeadVersion::Yolo26, "yolo26"},
-                                              })
-
-struct YoloV8RotatedParam {
+// YOLO26 raw heads: no distance bins (the four box channels are distances in
+// cells), one output per stride.
+struct Yolo26Param {
   unsigned int class_num = 0;
   Vector<float> strides;
-  std::size_t reg_max = 16;
-  YoloHeadVersion head_version = YoloHeadVersion::YoloV8;
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8RotatedParam, class_num, strides, reg_max, head_version,
-                                                confidence_threshold, iou_threshold)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Yolo26Param, class_num, strides, confidence_threshold, iou_threshold)
 
 struct GeneralDetectParam {
   unsigned int class_num = 0;
@@ -125,6 +111,8 @@ auto make_yolov5_detect() -> UniquePtr<DetectPostprocessor>;
 
 auto make_yolov8_detect() -> UniquePtr<DetectPostprocessor>;
 
+auto make_yolo26_detect() -> UniquePtr<DetectPostprocessor>;
+
 auto make_general_detect() -> UniquePtr<DetectPostprocessor>;
 
 auto make_detr_detect() -> UniquePtr<DetectPostprocessor>;
@@ -134,6 +122,8 @@ auto make_e2e_detect() -> UniquePtr<DetectPostprocessor>;
 auto make_yolov5_rotated() -> UniquePtr<RotatedPostprocessor>;
 
 auto make_yolov8_rotated() -> UniquePtr<RotatedPostprocessor>;
+
+auto make_yolo26_rotated() -> UniquePtr<RotatedPostprocessor>;
 
 auto make_general_rotated() -> UniquePtr<RotatedPostprocessor>;
 
@@ -147,11 +137,17 @@ auto make_general_yolo_pose() -> UniquePtr<KeypointPostprocessor>;
 
 auto make_yolov8_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
+auto make_yolo26_keypoint() -> UniquePtr<KeypointPostprocessor>;
+
 auto make_rtmo_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
 auto make_e2e_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
 auto make_general_yolo_segment() -> UniquePtr<SegmentPostprocessor>;
+
+auto make_yolov8_segment() -> UniquePtr<SegmentPostprocessor>;
+
+auto make_yolo26_segment() -> UniquePtr<SegmentPostprocessor>;
 
 auto make_e2e_segment() -> UniquePtr<SegmentPostprocessor>;
 
@@ -170,6 +166,9 @@ auto finish_rotated(RotatedResultMap& result, const Vector<float>& iou_threshold
 auto check_yolov5(YoloV5Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
 
 auto check_yolov8(YoloV8Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
+
+// check_yolov8() for YOLO26 heads (reg_max 1); fills the per-class thresholds.
+auto check_yolo26(Yolo26Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
 
 } // namespace hrt::postprocess
 

@@ -1,12 +1,13 @@
-"""Exports Ultralytics YOLOv8 or YOLO26 detect, pose or OBB with raw per-stride heads for NPUs.
+"""Exports Ultralytics YOLOv8 or YOLO26 detect, pose, OBB or segment with raw per-stride heads for NPUs.
 
-Each output is [1, 4 * reg_max + classes (+ keypoints), h, w], or bins, theta,
-classes for OBB, from the one-to-many head that the default (NMS) export
-decodes, named head0..head2 so engines order them by stride. Decode with
-YoloV8Detect, YoloV8Keypoint or YoloV8Rotated, strides [8, 16, 32]; YOLO26
-takes reg_max 1 and head_version "yolo26".
+Each head output is [1, box + classes (+ keypoints or mask coefficients), h, w], or box, theta,
+classes for OBB, from the one-to-many head that the default (NMS) export decodes; box is 4 * reg_max
+distance bins for YOLOv8 and 4 distances for YOLO26. Heads are named head0..head2 so engines order
+them by stride; segment models add the mask prototypes as "proto". Decode YOLOv8 with
+YoloV8Detect, YoloV8Keypoint, YoloV8Rotated or YoloV8Segment and YOLO26 with Yolo26Detect,
+Yolo26Keypoint, Yolo26Rotated or Yolo26Segment, strides [8, 16, 32].
 
-    python yolo_export_raw.py yolo26n-pose.pt yolo26n-pose-raw.onnx 640
+    python yolo_export_raw.py yolo26n-seg.pt yolo26n-seg-raw.onnx 640
 """
 
 import sys
@@ -30,20 +31,27 @@ def main():
                 parts += [modules["angle_head"][i](x[i]), modules["cls_head"][i](x[i])]
             else:
                 parts.append(modules["cls_head"][i](x[i]))
+            if modules.get("mask_head") is not None:
+                parts.append(modules["mask_head"][i](x[i]))
             if modules.get("pose_head") is not None:
                 features = modules["pose_head"][i](x[i])
                 if modules.get("kpts_head") is not None:
                     features = modules["kpts_head"][i](features)
                 parts.append(features)
             heads.append(torch.cat(parts, 1))
+        if modules.get("mask_head") is not None:
+            # YOLOv8 builds prototypes from the finest level, YOLO26 from all of them.
+            proto = self.proto(x) if type(self).__name__ == "Segment26" else self.proto(x[0])
+            heads.append(proto[0] if isinstance(proto, tuple) else proto)
         return heads
 
     head.forward = types.MethodType(forward, head)
     image = torch.zeros(1, 3, size, size)
     with torch.no_grad():
         print([tuple(t.shape) for t in model(image)])
-        torch.onnx.export(model, image, out, opset_version=17, input_names=["images"],
-                          output_names=["head0", "head1", "head2"], dynamo=False)
+        names = ["head0", "head1", "head2"] + (["proto"] if modules.get("mask_head") is not None else [])
+        torch.onnx.export(model, image, out, opset_version=17, input_names=["images"], output_names=names,
+                          dynamo=False)
     print("exported", out)
 
 

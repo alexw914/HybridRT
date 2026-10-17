@@ -16,6 +16,10 @@ namespace hrt::postprocess {
 auto make_segment(std::string_view type) -> UniquePtr<SegmentPostprocessor> {
   if (type == "GeneralYoloSegment")
     return make_general_yolo_segment();
+  if (type == "YoloV8Segment")
+    return make_yolov8_segment();
+  if (type == "Yolo26Segment")
+    return make_yolo26_segment();
   if (type == "E2ESegment")
     return make_e2e_segment();
   if (type == "SemanticSegment")

@@ -4,12 +4,19 @@
 // Description: Tests detection decoding, NMS and coordinate mapping.
 // -----------------------------------------------------------------------------
 
+#include <hrt/model/image_model.hpp>
 #include <hrt/postprocess/detect.hpp>
 
 #include <cmath>
 #include <gtest/gtest.h>
 
 #include "fake_engine.hpp"
+
+#ifdef HRT_ORT_MODEL_TEST
+#include <opencv2/imgcodecs.hpp>
+
+#include "../engine/template_config.hpp"
+#endif
 
 namespace {
 
@@ -128,15 +135,15 @@ TEST(DetectYoloV8Test, AbortsOnMismatchedConfig) {
   EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", negative, engine), "");
 }
 
-TEST(DetectYoloV8Test, ReadsRawDistancesWithOneBin) {
-  // YOLO26 heads: reg_max 1, so the four box channels are the distances in
-  // cells. Cell (x=0, y=1) of a 2x2 stride-8 head: 1 cell left and up, 0.5
+TEST(DetectYolo26Test, ReadsDistancesInCells) {
+  // YOLO26 heads have no distance bins: the four box channels are distances
+  // in cells. Cell (x=0, y=1) of a 2x2 stride-8 head: 1 cell left and up, 0.5
   // right and down.
   const auto output = proto(DataType::Float32, {1, 5, 2, 2});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
-  auto config = yolov8_config();
-  config["reg_max"] = 1;
-  auto postprocessor = hrt::postprocess::create_detect_postprocessor("YoloV8Detect", config, engine);
+  const auto config =
+      Json::parse(R"({"class_num": 1, "strides": [8], "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
+  auto postprocessor = hrt::postprocess::create_detect_postprocessor("Yolo26Detect", config, engine);
   hrt::Vector<float> values(5 * 4, -10.0F);
   const hrt::Vector<float> cell{1.0F, 1.0F, 0.5F, 0.5F, 3.0F};
   for (std::size_t c = 0; c < cell.size(); ++c)
@@ -150,6 +157,12 @@ TEST(DetectYoloV8Test, ReadsRawDistancesWithOneBin) {
   EXPECT_FLOAT_EQ(box.rect.y, 4.0F);
   EXPECT_FLOAT_EQ(box.rect.width, 8.0F);
   EXPECT_FLOAT_EQ(box.rect.height, 12.0F);
+  EXPECT_NEAR(box.score, sigmoid(3.0F), 1e-5F);
+  // YOLOv8-sized heads (distance bins) do not fit.
+  FakeEngine bins({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 65, 2, 2})});
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("Yolo26Detect", config, bins), "");
+  EXPECT_EQ(hrt::postprocess::check_config("Yolo26Detect", Json::parse(R"({"reg_max": 1})")).size(), 1U);
 }
 
 TEST(DetectYoloV5Test, KeepsLowObjectnessAboveThreshold) {
@@ -282,5 +295,25 @@ TEST(DetectGeneralTest, ChecksConfigWithoutThrowing) {
       hrt::postprocess::create_detect_postprocessor("GeneralDetect", Json::parse(R"({"class_num": "one"})"), engine),
       "");
 }
+
+#ifdef HRT_ORT_MODEL_TEST
+TEST(DetectYolo26Test, RunsRawHeadsWhenAvailable) {
+  const auto algo = hrt::test::template_algo("yolo26n_detect_raw");
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/bus.jpg").string());
+  if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
+    GTEST_SKIP() << "YOLO26n raw-head ONNX fixture or bus.jpg is unavailable";
+  const auto model = hrt::model::ImageModel<hrt::postprocess::DetectResultMap>::create(algo);
+  const auto image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, bgr.data, hrt::core::ImageFormat::InterBgr,
+                                            {bgr.cols, bgr.rows}, hrt::core::DataType::Uint8, bgr.step);
+  ASSERT_TRUE(image);
+  const auto result = model->process_sync(*image);
+  ASSERT_TRUE(result);
+  // bus.jpg: four people and the bus.
+  ASSERT_TRUE(result->contains(0));
+  EXPECT_EQ(result->at(0).size(), 4U);
+  ASSERT_TRUE(result->contains(5));
+  EXPECT_EQ(result->at(5).size(), 1U);
+}
+#endif
 
 } // namespace

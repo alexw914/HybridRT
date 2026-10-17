@@ -34,6 +34,8 @@ auto nms(DetectResult& boxes, float iou_threshold) -> void {
 auto make_detect(std::string_view type) -> UniquePtr<DetectPostprocessor> {
   if (type == "YoloV8Detect")
     return make_yolov8_detect();
+  if (type == "Yolo26Detect")
+    return make_yolo26_detect();
   if (type == "YoloV5Detect")
     return make_yolov5_detect();
   if (type == "GeneralDetect")
@@ -108,6 +110,15 @@ auto check_yolov8(YoloV8Param& param, const engine::Engine& engine, std::size_t 
       return false;
     }
   }
+  return true;
+}
+
+auto check_yolo26(Yolo26Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool {
+  YoloV8Param heads{param.class_num, param.strides, 1, param.confidence_threshold, param.iou_threshold};
+  if (!check_yolov8(heads, engine, extra_channels))
+    return false;
+  param.confidence_threshold = heads.confidence_threshold;
+  param.iou_threshold = heads.iou_threshold;
   return true;
 }
 

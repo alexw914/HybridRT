@@ -350,6 +350,8 @@ auto make_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor> {
     return make_general_yolo_pose();
   if (type == "YoloV8Keypoint")
     return make_yolov8_keypoint();
+  if (type == "Yolo26Keypoint")
+    return make_yolo26_keypoint();
   if (type == "RtmoKeypoint")
     return make_rtmo_keypoint();
   if (type == "E2EKeypoint")

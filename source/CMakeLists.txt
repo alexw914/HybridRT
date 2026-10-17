@@ -44,12 +44,14 @@ add_library(hybridrt STATIC
     postprocess/detect.cpp
     postprocess/detect/yolov5_detect.cpp
     postprocess/detect/yolov8_detect.cpp
+    postprocess/detect/yolo26_detect.cpp
     postprocess/detect/general_detect.cpp
     postprocess/detect/detr_detect.cpp
     postprocess/detect/e2e_detect.cpp
     postprocess/rotated.cpp
     postprocess/rotated/yolov5_rotated.cpp
     postprocess/rotated/yolov8_rotated.cpp
+    postprocess/rotated/yolo26_rotated.cpp
     postprocess/rotated/general_rotated.cpp
     postprocess/rotated/e2e_rotated.cpp
     postprocess/classify/general_classify.cpp
@@ -58,9 +60,12 @@ add_library(hybridrt STATIC
     postprocess/keypoint/rtmo_keypoint.cpp
     postprocess/keypoint/general_yolo_pose.cpp
     postprocess/keypoint/yolov8_keypoint.cpp
+    postprocess/keypoint/yolo26_keypoint.cpp
     postprocess/segment.cpp
     postprocess/segment/mask_decoder.cpp
     postprocess/segment/general_yolo_segment.cpp
+    postprocess/segment/yolov8_segment.cpp
+    postprocess/segment/yolo26_segment.cpp
     postprocess/segment/e2e_segment.cpp
     postprocess/segment/semantic_segment.cpp
     model/image_model.cpp)

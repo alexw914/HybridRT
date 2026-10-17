@@ -22,7 +22,6 @@ struct YoloV8KeypointParam {
   unsigned int keypoint_num = 0;
   Vector<float> strides;
   std::size_t reg_max = 16;
-  YoloHeadVersion head_version = YoloHeadVersion::YoloV8;
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
   // Visibility score above which a keypoint counts as visible.
@@ -30,13 +29,12 @@ struct YoloV8KeypointParam {
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8KeypointParam, class_num, keypoint_num, strides, reg_max,
-                                                head_version, confidence_threshold, iou_threshold, keypoint_threshold)
+                                                confidence_threshold, iou_threshold, keypoint_threshold)
 
 // One output per stride with channels 4 * reg_max distance bins, class
 // logits, then x, y (and visibility logit) per keypoint, as Ultralytics pose
 // heads emit them before decoding (e.g. YOLOv8 face models with 5 landmarks).
-// A keypoint at cell (x, y) lies at ((raw * 2 + x) * stride, (raw * 2 + y) * stride)
-// for YOLOv8 heads and at ((raw + x + 0.5) * stride, ...) for YOLO26 heads.
+// A keypoint at cell (x, y) lies at ((raw * 2 + x) * stride, (raw * 2 + y) * stride).
 class YoloV8Keypoint final : public KeypointPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
@@ -112,9 +110,6 @@ private:
   auto decode_head(const Grid& grid, float stride) -> void {
     const auto bins = param_.reg_max;
     const auto first_keypoint = bins * 4 + param_.class_num;
-    const auto yolo26 = param_.head_version == YoloHeadVersion::Yolo26;
-    const auto scale = yolo26 ? 1.0F : 2.0F;
-    const auto shift = yolo26 ? 0.5F : 0.0F;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
     for (const auto cell : scan_cells(grid, bins * 4, param_.class_num, min_score, scan_)) {
       const std::int64_t y = cell / grid.cols();
@@ -136,8 +131,8 @@ private:
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
           const auto channel = first_keypoint + j * dims_;
-          const core::Point2f point{(grid.at(y, x, channel) * scale + static_cast<float>(x) + shift) * stride,
-                                    (grid.at(y, x, channel + 1) * scale + static_cast<float>(y) + shift) * stride};
+          const core::Point2f point{(grid.at(y, x, channel) * 2.0F + static_cast<float>(x)) * stride,
+                                    (grid.at(y, x, channel + 1) * 2.0F + static_cast<float>(y)) * stride};
           const auto visibility = dims_ == 3 ? sigmoid(grid.at(y, x, channel + 2)) : 1.0F;
           object.keypoints.push_back(
               {point, visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,

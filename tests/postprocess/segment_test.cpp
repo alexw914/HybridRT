@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: tests/postprocess/segment_test.cpp
-// Description: Tests instance mask, end-to-end instance mask and semantic
-//              label decoding.
+// Description: Tests YOLO instance masks (single output, raw YOLOv8 and
+//              YOLO26 heads, end to end) and semantic label decoding.
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
@@ -116,6 +116,67 @@ TEST(SegmentTest, AbortsOnMismatchedOutputs) {
   EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", config, engine), "");
   EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("Mystery", segment_config(), engine), "");
   EXPECT_EQ(hrt::postprocess::check_config("SemanticSegment", Json::parse(R"({"class_num": 3})")).size(), 1U);
+}
+
+// One stride-8 head of the 16x16 input (2x2 cells) whose cell (0, 0) holds
+// the box (4, 4)-(12, 12) with score logit 3 and coefficients (1, 0); `bins`
+// distance bins per side, the first meaning 0 cells and the last 1 cell.
+auto raw_segment_head(std::size_t bins) -> hrt::Vector<float> {
+  const auto channels = bins * 4 + 1 + 2;
+  hrt::Vector<float> values(channels * 4, 0.0F);
+  auto at = [&](std::size_t channel) -> float& { return values[channel * 4]; };
+  for (std::size_t side = 0; side < 4; ++side) {
+    const auto distance = side < 2 ? 0.0F : 1.0F;
+    if (bins == 1) {
+      at(side) = distance;
+    } else {
+      at(side * bins) = distance == 0.0F ? 20.0F : -20.0F;
+      at(side * bins + bins - 1) = distance == 0.0F ? -20.0F : 20.0F;
+    }
+  }
+  for (std::size_t cell = 1; cell < 4; ++cell)
+    values[bins * 4 * 4 + cell] = -10.0F;
+  at(bins * 4) = 3.0F;
+  at(bins * 4 + 1) = 1.0F;
+  return values;
+}
+
+TEST(SegmentTest, DecodesRawYoloV8AndYolo26Heads) {
+  for (const auto& [type, bins] :
+       hrt::Vector<std::pair<const char*, std::size_t>>{{"YoloV8Segment", 2}, {"Yolo26Segment", 1}}) {
+    const auto head = proto(DataType::Float32, {1, static_cast<std::int64_t>(bins * 4 + 3), 2, 2});
+    const auto masks = proto(DataType::Float32, {1, 2, 4, 4});
+    // Prototypes first: they are found by shape, not position.
+    FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {masks, head});
+    auto config = Json::parse(R"({"class_num": 1, "strides": [8], "confidence_threshold": [0.5],
+                                  "iou_threshold": [0.45]})");
+    if (bins > 1)
+      config["reg_max"] = bins;
+    auto postprocessor = hrt::postprocess::create_segment_postprocessor(type, config, engine);
+    ASSERT_NE(postprocessor, nullptr) << type;
+    hrt::postprocess::SegmentResultMap result;
+    ASSERT_TRUE(postprocessor->process(
+        result, {hrt::test::buffer_of(masks, prototypes()), hrt::test::buffer_of(head, raw_segment_head(bins))},
+        hrt::test::identity(16, 16)))
+        << type;
+    expect_left_half_mask(result);
+    EXPECT_EQ(hrt::model::task_of(type), hrt::model::Task::Segment);
+  }
+}
+
+TEST(SegmentTest, AbortsOnRawHeadsThatDoNotFit) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  const auto input = proto(DataType::Float32, {1, 3, 16, 16});
+  const auto masks = proto(DataType::Float32, {1, 2, 4, 4});
+  const auto config = Json::parse(R"({"class_num": 1, "strides": [8], "confidence_threshold": [0.5],
+                                      "iou_threshold": [0.45]})");
+  for (const auto& outputs :
+       hrt::Vector<hrt::Vector<hrt::core::BufferProto>>{{proto(DataType::Float32, {1, 7, 2, 2})},
+                                                        {proto(DataType::Float32, {1, 8, 2, 2}), masks},
+                                                        {proto(DataType::Float32, {1, 7, 4, 4}), masks}}) {
+    FakeEngine engine({input}, outputs);
+    EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("Yolo26Segment", config, engine), "");
+  }
 }
 
 TEST(SegmentTest, DecodesSemanticLabels) {
@@ -283,6 +344,35 @@ TEST(SegmentTest, RunsSemanticModelWhenAvailable) {
   for (const auto& [cls, objects] : *result)
     classes.push_back(cls);
   EXPECT_EQ(classes, (hrt::Vector<std::int64_t>{0, 6, 15}));
+}
+
+TEST(SegmentTest, RunsRawSegmentHeadsWhenAvailable) {
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/bus.jpg").string());
+  bool ran = false;
+  // bus.jpg: four people and the bus, and YOLOv8n also a tie (class 36).
+  for (const auto& [name, extra] :
+       hrt::Vector<std::pair<const char*, bool>>{{"yolov8n_segment_raw", true}, {"yolo26n_segment_raw", false}}) {
+    const auto algo = hrt::test::template_algo(name);
+    if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
+      continue;
+    const auto model = hrt::model::ImageModel<hrt::postprocess::SegmentResultMap>::create(algo);
+    const auto image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, bgr.data, hrt::core::ImageFormat::InterBgr,
+                                              {bgr.cols, bgr.rows}, hrt::core::DataType::Uint8, bgr.step);
+    ASSERT_TRUE(image);
+    const auto result = model->process_sync(*image);
+    ASSERT_TRUE(result) << name;
+    ASSERT_TRUE(result->contains(0)) << name;
+    EXPECT_EQ(result->at(0).size(), 4U) << name;
+    ASSERT_TRUE(result->contains(5)) << name;
+    EXPECT_EQ(result->contains(36), extra) << name;
+    for (const auto& [cls, objects] : *result) {
+      for (const auto& object : objects)
+        EXPECT_FALSE(object.mask.data.empty()) << name;
+    }
+    ran = true;
+  }
+  if (!ran)
+    GTEST_SKIP() << "raw-head segment ONNX fixtures or bus.jpg are unavailable";
 }
 #endif
 

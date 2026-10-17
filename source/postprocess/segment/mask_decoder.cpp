@@ -7,6 +7,9 @@
 
 #include "include/postprocess/mask_decoder.hpp"
 
+#include <kitzoo/core/macro.hpp>
+#include <kitzoo/log/logger.hpp>
+
 #include <cmath>
 #include <opencv2/imgproc.hpp>
 
@@ -96,6 +99,38 @@ auto MaskDecoder::taps(Vector<Tap>& out, int count, double scale, double offset,
     else
       tap = {first, first + 1, static_cast<float>(position - first)};
   }
+}
+
+auto raw_segment_outputs(const engine::Engine& engine, const Vector<float>& strides, std::size_t box_channels,
+                         std::size_t classes, const char* name) -> std::optional<RawSegmentOutputs> {
+  const auto& outputs = engine.output_protos();
+  const auto layout = engine.proto().output_layout;
+  const auto input = engine_input_size(engine);
+  KZ_CHECK_RETURN(input && outputs.size() == strides.size() + 1, std::nullopt,
+                  "{}: needs one head per stride ({}) plus the prototypes, got {} outputs", name, strides.size(),
+                  outputs.size());
+  for (std::size_t candidate = 0; candidate < outputs.size(); ++candidate) {
+    const auto proto = head_shape(outputs[candidate], layout);
+    if (!proto || proto->channels <= 0)
+      continue;
+    RawSegmentOutputs found{{}, candidate, static_cast<std::size_t>(proto->channels)};
+    bool fits = true;
+    for (std::size_t i = 0; i < outputs.size() && fits; ++i) {
+      if (i == candidate)
+        continue;
+      const auto head = head_shape(outputs[i], layout);
+      const auto stride = strides[found.heads.size()];
+      fits = head && static_cast<std::size_t>(head->channels) == box_channels + classes + found.masks &&
+             static_cast<float>(head->cols) * stride == static_cast<float>(input->width) &&
+             static_cast<float>(head->rows) * stride == static_cast<float>(input->height);
+      found.heads.push_back(i);
+    }
+    if (fits)
+      return found;
+  }
+  KZ_LOG_ERROR("{}: outputs must be {} heads [1, {} + {} + masks, h, w] matching the strides and [1, masks, mh, mw]",
+               name, strides.size(), box_channels, classes);
+  return std::nullopt;
 }
 
 } // namespace hrt::postprocess

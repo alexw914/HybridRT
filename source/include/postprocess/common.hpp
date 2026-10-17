@@ -201,12 +201,9 @@ auto visit_head(const core::Buffer& buffer, engine::DataLayout layout, Fn&& deco
 }
 
 // Expected value of the softmax over `bins` consecutive channels starting at
-// `first` (YOLOv8 distribution focal loss decoding); with one bin (YOLO26,
-// reg_max 1) the channel is the distance itself.
+// `first` (YOLOv8 distribution focal loss decoding).
 template <typename Grid>
 auto dfl(const Grid& grid, std::int64_t y, std::int64_t x, std::size_t first, std::size_t bins) -> float {
-  if (bins == 1)
-    return grid.at(y, x, first);
   auto max = grid.at(y, x, first);
   for (std::size_t i = 1; i < bins; ++i)
     max = std::max(max, grid.at(y, x, first + i));

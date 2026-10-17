@@ -100,6 +100,14 @@
       }
     },
     {
+      "name": "yolo26n_detect_raw",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo26/models/yolo26n-raw.onnx"}]},
+        "postprocess": {"type": "Yolo26Detect", "class_num": 80, "strides": [8, 16, 32], "confidence_threshold": [0.25], "iou_threshold": [0.45]}
+      }
+    },
+    {
       "name": "yolov5_detect",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
@@ -165,10 +173,17 @@
           "class_num": 15,
           "strides": [8, 16, 32],
           "reg_max": 16,
-          "head_version": "yolov8",
           "confidence_threshold": [0.25],
           "iou_threshold": [0.45]
         }
+      }
+    },
+    {
+      "name": "yolo26n_obb_raw",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo26/models/yolo26n-obb-raw.onnx"}]},
+        "postprocess": {"type": "Yolo26Rotated", "class_num": 15, "strides": [8, 16, 32], "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
     },
     {
@@ -228,7 +243,22 @@
           "keypoint_num": 5,
           "strides": [16, 32, 8],
           "reg_max": 16,
-          "head_version": "yolov8",
+          "keypoint_threshold": 0.5,
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
+      "name": "yolo26n_pose_raw",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo26/models/yolo26n-pose-raw.onnx"}]},
+        "postprocess": {
+          "type": "Yolo26Keypoint",
+          "class_num": 1,
+          "keypoint_num": 17,
+          "strides": [8, 16, 32],
           "keypoint_threshold": 0.5,
           "confidence_threshold": [0.25],
           "iou_threshold": [0.45]
@@ -312,6 +342,30 @@
           "confidence_threshold": [0.25],
           "iou_threshold": [0.45]
         }
+      }
+    },
+    {
+      "name": "yolov8n_segment_raw",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-seg-raw.onnx"}]},
+        "postprocess": {
+          "type": "YoloV8Segment",
+          "class_num": 80,
+          "strides": [8, 16, 32],
+          "reg_max": 16,
+          "mask_threshold": 0.5,
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
+      "name": "yolo26n_segment_raw",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo26/models/yolo26n-seg-raw.onnx"}]},
+        "postprocess": {"type": "Yolo26Segment", "class_num": 80, "strides": [8, 16, 32], "mask_threshold": 0.5, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
     },
     {

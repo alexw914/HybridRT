@@ -86,42 +86,6 @@ TEST(YoloV8KeypointTest, DecodesBinsAndKeypointOffsets) {
   EXPECT_EQ(hrt::model::task_of("YoloV8Keypoint"), hrt::model::Task::Keypoint);
 }
 
-TEST(YoloV8KeypointTest, DecodesYolo26Heads) {
-  // reg_max 1 (raw distances) and YOLO26 keypoints at (raw + cell + 0.5).
-  constexpr int channels = 4 + 1 + 2 * 3;
-  const auto output = proto(DataType::Float32, {1, channels, 4, 4});
-  FakeEngine engine({proto(DataType::Float32, {1, 3, 32, 32})}, {output});
-  auto yolo26 = config();
-  yolo26["reg_max"] = 1;
-  yolo26["head_version"] = "yolo26";
-  auto decoder = hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", yolo26, engine);
-  hrt::Vector<float> values(channels * 16, 0.0F);
-  auto at = [&](int channel, int y, int x) -> float& {
-    return values[static_cast<std::size_t>(channel * 16 + y * 4 + x)];
-  };
-  for (int y = 0; y < 4; ++y) {
-    for (int x = 0; x < 4; ++x)
-      at(4, y, x) = -10.0F;
-  }
-  // Cell (x 1, y 2): one cell to each side, score logit 3, keypoint (0.25, -0.25).
-  for (int side = 0; side < 4; ++side)
-    at(side, 2, 1) = 1.0F;
-  at(4, 2, 1) = 3.0F;
-  at(5, 2, 1) = 0.25F;
-  at(6, 2, 1) = -0.25F;
-  at(7, 2, 1) = 2.0F;
-  hrt::postprocess::KeypointResultMap result;
-  ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(32, 32)));
-  ASSERT_EQ(result.at(0).size(), 1U);
-  const auto& object = result.at(0)[0];
-  EXPECT_NEAR(object.box.rect.x, 4.0F, 1e-4F);
-  EXPECT_NEAR(object.box.rect.width, 16.0F, 1e-4F);
-  EXPECT_FLOAT_EQ(object.keypoints[0].point.x, 14.0F);
-  EXPECT_FLOAT_EQ(object.keypoints[0].point.y, 18.0F);
-  EXPECT_FLOAT_EQ(object.keypoints[1].point.x, 12.0F);
-  EXPECT_FLOAT_EQ(object.keypoints[1].point.y, 20.0F);
-}
-
 TEST(YoloV8KeypointTest, AbortsOnHeadsThatDoNotFit) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto input = proto(DataType::Float32, {1, 3, 32, 32});

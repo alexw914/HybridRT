@@ -77,35 +77,25 @@ TEST(RotatedTest, GeneralDecodesObb) {
             1U);
 }
 
-TEST(RotatedTest, YoloV8ReadsYolo26AnglesInRadians) {
-  // One 2x2 stride-8 head, reg_max 1: distances, theta, one class.
+TEST(RotatedTest, Yolo26ReadsDistancesAndRadians) {
+  // One 2x2 stride-8 head: distances in cells, theta in radians, one class.
   const auto output = proto(DataType::Float32, {1, 6, 2, 2});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
-  const auto angle = std::numbers::pi_v<float> / 12.0F;
-  for (const auto* version : {"yolov8", "yolo26"}) {
-    const kitzoo::json::Json config{{"class_num", 1},
-                                    {"strides", {8}},
-                                    {"reg_max", 1},
-                                    {"head_version", version},
-                                    {"confidence_threshold", {0.5F}},
-                                    {"iou_threshold", {0.45F}}};
-    auto postprocessor = hrt::postprocess::create_rotated_postprocessor("YoloV8Rotated", config, engine);
-    hrt::Vector<float> values(6 * 4, -10.0F);
-    const hrt::Vector<float> cell{0.5F, 0.5F, 0.5F, 0.5F, angle, 3.0F};
-    for (std::size_t c = 0; c < cell.size(); ++c)
-      values[c * 4 + 3] = cell[c];
-    hrt::postprocess::RotatedResultMap result;
-    ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(16, 16)));
-    ASSERT_EQ(result.at(0).size(), 1U);
-    const auto& rect = result.at(0)[0].rect;
-    EXPECT_NEAR(rect.center.x, 12.0F, 1e-4F);
-    EXPECT_NEAR(rect.center.y, 12.0F, 1e-4F);
-    EXPECT_NEAR(rect.size.width, 8.0F, 1e-4F);
-    // YOLOv8 maps theta through (sigmoid - 0.25) * 180, YOLO26 reads radians.
-    const auto expected =
-        version == hrt::String("yolo26") ? 15.0F : (1.0F / (1.0F + std::exp(-angle)) - 0.25F) * 180.0F;
-    EXPECT_NEAR(rect.angle, expected, 1e-3F);
-  }
+  const auto config = kitzoo::json::Json::parse(
+      R"({"class_num": 1, "strides": [8], "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
+  auto postprocessor = hrt::postprocess::create_rotated_postprocessor("Yolo26Rotated", config, engine);
+  hrt::Vector<float> values(6 * 4, -10.0F);
+  const hrt::Vector<float> cell{0.5F, 0.5F, 0.5F, 0.5F, std::numbers::pi_v<float> / 12.0F, 3.0F};
+  for (std::size_t c = 0; c < cell.size(); ++c)
+    values[c * 4 + 3] = cell[c];
+  hrt::postprocess::RotatedResultMap result;
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(16, 16)));
+  ASSERT_EQ(result.at(0).size(), 1U);
+  const auto& rect = result.at(0)[0].rect;
+  EXPECT_NEAR(rect.center.x, 12.0F, 1e-4F);
+  EXPECT_NEAR(rect.center.y, 12.0F, 1e-4F);
+  EXPECT_NEAR(rect.size.width, 8.0F, 1e-4F);
+  EXPECT_NEAR(rect.angle, 15.0F, 1e-3F);
 }
 
 TEST(RotatedTest, RejectsNonuniformSourceMapping) {
@@ -207,6 +197,22 @@ TEST(RotatedTest, RunsRawObbHeadsWhenAvailable) {
   // airport.jpg: eleven planes.
   ASSERT_TRUE(result->contains(0));
   EXPECT_EQ(result->at(0).size(), 11U);
+}
+
+TEST(RotatedTest, RunsYolo26RawHeadsWhenAvailable) {
+  const auto algo = hrt::test::template_algo("yolo26n_obb_raw");
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/airport.jpg").string());
+  if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
+    GTEST_SKIP() << "YOLO26n-obb raw-head ONNX fixture or airport.jpg is unavailable";
+  const auto model = hrt::model::ImageModel<hrt::postprocess::RotatedResultMap>::create(algo);
+  const auto image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, bgr.data, hrt::core::ImageFormat::InterBgr,
+                                            {bgr.cols, bgr.rows}, hrt::core::DataType::Uint8, bgr.step);
+  ASSERT_TRUE(image);
+  const auto result = model->process_sync(*image);
+  ASSERT_TRUE(result);
+  // airport.jpg: ten planes.
+  ASSERT_TRUE(result->contains(0));
+  EXPECT_EQ(result->at(0).size(), 10U);
 }
 #endif
 
