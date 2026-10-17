@@ -1,0 +1,36 @@
+{
+  "name": "rtmpose",
+  "version": "1.0.0",
+  "description": "YOLOv8n person detection and top-down RTMPose-m body7 SimCC keypoints at 256 x 192.",
+  "algos": [
+    {
+      "name": "detect",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n.onnx"}]},
+        "postprocess": {"type": "GeneralDetect", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
+      }
+    },
+    {
+      "name": "pose",
+      "config": {
+        "preprocess": {
+          "resize_type": "pad_outside",
+          "pad_scale": 1.25,
+          "mean": [123.675, 116.28, 103.53],
+          "std": [58.395, 57.12, 57.375]
+        },
+        "engine": {
+          "backends": [
+            {
+              "engine_type": "ort",
+              "config": {"input_shapes": {"input": [1, 3, 256, 192]}},
+              "data": "assets/rtmpose/models/rtmpose-m_simcc-body7_256x192.onnx"
+            }
+          ]
+        },
+        "postprocess": {"type": "GeneralKeypoint", "general_keypoint_type": "simcc", "keypoint_threshold": 0.3}
+      }
+    }
+  ]
+}

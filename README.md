@@ -89,6 +89,8 @@ target_link_libraries(app PRIVATE hrt::hybridrt)
 | `hrt::hybridrt` | Model execution with memory, contexts, engines, image preprocessing, task postprocessing, and OpenCV result drawing in `core/view`. |
 
 Detection supports YOLO and DETR query outputs; see `assets/rtdetr` for an Ultralytics RT-DETR manifest.
+Top-down keypoints decode heatmap (HRNet), SimCC (RTMPose) and point outputs; see `assets/rtmpose` for a
+YOLOv8 person detector and RTMPose manifest.
 
 `tools/hrt-compress` packs a JSON manifest (every field: `assets/template/hrtc_template.json`) into a
 `.hrtc` file, prints or extracts existing packages, and checks their configs:

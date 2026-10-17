@@ -60,6 +60,16 @@ other dynamic dims need an entry. Outputs whose size depends on the data are not
 
 Operator libraries are optional: one that does not load is skipped with a warning.
 
+Per platform:
+
+| Engine | Preprocess and model inputs |
+| --- | --- |
+| `rknn` (RK3588) | `image_input: true` (default) feeds uint8 NHWC images and the runtime applies the mean, std and channel swap built into the `.rknn` (`strings model.rknn \| grep "'mean'"` shows them): use `dst_image_format: "inter_rgb"` and keep `mean`/`std` at their defaults. `false` feeds int8 or float32 tensors normalized by `preprocess`. `device: "auto"` uses the RGA. |
+| `trt` | `device: "auto"` preprocesses with CUDA (NPP) into the device input. |
+| `cann` | `device: "auto"` preprocesses with DVPP. |
+| `mnn` | `forward_type: "metal"` needs an SDK built with Metal; on Linux with RGA and a dma-heap `device: "auto"` uses the RGA, as for `ncnn`. |
+| `ort` | `execution_provider: "coreml"` needs a CoreML build; models with a dynamic batch need no `input_shapes`, other dynamic dims do. |
+
 ## postprocess
 
 `confidence_threshold` and `iou_threshold` take one value for all classes or one per class,
@@ -72,7 +82,7 @@ each in [0, 1].
 | `GeneralDetect`, `GeneralRotated` | `class_num`, thresholds; decoded `[1, 4 + classes (+ angle), N]` output |
 | `DetrDetect` | `class_num`, `confidence_threshold` (0.25), `output_format` (`combined`/`separate`), `score_activation` (`none`/`sigmoid`/`softmax`), `background_class` (-1: none), `boxes_output` (0), `scores_output` (1) |
 | `YoloKeypoint` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), thresholds |
-| `GeneralKeypoint` | `general_keypoint_type`: `heatmap`, `point_with_visible`, `point_channel_first`, `point_channel_last` |
+| `GeneralKeypoint` | `general_keypoint_type` (`heatmap`/`simcc`/`point_with_visible`/`point_channel_first`/`point_channel_last`), `heatmap_refine` (`dark`/`none`), `score_activation` (`none`/`sigmoid`), `keypoint_threshold` (0) |
 | `InstanceSegment` | `class_num`, `mask_threshold` (0.5), thresholds |
 | `SemanticSegment` | none |
 | `GeneralClassify` | `classify_postprocess_type`: `none`, `sigmoid`, `softmax` |
@@ -98,6 +108,22 @@ Use the model's own preprocessing; Ultralytics RT-DETR needs direct resize
 embedded class selection and global multi-label top-k require a matching export
 or a different decoder; the family name alone does not guarantee compatibility.
 
+`GeneralKeypoint` decodes one top-down crop per call; cascades pass detections as `src_rect`
+with `resize_type: "pad_outside"` and `pad_scale` (1.25 in mmpose). `general_keypoint_type`
+follows the outputs:
+
+- `heatmap`: `[1, K, H, W]` maps (HRNet, SimpleBaseline, ViTPose); peak cell times
+  input / heatmap size, score the peak. `dark` refines as mmpose DARK (11 x 11 blur,
+  sigma 2) at interior maxima of positive heatmaps and keeps the argmax otherwise.
+- `simcc`: x `[1, K, W * r]` and y `[1, K, H * r]` distributions (RTMPose); bin / r,
+  score min(max x, max y).
+- `point_with_visible`: x, y and `[1, K, 3]` visibility distributions; the argmax state
+  sets `visible`, its last channel the score.
+- `point_channel_first`, `point_channel_last`: normalized `[1, 2, K]` or `[1, K, 2]` points.
+
+For `heatmap` and `simcc`, `score_activation` applies to the score and a keypoint is visible
+when the score exceeds `keypoint_threshold` (mmpose drops scores <= 0 and draws above 0.3).
+
 ## results.json
 
 `results.json` is the output layout of `hrt-validate`, the same for every task. `engine` is
@@ -107,7 +133,7 @@ and `results`, whose items always carry every field, empty when the task has non
 | Field | Value |
 | --- | --- |
 | `class_id`, `score` | Detection class and score; classify: top 1 of output 0. Semantic segments and `GeneralKeypoint` use score 1. |
-| `x`, `y`, `width`, `height` | Box in source pixels, the top-left of the unrotated box; the full image for classify, semantic segments and `GeneralKeypoint`. |
+| `x`, `y`, `width`, `height` | Box in source pixels, the top-left of the unrotated box; the full image for classify and semantic segments; the cropped source region for `GeneralKeypoint`. |
 | `angle` | Rotated boxes; 0 otherwise. |
 | `keypoints` | `[x, y, score, visible]` per keypoint, `visible` 0 unlabeled, 1 invisible, 2 visible. |
 | `mask` | `{"rect": [x, y, w, h], "rle": [...]}`: row-major run lengths over `rect`, alternating 0 and 1, starting with 0; `null` without a mask. |

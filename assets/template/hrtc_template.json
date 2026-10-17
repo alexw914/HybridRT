@@ -173,9 +173,15 @@
     {
       "name": "general_keypoint",
       "config": {
-        "preprocess": {"resize_type": "keep_ratio", "std": [255, 255, 255]},
+        "preprocess": {"resize_type": "pad_outside", "pad_scale": 1.25, "mean": [123.675, 116.28, 103.53], "std": [58.395, 57.12, 57.375]},
         "engine": {"backends": [{"engine_type": "ort", "data": "models/general_keypoint.onnx"}]},
-        "postprocess": {"type": "GeneralKeypoint", "general_keypoint_type": "heatmap"}
+        "postprocess": {
+          "type": "GeneralKeypoint",
+          "general_keypoint_type": "heatmap",
+          "heatmap_refine": "dark",
+          "score_activation": "none",
+          "keypoint_threshold": 0.3
+        }
       }
     },
     {

@@ -1,0 +1,15 @@
+{
+  "downloaded_on": "2026-10-17",
+  "archive": {
+    "url": "https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504.zip",
+    "sha256": "f7fbb6c5c11a1bb70f3d445e4ddec5d144ea89ad5649c081ef976f9b24a0b741"
+  },
+  "onnx": {
+    "file": "models/rtmpose-m_simcc-body7_256x192.onnx",
+    "member": "20230831/rtmpose_onnx/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504/end2end.onnx",
+    "sha256": "5c0a4bf67953e6d2ac43ce15e77dc9d5d354ae18430a47d2c5963a7bc5683e3c",
+    "bytes": 54330655,
+    "input_shape": ["batch", 3, 256, 192],
+    "output_shapes": [["batch", 17, 384], ["batch", 17, 512]]
+  }
+}
