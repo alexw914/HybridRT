@@ -4,7 +4,7 @@ HybridRT is a C++20 model inference framework for CPU, GPU and NPU deployment.
 It combines image preprocessing, inference and postprocessing behind one interface,
 with models and configuration stored in a single .hrtc package.
 
-Supported model families and tasks:
+## Supported Models
 
 | Task | Models and output formats |
 | --- | --- |
