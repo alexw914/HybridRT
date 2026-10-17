@@ -93,7 +93,7 @@ each in [0, 1].
 | `E2EKeypoint` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), `confidence_threshold`; end-to-end pose `[1, N, 6 + K x (2 \| 3)]` |
 | `RtmoKeypoint` | `confidence_threshold` ([0.15]), `iou_threshold` ([0.65]), `keypoint_threshold` (0.3); one class |
 | `GeneralKeypoint` | `general_keypoint_type` (`heatmap`/`heatmap_udp`/`simcc`/`point_with_visible`/`point_channel_first`/`point_channel_last`), `heatmap_refine` (`dark`/`none`), `score_activation` (`none`/`sigmoid`), `keypoint_threshold` (0) |
-| `InstanceSegment` | `class_num`, `mask_threshold` (0.5), thresholds |
+| `GeneralYoloSegment` | `class_num`, `mask_threshold` (0.5), thresholds |
 | `E2ESegment` | `class_num`, `mask_threshold` (0.5), `confidence_threshold`; end-to-end `[1, N, 6 + masks]` plus prototypes |
 | `SemanticSegment` | none |
 | `GeneralClassify` | `classify_postprocess_type`: `none`, `sigmoid`, `softmax` |
@@ -140,7 +140,7 @@ Ultralytics end-to-end exports have one row per kept object, already deduplicate
 and `iou_threshold` is not accepted; padding rows score 0. Ultralytics 8.4 writes them with
 `export(format="onnx", nms=False)` for one-to-one heads (YOLOv10, YOLO26) and `nms=True` for any
 generation; without `nms` it exports the raw `[1, 4 + classes + extra, anchors]` heads, which
-`GeneralDetect`, `GeneralYoloPose`, `InstanceSegment` and `GeneralRotated` decode for YOLO26 as for
+`GeneralDetect`, `GeneralYoloPose`, `GeneralYoloSegment` and `GeneralRotated` decode for YOLO26 as for
 YOLOv8. Columns, in network-input pixels:
 
 | Type | Row |
@@ -239,7 +239,7 @@ Results checked against independent references on bus.jpg (ONNX Runtime 1.31.0, 
   `predict` on the same ONNX files: identical boxes, scores, classes, keypoints and angles on bus.jpg
   and airport.jpg; mask IoU 0.966 to 0.997 against `retina_masks=True`. On airport.jpg the YOLO26
   segment export keeps one more box at score 0.253 because of the rounding above.
-- Raw YOLO26 pose, segment and OBB exports (no `nms`) through `GeneralYoloPose`, `InstanceSegment` and
+- Raw YOLO26 pose, segment and OBB exports (no `nms`) through `GeneralYoloPose`, `GeneralYoloSegment` and
   `GeneralRotated`: the same objects and scores as Ultralytics `predict`, except one borderline
   airport.jpg segment box from the same rounding. These exports are not template algos.
 - YOLO26 raw heads through `YoloV8Detect`, `YoloV8Keypoint` and `YoloV8Rotated`: identical objects,
@@ -274,7 +274,7 @@ Against the ORT results of the same models on bus.jpg, airport.jpg and zidane.jp
 | Types | RKNN result |
 | --- | --- |
 | `GeneralDetect`, `YoloV8Detect` (raw) | same objects; boxes within 8 px, scores within 0.07 |
-| `InstanceSegment` | same objects; mask IoU 0.935 or more |
+| `GeneralYoloSegment` | same objects; mask IoU 0.935 or more |
 | `GeneralYoloPose`, `YoloV8Keypoint` (raw, face) | same people and faces (one borderline person fewer for the raw pose heads); keypoints within 7.3 px |
 | `GeneralRotated`, `YoloV8Rotated` (raw) | same 11 planes; angles within 2.2 degrees |
 | `GeneralClassify` | same top 1 on airport.jpg; bus.jpg's near-flat scores (0.02) differ |

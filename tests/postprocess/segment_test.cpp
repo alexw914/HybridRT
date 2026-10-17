@@ -62,7 +62,7 @@ auto expect_left_half_mask(const hrt::postprocess::SegmentResultMap& result) -> 
 
 TEST(SegmentTest, DecodesYoloInstanceMask) {
   auto engine = segment_engine(DataType::Float32);
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("InstanceSegment", segment_config(), engine);
+  auto postprocessor = hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", segment_config(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   // cx, cy, w, h, score, coefficient 0, coefficient 1.
@@ -78,7 +78,7 @@ TEST(SegmentTest, DecodesYoloInstanceMask) {
 
 TEST(SegmentTest, DecodesInt8Detections) {
   auto engine = segment_engine(DataType::Int8);
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("InstanceSegment", segment_config(), engine);
+  auto postprocessor = hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", segment_config(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   // real = 0.1 * q: 8, 8, 8, 8, 0.9, 1, 0.
@@ -97,7 +97,7 @@ TEST(SegmentTest, KeepsNonzeroClassId) {
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {detections, masks});
   auto config = segment_config();
   config["class_num"] = 2;
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("InstanceSegment", config, engine);
+  auto postprocessor = hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", config, engine);
   hrt::postprocess::SegmentResultMap result;
   ASSERT_TRUE(postprocessor->process(result,
                                      {hrt::test::buffer_of<float>(detections, {8, 8, 8, 8, 0.1F, 0.9F, 1, 0}),
@@ -113,7 +113,7 @@ TEST(SegmentTest, AbortsOnMismatchedOutputs) {
   auto engine = segment_engine(DataType::Float32);
   auto config = segment_config();
   config["class_num"] = 2;
-  EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("InstanceSegment", config, engine), "");
+  EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", config, engine), "");
   EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("Mystery", segment_config(), engine), "");
   EXPECT_EQ(hrt::postprocess::check_config("SemanticSegment", Json::parse(R"({"class_num": 3})")).size(), 1U);
 }

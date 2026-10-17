@@ -1,0 +1,133 @@
+// -----------------------------------------------------------------------------
+// HybridRT | C++20 Model Inference Framework
+// File: source/postprocess/segment/general_yolo_segment.cpp
+// Description: Implements decoding of single-output YOLO instance
+//              segmentation, [1, 4 + classes + masks, N] plus prototypes.
+// -----------------------------------------------------------------------------
+
+#include <kitzoo/core/macro.hpp>
+#include <kitzoo/log/logger.hpp>
+
+#include "include/postprocess/common.hpp"
+#include "include/postprocess/mask_decoder.hpp"
+#include "include/postprocess/params.hpp"
+
+namespace hrt::postprocess {
+
+namespace {
+
+struct GeneralYoloSegmentParam {
+  unsigned int class_num = 0;
+  Vector<float> confidence_threshold;
+  Vector<float> iou_threshold;
+  float mask_threshold = 0.5F;
+};
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralYoloSegmentParam, class_num, confidence_threshold, iou_threshold,
+                                                mask_threshold)
+
+// Outputs: detections [1, 4 + classes + masks, N] and prototypes
+// [1, masks, mh, mw], identified by rank.
+class GeneralYoloSegment final : public SegmentPostprocessor {
+public:
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    return check_section<GeneralYoloSegmentParam>(config);
+  }
+
+  auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    param_ = config.get<GeneralYoloSegmentParam>();
+    if (param_.class_num == 0 ||
+        !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
+        !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
+      return false;
+    const auto& outputs = engine.output_protos();
+    if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 2 || !engine_input_size(engine)) {
+      KZ_LOG_ERROR("general_yolo_segment: needs one image input and two NCHW outputs");
+      return false;
+    }
+    detections_ = outputs[0].shape.size() == 3 ? 0 : 1;
+    prototypes_ = 1 - detections_;
+    const auto& det = outputs[detections_].shape;
+    const auto& proto = outputs[prototypes_].shape;
+    if (det.size() != 3 || proto.size() != 4 || det[0] != 1 || proto[0] != 1 ||
+        det[1] != static_cast<std::int64_t>(param_.class_num) + 4 + proto[1]) {
+      KZ_LOG_ERROR("general_yolo_segment: outputs must be [1, 4 + class_num + masks, N] and [1, masks, h, w]");
+      return false;
+    }
+    mask_logit_ = logit(param_.mask_threshold);
+    return true;
+  }
+
+protected:
+  auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
+      -> bool override {
+    const RowView det(*outputs[detections_], scratch_[0]);
+    const auto* proto = float_data(*outputs[prototypes_], scratch_[1]);
+    if (!det.valid() || proto == nullptr)
+      return false;
+    const auto& proto_shape = outputs[prototypes_]->shape();
+    const MaskDecoder::Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
+                                             static_cast<int>(proto_shape[3])};
+
+    const auto classes = param_.class_num;
+    rects_.resize(classes);
+    scores_.resize(classes);
+    anchors_.resize(classes);
+    // Class rows are read in order; walking anchors first strides every row
+    // per anchor. Boxes are only built for scores above the threshold.
+    for (std::size_t cls = 0; cls < classes; ++cls) {
+      rects_[cls].clear();
+      scores_[cls].clear();
+      anchors_[cls].clear();
+      candidates_.clear();
+      det.above(4 + cls, param_.confidence_threshold[cls], candidates_);
+      for (const auto i : candidates_) {
+        const auto [l, t, r, b] = center_box(det.at(0, i), det.at(1, i), det.at(2, i), det.at(3, i));
+        if (!(r - l > 0.0F && b - t > 0.0F))
+          continue;
+        rects_[cls].push_back(core::Rect2f::from_points({l, t}, {r, b}));
+        scores_[cls].push_back(det.at(4 + cls, i));
+        anchors_[cls].push_back(i);
+      }
+    }
+
+    const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
+                              static_cast<float>(transform.src_roi.width),
+                              static_cast<float>(transform.src_roi.height)};
+    Vector<float> coefficients(static_cast<std::size_t>(prototypes.channels));
+    for (std::size_t cls = 0; cls < classes; ++cls) {
+      for (auto k : nms_keep(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
+        const auto box = core::intersect(to_source(rects_[cls][k], transform), bounds);
+        if (box.empty())
+          continue;
+        for (std::size_t j = 0; j < coefficients.size(); ++j)
+          coefficients[j] = det.at(4 + classes + j, anchors_[cls][k]);
+        auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
+        object.box = {box, scores_[cls][k], static_cast<std::int64_t>(cls), -1};
+        object.mask = masks_.make(prototypes, coefficients, rects_[cls][k], box, transform, mask_logit_);
+      }
+    }
+    return true;
+  }
+
+private:
+  GeneralYoloSegmentParam param_;
+  Vector<std::uint32_t> candidates_;
+  Vector<Vector<core::Rect2f>> rects_;
+  Vector<Vector<float>> scores_;
+  Vector<Vector<std::uint32_t>> anchors_;
+  std::size_t detections_ = 0;
+  std::size_t prototypes_ = 1;
+  float mask_logit_ = 0.0F;
+  Array<core::Buffer, 2> scratch_{core::Buffer(core::MemoryType::Cpu, core::DataType::Float32),
+                                  core::Buffer(core::MemoryType::Cpu, core::DataType::Float32)};
+  MaskDecoder masks_;
+};
+
+} // namespace
+
+auto make_general_yolo_segment() -> UniquePtr<SegmentPostprocessor> {
+  return std::make_unique<GeneralYoloSegment>();
+}
+
+} // namespace hrt::postprocess

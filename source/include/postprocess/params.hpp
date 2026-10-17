@@ -151,7 +151,7 @@ auto make_rtmo_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
 auto make_e2e_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
-auto make_instance_segment() -> UniquePtr<SegmentPostprocessor>;
+auto make_general_yolo_segment() -> UniquePtr<SegmentPostprocessor>;
 
 auto make_e2e_segment() -> UniquePtr<SegmentPostprocessor>;
 

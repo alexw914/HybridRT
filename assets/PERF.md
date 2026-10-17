@@ -9,7 +9,7 @@ work can rerun the same measurement. Plain feature work is not listed here.
 **Bottleneck.** Raw anchor-free heads (`YoloV8Detect`, `YoloV8Rotated`, `YoloV8Keypoint`) visited every
 cell and, for each, read the score of every class from a different NCHW plane: 80 planes per cell for
 COCO heads, more concurrent streams than the prefetcher follows. Decoded single outputs
-(`GeneralDetect`, `GeneralRotated`, `GeneralYoloPose`, `InstanceSegment`) walked anchors first,
+(`GeneralDetect`, `GeneralRotated`, `GeneralYoloPose`, `GeneralYoloSegment`) walked anchors first,
 reading every class row per anchor, and converted whole int8 tensors to float before looking at
 them. On RK3588 the A55 cores (cpu0 to cpu3) run the same decoder about 3.5 times slower than the A76
 cores (cpu4 to cpu7), which made unpinned timings bimodal.
@@ -42,9 +42,9 @@ ONNX Runtime 1.31.0, `hybridrt_bench_postprocess`, pinned, median of 3 repetitio
 | RK3588 `GeneralDetect`, YOLOv8n, fp16 | 0.771 ms | 0.456 ms |
 | RK3588 `GeneralRotated`, YOLOv8n-obb, fp16 | 0.457 ms | 0.413 ms |
 | RK3588 `GeneralYoloPose`, YOLOv8n-pose, fp16 | 0.051 ms | 0.008 ms |
-| RK3588 `InstanceSegment`, YOLOv8n-seg, fp16 | 1.244 ms | 1.257 ms (masks dominate) |
+| RK3588 `GeneralYoloSegment`, YOLOv8n-seg, fp16 | 1.244 ms | 1.257 ms (masks dominate) |
 | x86 `GeneralDetect` (yolov8n) | 0.400 ms | 0.225 ms |
-| x86 `InstanceSegment` (yolov8n-seg) | 0.661 ms | 0.551 ms |
+| x86 `GeneralYoloSegment` (yolov8n-seg) | 0.661 ms | 0.551 ms |
 | x86 `GeneralYoloPose` (yolov8n-pose) | 0.021 ms | 0.004 ms |
 | x86 `GeneralRotated` (yolov8n-obb) | 0.223 ms | 0.207 ms |
 
@@ -57,12 +57,12 @@ framework, so applications should pin them.
 
 ## 2026-10-17: segmentation postprocessing
 
-**Bottleneck.** On the RK3588 board, `InstanceSegment` took 11.4 ms and `SemanticSegment` 54 to 57 ms
+**Bottleneck.** On the RK3588 board, `GeneralYoloSegment` took 11.4 ms and `SemanticSegment` 54 to 57 ms
 per call, against 0.05 to 1.7 ms for the other decoders. Timing each section on the board showed:
 
 - `SemanticSegment`: the argmax over `[1, 21, 512, 512]` took 37 ms. It looped over pixels and read
   each pixel's 21 channel values one plane (1 MB) apart, so nearly every read missed the cache.
-- `InstanceSegment`: 5.9 ms scanning candidates and 6.0 ms building masks. The scan read the score of
+- `GeneralYoloSegment`: 5.9 ms scanning candidates and 6.0 ms building masks. The scan read the score of
   every class for one anchor at a time, a row (6300 floats) apart. Each mask made four
   source-resolution passes: `warpAffine` into a float image, `compare`, `bitwise_and`, plus the
   prototype sum.
@@ -87,11 +87,11 @@ sections inside a decoder with temporary timers. Desktop: Ryzen 5 5600X, ONNX Ru
 
 | Case | Before | After |
 | --- | --- | --- |
-| RK3588 `InstanceSegment` postprocess (yolov8n-seg, 640 x 480) | 11.4 ms | 1.2 ms |
-| RK3588 `InstanceSegment` `process_sync` | 59.8 ms | 49 ms |
+| RK3588 `GeneralYoloSegment` postprocess (yolov8n-seg, 640 x 480) | 11.4 ms | 1.2 ms |
+| RK3588 `GeneralYoloSegment` `process_sync` | 59.8 ms | 49 ms |
 | RK3588 `SemanticSegment` postprocess (LRASPP, 512 x 512, 21 classes) | 54 to 57 ms | 8.7 ms |
 | RK3588 `SemanticSegment` `process_sync` | 117 ms | 70.5 ms |
-| x86 `InstanceSegment` postprocess (yolov8n-seg) | 2.72 ms | 0.67 ms |
+| x86 `GeneralYoloSegment` postprocess (yolov8n-seg) | 2.72 ms | 0.67 ms |
 
 Remaining: 3 ms of the semantic time builds one source-resolution mask per class. Other decoded
 single-output types (`GeneralDetect`, `GeneralYoloPose`, `GeneralRotated`) still scan per anchor

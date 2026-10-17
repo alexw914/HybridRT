@@ -59,7 +59,9 @@ add_library(hybridrt STATIC
     postprocess/keypoint/general_yolo_pose.cpp
     postprocess/keypoint/yolov8_keypoint.cpp
     postprocess/segment.cpp
-    postprocess/segment/instance_segment.cpp
+    postprocess/segment/mask_decoder.cpp
+    postprocess/segment/general_yolo_segment.cpp
+    postprocess/segment/e2e_segment.cpp
     postprocess/segment/semantic_segment.cpp
     model/image_model.cpp)
 hybridrt_configure_target(hybridrt)

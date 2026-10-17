@@ -306,7 +306,7 @@
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-seg.onnx"}]},
         "postprocess": {
-          "type": "InstanceSegment",
+          "type": "GeneralYoloSegment",
           "class_num": 80,
           "mask_threshold": 0.5,
           "confidence_threshold": [0.25],
