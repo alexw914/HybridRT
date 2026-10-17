@@ -47,11 +47,14 @@ jobs:
             ort: linux-x64
           - os: macos-latest
             ort: osx-arm64
+          - os: windows-latest
+            ort: win-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Install build tools and OpenCV
+        if: runner.os != 'Windows'
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
             sudo apt-get update
@@ -63,30 +66,23 @@ jobs:
           fi
 
       - name: Download ONNX Runtime
+        if: runner.os != 'Windows'
         run: |
           name="onnxruntime-${{ matrix.ort }}-${ORT_VERSION}"
           curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/${name}.tgz" | tar xz
           echo "ORT_ROOT=$PWD/${name}" >> "$GITHUB_ENV"
 
       - name: Configure
+        if: runner.os != 'Windows'
         run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DORT_ROOT="$ORT_ROOT"
 
-      - name: Build
-        run: cmake --build build/debug --parallel
-
-      - name: Test
-        run: ctest --test-dir build/debug --output-on-failure --parallel 4
-
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
       - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
         with:
           arch: x64
 
       - name: Download OpenCV and ONNX Runtime
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force external | Out-Null
@@ -102,6 +98,7 @@ jobs:
           "$PWD/external/opencv/build/x64/vc16/bin" >> $env:GITHUB_PATH
 
       - name: Configure
+        if: runner.os == 'Windows'
         run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DORT_ROOT="$env:ORT_ROOT" -DOpenCV_DIR="$env:OpenCV_DIR"
 
       - name: Build
@@ -111,22 +108,26 @@ jobs:
         run: ctest --test-dir build/debug --output-on-failure --parallel 4
 
       - uses: actions/setup-python@v5
+        if: runner.os == 'Windows'
         with:
           python-version: '3.10'
 
       - name: Install Ultralytics ONNX exporter
+        if: runner.os == 'Windows'
         run: |
           python -m pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
           if ($LASTEXITCODE -ne 0) { throw 'PyTorch installation failed' }
           python -m pip install ultralytics==8.1.4 onnx==1.14.1 numpy==1.26.4 opencv-python==4.10.0.84
 
       - name: Download official model and export ONNX
+        if: runner.os == 'Windows'
         run: |
           python -c "from ultralytics import YOLO; YOLO('external/yolov8n.pt').export(format='onnx', imgsz=(480,640), opset=17, simplify=False, dynamic=False)"
           if ($LASTEXITCODE -ne 0) { throw 'ONNX export failed' }
           python -c "import json; from pathlib import Path; m=json.loads(Path('assets/yolo/yolo.json').read_text()); m['algos']=m['algos'][:1]; m['algos'][0]['config']['engine']['backends'][0]['data']='external/yolov8n.onnx'; Path('build/yolo.json').write_text(json.dumps(m))"
 
       - name: Test ONNX model CLI workflow
+        if: runner.os == 'Windows'
         run: |
           build/tools/hrt-compress.exe -j build/yolo.json -o build/yolo.hrtc
           if ($LASTEXITCODE -ne 0) { throw 'Model packaging failed' }
