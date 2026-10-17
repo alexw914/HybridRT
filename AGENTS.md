@@ -41,7 +41,9 @@
 - 生成的 `source/include/hrtc/hrtc_generated.h` 随仓库提交、不手改，修改 `fbs/hrtc.fbs` 后用
   `-DHYBRIDRT_BUILD_FLATC=ON` 构建 `hrtc_schema` 重新生成。字段只在表末尾追加；不兼容的改动更换
   `file_identifier` 并重新打包。
-- 配置字段或引擎 config 变化时同步更新 `assets/template/hrtc_template.json` 及其 `README.md`。
+- `assets/template/README.md` 说明每种 preprocess、engine、postprocess 类型的作用、全部参数及默认值和可选值，
+  以及各平台需要传入的参数（如 RKNN 的 `image_input`、`dst_image_format`）；代码中类型、参数、默认值或平台行为
+  变化时，在同一提交中同步更新它和 `hrtc_template.json`。
 - 引擎推理耗时只由 `tools/hrt-model-bench` 测量；`benchmarks/` 只保留 `preprocess_bench`、
   `postprocess_bench`、`pipeline_bench`。
 - 模型文件、`.hrtc`、`assets/yolo/result/` 和下载到 `external/` 的 SDK 不提交；manifest 中的文件路径为
@@ -152,3 +154,38 @@
   ```
 
 - 不降低项目或依赖的 CMake 最低版本来绕过配置失败。若远端 CMake 低于 3.25，先安装或选择符合要求的 CMake，再重新配置和构建；不能把旧 build 中已有的测试二进制运行结果当作当前源码的验证结果。
+
+## RK3588 RKNN 板端验证
+
+- 板端为 Radxa Rock 5B+（Debian 12，librknnrt 2.3.2），SSH `radxa@192.168.5.11`，密码向用户确认，不写进仓库；
+  验证目录固定为 `~/hybridrt-test`：`bin/` 放程序，`lib/` 放 `librga.so`，`assets/` 放清单、图片和模型。板端
+  Python 只有 numpy 和 `rknnlite`，没有 OpenCV。
+- 本地交叉编译使用 Arm GNU Toolchain 12.2 的 `/Users/krisw/Env/rk3588/toolchains/rk3588-gcc12.toolchain.cmake`
+  （GCC 10.2 的 `rk3588.toolchain.cmake` 编不过 kitzoo）；第三方依赖用 `external/deps/` 的本地副本：
+
+  ```sh
+  E=/Users/krisw/Env/rk3588; D=$PWD/external/deps
+  cmake -S . -B build/rk3588-gcc12 -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_TOOLCHAIN_FILE=$E/toolchains/rk3588-gcc12.toolchain.cmake \
+      -DRKNN_ROOT=$E/rknpu2 -DRKNN_PLATFORM=RK3588 -DRGA_ROOT=$E/RGA -DOpenCV_DIR=$E/OpenCV/lib/cmake/opencv4 \
+      -DHYBRIDRT_BUILD_TESTS=ON -DHYBRIDRT_TOOLS_OUTPUT_DIR=build/rk3588-gcc12/tools \
+      -DFETCHCONTENT_SOURCE_DIR_KITZOO=$D/kitzoo-0.5.1 -DFETCHCONTENT_SOURCE_DIR_FLATBUFFERS=$D/flatbuffers-25.2.10 \
+      -DFETCHCONTENT_SOURCE_DIR_GOOGLETEST=$D/googletest-1.18.0 -DFETCHCONTENT_SOURCE_DIR_NLOHMANN_JSON=$D/json-3.12.0 \
+      -DFETCHCONTENT_SOURCE_DIR_SPDLOG=$D/spdlog-1.17.0 -DFETCHCONTENT_SOURCE_DIR_MIMALLOC=$D/mimalloc-3.5.3 \
+      -DFETCHCONTENT_SOURCE_DIR_CXXOPTS=$D/cxxopts-3.3.1 -DFETCHCONTENT_SOURCE_DIR_THREAD_POOL=$D/thread-pool-5.1.0 \
+      -DFETCHCONTENT_SOURCE_DIR_CONCURRENTQUEUE=$D/concurrentqueue-1.0.5
+  cmake --build build/rk3588-gcc12 --parallel
+  ```
+
+- 每次验证都重新构建，再用 tar 经 SSH 同步当前产物，不运行板端旧二进制；模型放 `assets/<名称>/`，清单中的路径相对
+  `~/hybridrt-test`；从该目录运行并设置 `LD_LIBRARY_PATH=lib`：
+
+  ```sh
+  tar czf - -C build/rk3588-gcc12 tests/hybridrt_test_general_keypoint tools/hrt-validate examples/hybridrt_example_image_model \
+      | ssh radxa@192.168.5.11 'mkdir -p ~/hybridrt-test/bin && tar xzf - --strip-components=1 -C ~/hybridrt-test/bin'
+  ssh radxa@192.168.5.11 'cd ~/hybridrt-test && LD_LIBRARY_PATH=lib ./bin/hybridrt_test_general_keypoint'
+  ssh radxa@192.168.5.11 'cd ~/hybridrt-test && LD_LIBRARY_PATH=lib ./bin/hrt-validate -m assets/<名称>/<清单>.json -n <algo> -i assets/yolo/images -r drawn/'
+  ```
+
+- 测试程序内嵌源码路径，读取仓库文件的测试需在板端保持相同目录结构；接入新模型前先在板端用 `librknnrt.so` 的
+  `rknn_query`（Python ctypes）查询输入输出形状和量化参数，RKNN 模型内置的 mean/std 与 `rgb2bgr` 可用 `strings <模型>.rknn | grep "'mean'"` 查看。
