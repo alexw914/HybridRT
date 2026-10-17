@@ -88,6 +88,8 @@ target_link_libraries(app PRIVATE hrt::hybridrt)
 | `hrt::hrtc` | The `.hrtc` model package: algorithms, configs, and per-backend model files. |
 | `hrt::hybridrt` | Model execution with memory, contexts, engines, image preprocessing, task postprocessing, and OpenCV result drawing in `core/view`. |
 
+Detection supports YOLO and DETR query outputs; see `assets/rtdetr` for an Ultralytics RT-DETR manifest.
+
 `tools/hrt-compress` packs a JSON manifest (every field: `assets/template/hrtc_template.json`) into a
 `.hrtc` file, prints or extracts existing packages, and checks their configs:
 

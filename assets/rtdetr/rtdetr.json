@@ -1,0 +1,15 @@
+{
+  "name": "rtdetr",
+  "version": "1.0.0",
+  "description": "Ultralytics RT-DETR-L, batch 1, normalized queries without NMS.",
+  "algos": [
+    {
+      "name": "detect",
+      "config": {
+        "preprocess": {"resize_type": "normal", "std": [255, 255, 255]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/rtdetr/models/rtdetr-l.onnx"}]},
+        "postprocess": {"type": "DetrDetect", "class_num": 80, "confidence_threshold": [0.25]}
+      }
+    }
+  ]
+}

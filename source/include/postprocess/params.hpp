@@ -50,6 +50,41 @@ struct GeneralDetectParam {
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralDetectParam, class_num, confidence_threshold, iou_threshold)
 
+enum class DetrOutputFormat {
+  Combined,
+  Separate,
+};
+
+NLOHMANN_JSON_SERIALIZE_ENUM(DetrOutputFormat, {
+                                                   {DetrOutputFormat::Combined, "combined"},
+                                                   {DetrOutputFormat::Separate, "separate"},
+                                               })
+
+enum class DetrScoreActivation {
+  None,
+  Sigmoid,
+  Softmax,
+};
+
+NLOHMANN_JSON_SERIALIZE_ENUM(DetrScoreActivation, {
+                                                      {DetrScoreActivation::None, "none"},
+                                                      {DetrScoreActivation::Sigmoid, "sigmoid"},
+                                                      {DetrScoreActivation::Softmax, "softmax"},
+                                                  })
+
+struct DetrParam {
+  unsigned int class_num = 0;
+  Vector<float> confidence_threshold;
+  DetrOutputFormat output_format = DetrOutputFormat::Combined;
+  DetrScoreActivation score_activation = DetrScoreActivation::None;
+  int background_class = -1;
+  std::size_t boxes_output = 0;
+  std::size_t scores_output = 1;
+};
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(DetrParam, class_num, confidence_threshold, output_format,
+                                                score_activation, background_class, boxes_output, scores_output)
+
 // Built-in postprocessor of `type` for each task, or nullptr.
 auto make_detect(std::string_view type) -> UniquePtr<DetectPostprocessor>;
 
@@ -66,6 +101,8 @@ auto make_yolov5_detect() -> UniquePtr<DetectPostprocessor>;
 auto make_yolov8_detect() -> UniquePtr<DetectPostprocessor>;
 
 auto make_general_detect() -> UniquePtr<DetectPostprocessor>;
+
+auto make_detr_detect() -> UniquePtr<DetectPostprocessor>;
 
 auto make_yolov5_rotated() -> UniquePtr<RotatedPostprocessor>;
 

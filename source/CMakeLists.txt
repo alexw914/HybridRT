@@ -45,6 +45,7 @@ add_library(hybridrt STATIC
     postprocess/detect/yolov5_detect.cpp
     postprocess/detect/yolov8_detect.cpp
     postprocess/detect/general_detect.cpp
+    postprocess/detect/detr_detect.cpp
     postprocess/rotated.cpp
     postprocess/rotated/yolov5_rotated.cpp
     postprocess/rotated/yolov8_rotated.cpp

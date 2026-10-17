@@ -85,6 +85,23 @@
       }
     },
     {
+      "name": "detr_detect",
+      "config": {
+        "preprocess": {"resize_type": "normal", "std": [255, 255, 255]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "models/rtdetr-l.onnx"}]},
+        "postprocess": {
+          "type": "DetrDetect",
+          "class_num": 80,
+          "confidence_threshold": [0.25],
+          "output_format": "combined",
+          "score_activation": "none",
+          "background_class": -1,
+          "boxes_output": 0,
+          "scores_output": 1
+        }
+      }
+    },
+    {
       "name": "general_detect",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},

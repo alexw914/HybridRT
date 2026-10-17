@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/postprocess/detect.cpp
-// Description: Implements detection NMS, YOLO config validation and the
+// Description: Implements detection NMS, head validation and the
 //              detection postprocessor factory.
 // -----------------------------------------------------------------------------
 
@@ -38,6 +38,8 @@ auto make_detect(std::string_view type) -> UniquePtr<DetectPostprocessor> {
     return make_yolov5_detect();
   if (type == "GeneralDetect")
     return make_general_detect();
+  if (type == "DetrDetect")
+    return make_detr_detect();
   return nullptr;
 }
 

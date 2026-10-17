@@ -70,11 +70,33 @@ each in [0, 1].
 | `YoloV8Detect`, `YoloV8Rotated` | `class_num`, `strides` (one per output head), `reg_max` (16), thresholds |
 | `YoloV5Detect`, `YoloV5Rotated` | `class_num`, `strides` (one per output head), `anchors` (one list per head: w0, h0, w1, h1, ...), thresholds |
 | `GeneralDetect`, `GeneralRotated` | `class_num`, thresholds; decoded `[1, 4 + classes (+ angle), N]` output |
+| `DetrDetect` | `class_num`, `confidence_threshold` (0.25), `output_format` (`combined`/`separate`), `score_activation` (`none`/`sigmoid`/`softmax`), `background_class` (-1: none), `boxes_output` (0), `scores_output` (1) |
 | `YoloKeypoint` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), thresholds |
 | `GeneralKeypoint` | `general_keypoint_type`: `heatmap`, `point_with_visible`, `point_channel_first`, `point_channel_last` |
 | `InstanceSegment` | `class_num`, `mask_threshold` (0.5), thresholds |
 | `SemanticSegment` | none |
 | `GeneralClassify` | `classify_postprocess_type`: `none`, `sigmoid`, `softmax` |
+
+`DetrDetect` reads batch-1 normalized center-x, center-y, width and height boxes.
+It selects the highest-scoring foreground class of each query and does not apply
+NMS. The model's export contract, rather than its family name, determines the config:
+
+- `combined` (default): one `[1, N, 4 + scores]` output, boxes first. Ultralytics
+  RT-DETR exports with per-class probabilities use `score_activation: "none"`.
+- `separate`: `[1, N, 4]` boxes and `[1, N, scores]` scores. `boxes_output` and
+  `scores_output` index the engine's reported output order.
+- `sigmoid` activates independent class logits. `softmax` normalizes all score
+  channels, including the background channel. Set `background_class` to its index
+  (commonly `class_num` in original DETR exports); foreground IDs close that gap.
+
+`class_num` counts foreground score channels, including unused category slots,
+and excludes the background channel. For example, a DETR export with two
+outputs and a final background class uses `{"output_format":"separate",
+"score_activation":"softmax","background_class":80,"class_num":80}`.
+Use the model's own preprocessing; Ultralytics RT-DETR needs direct resize
+(`normal`), RGB and division by 255. Auxiliary decoder outputs, pixel/xyxy boxes,
+embedded class selection and global multi-label top-k require a matching export
+or a different decoder; the family name alone does not guarantee compatibility.
 
 ## results.json
 
