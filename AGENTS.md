@@ -44,10 +44,15 @@
 - `assets/template/README.md` 说明每种 preprocess、engine、postprocess 类型的作用、全部参数及默认值和可选值，
   以及各平台需要传入的参数（如 RKNN 的 `image_input`、`dst_image_format`）；代码中类型、参数、默认值或平台行为
   变化时，在同一提交中同步更新它和 `hrtc_template.json`。
+- `assets/` 下只提交 `template/`。测试、基准和验证用到的每个模型在 `hrtc_template.json` 中有一个以模型命名的
+  algo（如 `yolov8n_detect`、`rtmpose_m_pose`），写明该模型的预处理和后处理配置，`data` 为 `assets/<夹具>/` 下的本地
+  文件（相对仓库根目录）；其来源、导出或转换方式、sha256 和验证结论写进 `template/README.md` 的 Test models，
+  转换脚本放在 `template/`。测试模型、图片、夹具 manifest 和输出结果只放本地、不提交，不另建夹具目录的 README、
+  manifest 或 sources 文件；新增或改动模型、测试时只更新 template。
 - 引擎推理耗时只由 `tools/hrt-model-bench` 测量；`benchmarks/` 只保留 `preprocess_bench`、
   `postprocess_bench`、`pipeline_bench`。
-- 模型文件、`.hrtc`、`assets/yolo/result/` 和下载到 `external/` 的 SDK 不提交；manifest 中的文件路径为
-  绝对路径或相对于运行时工作目录。
+- 模型文件、`.hrtc`、`assets/` 下除 `template/` 外的文件和下载到 `external/` 的 SDK 不提交；manifest 中的文件
+  路径为绝对路径或相对于运行时工作目录。
 
 ## 文件头与头文件保护
 
@@ -111,8 +116,9 @@
 - 测试放 `tests/<module>/<源文件>_test.cpp`（根目录只留构建入口），同一源文件的场景合并到一个
   测试文件；用例组以源文件大驼峰名加 `Test` 命名，目标为 `hybridrt_test_<源文件>`（重名时加目录前缀，如
   `hybridrt_test_example_image_model`）。命令行程序和示例用黑盒测试：运行构建出的程序，检查退出码、
-  输出和生成的文件（`tests/tools/run_tool.hpp`）。前后处理用构造的小数据验证；依赖真实模型或 SDK 的测试在缺失时
-  `GTEST_SKIP()`。
+  输出和生成的文件（`tests/tools/run_tool.hpp`）。前后处理用构造的小数据验证；跑真实模型的测试用
+  `tests/engine/template_config.hpp` 的 `template_algo()` 读取模板中的模型 algo，由 `hybridrt_enable_model_test()`
+  启用，模型、图片或 SDK 缺失时 `GTEST_SKIP()`。
 - 新增、合并或删除示例和测试时同步更新 CMake 与文档。
 
 ## 提交与验证
@@ -121,7 +127,7 @@
   `perf`（正文记录基准前后数据）、`chore`、`doc`、`test`、`ci`，不混用。
 - 提交围绕完整目的，含调用方、构建配置、测试、示例和规则更新，能独立构建；较大提交在正文说明
   改动原因、已授权的接口变化、构建测试结果及未验证的平台和后端。
-- 提交前检查差异，不含生成文件、临时文件、第三方代码、模型文件或 `docs/`；执行
+- 提交前检查差异，不含生成文件、临时文件、第三方代码、模型文件、`assets/` 下除 `template/` 外的文件或 `docs/`；执行
   `git diff --check`（有暂存时加 `--cached`）。
 - 只有用户明确要求时才提交或推送；推送不强制覆盖远程历史。
 - 修改后同步更新受影响的 CMake、调用方、示例和文档，运行相关构建和测试，报告未验证的平台和后端。
@@ -177,8 +183,8 @@
   cmake --build build/rk3588-gcc12 --parallel
   ```
 
-- 每次验证都重新构建，再用 tar 经 SSH 同步当前产物，不运行板端旧二进制；模型放 `assets/<名称>/`，清单中的路径相对
-  `~/hybridrt-test`；从该目录运行并设置 `LD_LIBRARY_PATH=lib`：
+- 每次验证都重新构建，再用 tar 经 SSH 同步当前产物，不运行板端旧二进制；模型放 `assets/<名称>/`，清单由模板中
+  该模型的 algo 生成（`rknn` 后端），路径相对 `~/hybridrt-test`；从该目录运行并设置 `LD_LIBRARY_PATH=lib`：
 
   ```sh
   tar czf - -C build/rk3588-gcc12 tests/hybridrt_test_general_keypoint tools/hrt-validate examples/hybridrt_example_image_model \

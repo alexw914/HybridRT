@@ -12,19 +12,19 @@
 
 namespace {
 
-constexpr hrt::Array<const char*, 2> kManifests{"yolo.json", "yolo_coreml.json"};
+constexpr hrt::Array<const char*, 2> kProviders{"cpu", "coreml"};
 
-// Latency of one call; args: task, manifest (0 ORT CPU, 1 ORT CoreML).
+// Latency of one call; args: task, provider (0 ORT CPU, 1 ORT CoreML).
 auto BM_Task(benchmark::State& state) -> void {
   cv::setNumThreads(1);
   const auto task = static_cast<std::size_t>(state.range(0));
-  const auto* manifest = kManifests.at(static_cast<std::size_t>(state.range(1)));
-  state.SetLabel(hrt::String(hrt::bench::kTasks.at(task)) + "/" + manifest);
-  const auto entry = hrt::bench::algo_entry(manifest, task);
+  const auto provider = static_cast<std::size_t>(state.range(1));
+  state.SetLabel(hrt::String(hrt::bench::kTasks.at(task)) + "/" + kProviders.at(provider));
+  const auto entry = hrt::bench::algo_entry(task, static_cast<hrt::bench::Provider>(provider));
   const auto bgr = hrt::bench::task_image(task);
   const auto image = hrt::bench::wrap_bgr(bgr);
   if (!entry.is_object() || !image) {
-    state.SkipWithError("assets/yolo manifest or image is missing");
+    state.SkipWithError("assets/yolo model or image is missing");
     return;
   }
   hrt::bench::with_result(task, [&]<typename Result>() -> void {
@@ -53,7 +53,7 @@ auto BM_Pooled(benchmark::State& state) -> void {
   {
     const std::lock_guard lock(mutex);
     auto& slot = models[{state.range(0), state.range(1), state.range(2)}];
-    const auto entry = hrt::bench::algo_entry("yolo.json", 0);
+    const auto entry = hrt::bench::algo_entry(0);
     if (slot == nullptr && entry.is_object() && image) {
       slot = Model::create(entry, {.preprocess = static_cast<std::size_t>(state.range(0)),
                                    .engine = static_cast<std::size_t>(state.range(1)),
@@ -62,7 +62,7 @@ auto BM_Pooled(benchmark::State& state) -> void {
     model = slot.get();
   }
   if (model == nullptr) {
-    state.SkipWithError("assets/yolo manifest or image is missing");
+    state.SkipWithError("assets/yolo model or image is missing");
     return;
   }
   for (auto _ : state)
@@ -73,7 +73,7 @@ auto BM_Pooled(benchmark::State& state) -> void {
 } // namespace
 
 BENCHMARK(BM_Task)
-    ->ArgNames({"task", "manifest"})
+    ->ArgNames({"task", "provider"})
     ->ArgsProduct({{0, 1, 2, 3, 4}, {0, 1}})
     ->Unit(benchmark::kMillisecond)
     ->UseRealTime();

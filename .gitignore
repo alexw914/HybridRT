@@ -19,7 +19,9 @@ install/
 
 # Models and test resources
 /resource/
-/assets/yolo/result/
+# Test fixtures: only the manifest reference is committed
+/assets/*
+!/assets/template/
 *.onnx
 *.mnn
 *.ncnn.param

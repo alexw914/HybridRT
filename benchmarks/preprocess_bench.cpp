@@ -98,11 +98,11 @@ auto BM_Task(benchmark::State& state) -> void {
   cv::setNumThreads(1);
   const auto task = static_cast<std::size_t>(state.range(0));
   state.SetLabel(hrt::bench::kTasks.at(task));
-  const auto entry = hrt::bench::algo_entry("yolo.json", task);
+  const auto entry = hrt::bench::algo_entry(task, hrt::bench::Provider::Cpu, false);
   const auto bgr = hrt::bench::task_image(task);
   const auto source = hrt::bench::wrap_bgr(bgr);
   if (!entry.is_object() || !source) {
-    state.SkipWithError("assets/yolo manifest or image is missing");
+    state.SkipWithError("assets/yolo/images is missing");
     return;
   }
   const auto param = entry["config"]["preprocess"].get<hrt::preprocess::ImagePreprocessorParam>();

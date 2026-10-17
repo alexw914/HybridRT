@@ -34,12 +34,12 @@ auto BM_Task(benchmark::State& state) -> void {
   cv::setNumThreads(1);
   const auto task = static_cast<std::size_t>(state.range(0));
   state.SetLabel(hrt::bench::kTasks.at(task));
-  const auto entry = hrt::bench::algo_entry("yolo.json", task);
+  const auto entry = hrt::bench::algo_entry(task);
   const auto bgr = hrt::bench::task_image(task);
   const auto source = hrt::bench::wrap_bgr(bgr);
   const auto algo = entry.is_object() ? hrt::hrtc::load_algo(entry) : std::nullopt;
   if (!algo || !source) {
-    state.SkipWithError("assets/yolo manifest, model or image is missing");
+    state.SkipWithError("assets/yolo model or image is missing");
     return;
   }
   auto engine = hrt::engine::Engine::create(algo->engines.front().engine_type);

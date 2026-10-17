@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: benchmarks/yolo_fixture.hpp
-// Description: Loads the YOLO task fixtures of assets/yolo shared by the
-//              benchmarks.
+// Description: Loads the YOLO task algos of the reference manifest shared by
+//              the benchmarks.
 // -----------------------------------------------------------------------------
 
 #ifndef HRT_BENCHMARKS_YOLO_FIXTURE_HPP
@@ -17,21 +17,40 @@
 
 namespace hrt::bench {
 
-// The algos of assets/yolo/yolo.json, in manifest order; the benchmark
-// argument indexes this list.
+// The benchmarked tasks; the benchmark argument indexes this list.
 inline constexpr Array<const char*, 5> kTasks{"detect", "segment", "pose", "obb", "classify"};
 
-// Entry `task` of "algos" in assets/yolo/<manifest>, or null when the fixture
-// is missing. Its model paths are relative to the repository root, which
-// becomes the working directory.
-inline auto algo_entry(std::string_view manifest, std::size_t task) -> kitzoo::json::Json {
+// Their algos in assets/template/hrtc_template.json.
+inline constexpr Array<const char*, 5> kAlgos{"yolov8n_detect", "yolov8n_segment", "yolov8n_pose", "yolov8n_obb",
+                                              "yolov8n_classify"};
+
+enum class Provider {
+  Cpu,
+  CoreMl,
+};
+
+// The template algo of `task` on the ORT `provider`, or null when its local
+// model under assets/ is missing and `need_model`. Model paths are relative to
+// the repository root, which becomes the working directory.
+inline auto algo_entry(std::size_t task, Provider provider = Provider::Cpu,
+                       bool need_model = true) -> kitzoo::json::Json {
   std::filesystem::current_path(HRT_SOURCE_DIR);
-  const kitzoo::json::Reader reader(std::filesystem::path("assets/yolo") / manifest);
+  const kitzoo::json::Reader reader(std::filesystem::path("assets/template/hrtc_template.json"));
   const auto& json = reader.raw();
   const auto algos = json.is_object() ? json.find("algos") : json.end();
-  if (algos == json.end() || !algos->is_array() || task >= algos->size())
+  if (algos == json.end() || !algos->is_array() || task >= kAlgos.size())
     return {};
-  return (*algos)[task];
+  for (auto algo : *algos) {
+    if (algo.value("name", String{}) != kAlgos.at(task))
+      continue;
+    auto& backend = algo["config"]["engine"]["backends"][0];
+    if (need_model && !std::filesystem::is_regular_file(backend.value("data", String{})))
+      return {};
+    if (provider == Provider::CoreMl)
+      backend["config"]["execution_provider"] = "coreml";
+    return algo;
+  }
+  return {};
 }
 
 // The test image of `task` as BGR: the airport for OBB, the bus otherwise.

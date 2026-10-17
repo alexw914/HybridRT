@@ -85,10 +85,10 @@
       }
     },
     {
-      "name": "detr_detect",
+      "name": "rtdetr_l_detect",
       "config": {
         "preprocess": {"resize_type": "normal", "std": [255, 255, 255]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "models/rtdetr-l.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/rtdetr/models/rtdetr-l.onnx"}]},
         "postprocess": {
           "type": "DetrDetect",
           "class_num": 80,
@@ -102,10 +102,10 @@
       }
     },
     {
-      "name": "general_detect",
+      "name": "yolov8n_detect",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "models/general_detect.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n.onnx"}]},
         "postprocess": {"type": "GeneralDetect", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
     },
@@ -140,26 +140,26 @@
       }
     },
     {
-      "name": "general_rotated",
+      "name": "yolov8n_obb",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "models/general_rotated.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-obb.onnx"}]},
         "postprocess": {"type": "GeneralRotated", "class_num": 15, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
     },
     {
-      "name": "general_classify",
+      "name": "yolov8n_classify",
       "config": {
-        "preprocess": {"resize_type": "center_crop", "resize_short_size": 256, "mean": [123.675, 116.28, 103.53], "std": [58.395, 57.12, 57.375]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "models/general_classify.onnx"}]},
+        "preprocess": {"std": [255, 255, 255]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-cls.onnx"}]},
         "postprocess": {"type": "GeneralClassify", "classify_postprocess_type": "none"}
       }
     },
     {
-      "name": "yolo_keypoint",
+      "name": "yolov8n_pose",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "models/yolo_keypoint.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-pose.onnx"}]},
         "postprocess": {
           "type": "YoloKeypoint",
           "class_num": 1,
@@ -168,6 +168,27 @@
           "confidence_threshold": [0.25],
           "iou_threshold": [0.45]
         }
+      }
+    },
+    {
+      "name": "rtmpose_m_pose",
+      "config": {
+        "preprocess": {
+          "resize_type": "pad_outside",
+          "pad_scale": 1.25,
+          "mean": [123.675, 116.28, 103.53],
+          "std": [58.395, 57.12, 57.375]
+        },
+        "engine": {
+          "backends": [
+            {
+              "engine_type": "ort",
+              "config": {"input_shapes": {"input": [1, 3, 256, 192]}},
+              "data": "assets/rtmpose/models/rtmpose-m_simcc-body7_256x192.onnx"
+            }
+          ]
+        },
+        "postprocess": {"type": "GeneralKeypoint", "general_keypoint_type": "simcc", "keypoint_threshold": 0.3}
       }
     },
     {
@@ -185,10 +206,10 @@
       }
     },
     {
-      "name": "instance_segment",
+      "name": "yolov8n_segment",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "models/instance_segment.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-seg.onnx"}]},
         "postprocess": {
           "type": "InstanceSegment",
           "class_num": 80,

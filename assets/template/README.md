@@ -2,8 +2,11 @@
 
 `hrtc_template.json` lists every manifest field. The first algo shows all preprocess keys
 and one backend of each engine type with all of its config keys; each following algo shows
-one postprocessor type. Values are defaults, or typical YOLO values where the default would not fit.
-It is a reference, not a package: its model files do not exist. Check a manifest with
+one postprocessor type. Algos named after a model (`yolov8n_detect`, `rtmpose_m_pose`, ...) are the
+configs the tests and benchmarks run, with the model's own preprocessing; their `data` points at
+a local fixture under `assets/` (see [Test models](#test-models)), relative to the repository
+root. The others are type references whose model files do not exist. Values are defaults, or
+typical YOLO values where the default would not fit. Check a manifest with
 `hrt-compress -c -j <manifest>`; the ORT, ncnn and MNN engine tests load the backend configs
 of the first algo.
 
@@ -138,3 +141,37 @@ and `results`, whose items always carry every field, empty when the task has non
 | `keypoints` | `[x, y, score, visible]` per keypoint, `visible` 0 unlabeled, 1 invisible, 2 visible. |
 | `mask` | `{"rect": [x, y, w, h], "rle": [...]}`: row-major run lengths over `rect`, alternating 0 and 1, starting with 0; `null` without a mask. |
 | `cls` | Classify, one item per engine output: `output` index, `topk` `[[class, score], ...]` (5), `scores` by class. |
+
+## Test models
+
+Only `assets/template/` is committed. Test models, images and their outputs stay in local,
+untracked directories under `assets/`, at the paths the template algos name; tests and
+benchmarks that need them skip when they are missing. `hybridrt_example_image_model` reads only the
+chosen algo (`-m assets/template/hrtc_template.json -a yolov8n_detect`). `hrt-validate`,
+`hrt-model-bench` and `hrt-compress` read every model file of a manifest, so copy one algo into its
+own manifest first; from the repository root:
+
+```sh
+python -c "import json, sys; m = json.load(open('assets/template/hrtc_template.json')); m['algos'] = [a for a in m['algos'] if a['name'] == sys.argv[1]]; json.dump(m, open(sys.argv[1] + '.json', 'w'))" yolov8n_detect
+hrt-validate -m yolov8n_detect.json -n yolov8n_detect -e ort -i assets/yolo/images -r drawn/
+```
+
+| Algo | Local file | Source | sha256 |
+| --- | --- | --- | --- |
+| images | `assets/yolo/images/bus.jpg`, `airport.jpg` | [bus.jpg](https://github.com/ultralytics/assets/raw/refs/heads/main/im/bus.jpg), [airport.jpg](https://github.com/ultralytics/assets/raw/refs/heads/main/im/airport.jpg) | `c02019c4...`, `7daff53a...` |
+| `yolov8n_detect` | `assets/yolo/models/yolov8n.onnx` | [unileon-robotics/YOLO8-ONNX](https://huggingface.co/unileon-robotics/YOLO8-ONNX/resolve/main/yolov8n.onnx) | `fa2c856b...` |
+| `yolov8n_segment` | `assets/yolo/models/yolov8n-seg.onnx` | same repository, `yolov8n-seg.onnx` | `9373c971...` |
+| `yolov8n_pose` | `assets/yolo/models/yolov8n-pose.onnx` | same repository, `yolov8n-pose.onnx` | `6fc546ff...` |
+| `yolov8n_obb` | `assets/yolo/models/yolov8n-obb.onnx` | same repository, `yolov8n-obb.onnx` | `d87f86b2...` |
+| `yolov8n_classify` | `assets/yolo/models/yolov8n-cls.onnx` | same repository, `yolov8n-cls.onnx` | `29e1963b...` |
+| `rtdetr_l_detect` | `assets/rtdetr/models/rtdetr-l.onnx` | [rtdetr-l.pt](https://github.com/ultralytics/assets/releases/download/v8.1.0/rtdetr-l.pt), Ultralytics 8.1.4 `export(format="onnx", imgsz=640, opset=17)` | `8090814f...` |
+| `rtmpose_m_pose` | `assets/rtmpose/models/rtmpose-m_simcc-body7_256x192.onnx` | `end2end.onnx` of the [RTMPose-m body7 SDK](https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504.zip) | `5c0a4bf6...` |
+
+The `yolov8n_*` models have a 480 x 640 input; `yolov8n_classify` resizes directly instead of the
+square center crop, so it is a pipeline check, not an accuracy reference. `rtmpose_m_pose` runs on
+one person per call: pass each `yolov8n_detect` class 0 box as `src_rect`.
+
+Results checked against independent references on bus.jpg (ONNX Runtime 1.31.0, x86_64):
+
+- `rtmpose_m_pose` after `yolov8n_detect`: visible keypoints within 5 px of mmpose's affine crop
+  and SimCC decoding, visibility 17/17 for all 4 people.

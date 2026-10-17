@@ -43,18 +43,17 @@ cmake -S . -B build/rk3588 -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=<aa
 cmake --build build/rk3588 --parallel
 ```
 
-Run an algorithm on an image from a package or straight from its manifest (examples need OpenCV
-imgcodecs). `assets/yolo` versions the manifests and test images but not the models: download
-those listed in `assets/yolo/sources.json` into `assets/yolo/models/` first. Run from the
-repository root:
+Run an algorithm on an image from a package or straight from a manifest (examples need OpenCV
+imgcodecs). The model algos of `assets/template/hrtc_template.json` name local test fixtures under
+`assets/`, which are not committed; their sources are listed in `assets/template/README.md`. Run
+from the repository root:
 
 ```sh
-build/tools/hrt-compress -j assets/yolo/yolo.json -o assets/yolo/yolo.hrtc
-build/debug/examples/hybridrt_example_image_model -m assets/yolo/yolo.hrtc -i assets/yolo/images/bus.jpg -o result.jpg
-build/debug/examples/hybridrt_example_image_model -m assets/yolo/yolo.json -a segment -i assets/yolo/images/bus.jpg -o segment.jpg
+build/debug/examples/hybridrt_example_image_model -m assets/template/hrtc_template.json -a yolov8n_segment \
+    -i assets/yolo/images/bus.jpg -o segment.jpg
 ```
 
-Benchmarks (Release, `-DHYBRIDRT_BUILD_BENCHMARKS=ON`) run on the `assets/yolo` tasks:
+Benchmarks (Release, `-DHYBRIDRT_BUILD_BENCHMARKS=ON`) run the `yolov8n_*` template algos:
 preprocessing, postprocessing, and the whole `ImageModel` call including pooled
 multi-threaded throughput:
 
@@ -88,9 +87,8 @@ target_link_libraries(app PRIVATE hrt::hybridrt)
 | `hrt::hrtc` | The `.hrtc` model package: algorithms, configs, and per-backend model files. |
 | `hrt::hybridrt` | Model execution with memory, contexts, engines, image preprocessing, task postprocessing, and OpenCV result drawing in `core/view`. |
 
-Detection supports YOLO and DETR query outputs; see `assets/rtdetr` for an Ultralytics RT-DETR manifest.
-Top-down keypoints decode heatmap (HRNet), SimCC (RTMPose) and point outputs; see `assets/rtmpose` for a
-YOLOv8 person detector and RTMPose manifest.
+Detection supports YOLO and DETR query outputs. Top-down keypoints decode heatmap (HRNet), SimCC (RTMPose)
+and point outputs; the template algos show each model's config.
 
 `tools/hrt-compress` packs a JSON manifest (every field: `assets/template/hrtc_template.json`) into a
 `.hrtc` file, prints or extracts existing packages, and checks their configs:

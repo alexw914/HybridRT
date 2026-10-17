@@ -26,6 +26,17 @@ function(hybridrt_add_unit_test name)
     endif()
 endfunction()
 
+# hybridrt_enable_model_test(name)
+#
+# With ONNX Runtime and OpenCV imgcodecs, defines HRT_ORT_MODEL_TEST so the test
+# runs template algos on the local fixtures under assets/ (skipped when absent).
+function(hybridrt_enable_model_test name)
+    if(HRT_USE_ORT AND TARGET opencv_imgcodecs)
+        target_link_libraries(hybridrt_test_${name} PRIVATE opencv_imgcodecs)
+        target_compile_definitions(hybridrt_test_${name} PRIVATE HRT_ORT_MODEL_TEST)
+    endif()
+endfunction()
+
 # hybridrt_add_program_test(name PROGRAM <target> DEFINE <macro> SOURCES ... [DEPENDS ...])
 #
 # A black-box test of a command-line program: <macro> holds the path of the
@@ -74,10 +85,7 @@ endif()
 
 hybridrt_add_unit_test(detect SOURCES postprocess/detect_test.cpp DEPENDS hrt::hybridrt)
 hybridrt_add_unit_test(detr_detect SOURCES postprocess/detr_detect_test.cpp DEPENDS hrt::hybridrt)
-if(HRT_USE_ORT AND TARGET opencv_imgcodecs)
-    target_link_libraries(hybridrt_test_detr_detect PRIVATE opencv_imgcodecs)
-    target_compile_definitions(hybridrt_test_detr_detect PRIVATE HRT_RTDETR_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
-endif()
+hybridrt_enable_model_test(detr_detect)
 hybridrt_add_unit_test(rotated SOURCES postprocess/rotated_test.cpp DEPENDS hrt::hybridrt)
 hybridrt_add_unit_test(general_classify SOURCES postprocess/general_classify_test.cpp DEPENDS hrt::hybridrt)
 hybridrt_add_unit_test(general_keypoint SOURCES postprocess/general_keypoint_test.cpp DEPENDS hrt::hybridrt)

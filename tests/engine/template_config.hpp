@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: tests/engine/template_config.hpp
-// Description: Reads a backend's config from the reference manifest
-//              assets/template/hrtc_template.json.
+// Description: Reads backend configs and model algos from the reference
+//              manifest assets/template/hrtc_template.json.
 // -----------------------------------------------------------------------------
 
 #ifndef HRT_ENGINE_TEMPLATE_CONFIG_HPP
@@ -17,6 +17,11 @@
 
 namespace hrt::test {
 
+// The repository root, which the template's fixture paths are relative to.
+inline auto source_root() -> std::filesystem::path {
+  return std::filesystem::path(HRT_TEMPLATE_DIR).parent_path().parent_path();
+}
+
 // The "config" of the first algo's backend of `engine_type`, as JSON text.
 inline auto template_config(std::string_view engine_type) -> String {
   const kitzoo::json::Reader reader(std::filesystem::path(HRT_TEMPLATE_DIR) / "hrtc_template.json");
@@ -25,6 +30,27 @@ inline auto template_config(std::string_view engine_type) -> String {
       return backend.value("config", kitzoo::json::Json::object()).dump();
   }
   return {};
+}
+
+// Algo `name` of the template as {"name", "config"}, with backend model paths
+// made absolute against the repository root; null when there is none.
+inline auto template_algo(std::string_view name) -> kitzoo::json::Json {
+  const kitzoo::json::Reader reader(std::filesystem::path(HRT_TEMPLATE_DIR) / "hrtc_template.json");
+  for (auto algo : reader.raw()["algos"]) {
+    if (!algo["name"].is_string() || algo["name"].get_ref<const String&>() != name)
+      continue;
+    for (auto& backend : algo["config"]["engine"]["backends"]) {
+      if (backend.contains("data") && backend["data"].is_string())
+        backend["data"] = (source_root() / backend["data"].get_ref<const String&>()).string();
+    }
+    return algo;
+  }
+  return {};
+}
+
+// The model file of the first backend of a template_algo() result.
+inline auto template_model(const kitzoo::json::Json& algo) -> std::filesystem::path {
+  return algo["config"]["engine"]["backends"][0]["data"].get<String>();
 }
 
 } // namespace hrt::test

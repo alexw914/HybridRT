@@ -13,9 +13,10 @@
 
 #include "fake_engine.hpp"
 
-#ifdef HRT_RTDETR_SOURCE_DIR
-#include <filesystem>
+#ifdef HRT_ORT_MODEL_TEST
 #include <opencv2/imgcodecs.hpp>
+
+#include "../engine/template_config.hpp"
 #endif
 
 namespace {
@@ -175,20 +176,13 @@ TEST(DetrDetectTest, RejectsMismatchedSeparateQueriesAndOutputIndexes) {
     EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("DetrDetect", Json::parse(text), valid), "");
 }
 
-#ifdef HRT_RTDETR_SOURCE_DIR
+#ifdef HRT_ORT_MODEL_TEST
 TEST(DetrDetectTest, RunsUltralyticsModelWhenAvailable) {
-  const std::filesystem::path root(HRT_RTDETR_SOURCE_DIR);
-  const auto path = root / "assets/rtdetr/models/rtdetr-l.onnx";
-  if (!std::filesystem::is_regular_file(path))
-    GTEST_SKIP() << "Ultralytics RT-DETR-L ONNX fixture is unavailable";
-  auto algo = Json::parse(R"({"name":"rtdetr","config":{
-    "preprocess":{"resize_type":"normal","std":[255,255,255]},
-    "engine":{"backends":[{"engine_type":"ort"}]},
-    "postprocess":{"type":"DetrDetect","class_num":80,"confidence_threshold":[0.25]}}})");
-  algo["config"]["engine"]["backends"][0]["data"] = path.string();
+  const auto algo = hrt::test::template_algo("rtdetr_l_detect");
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/bus.jpg").string());
+  if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
+    GTEST_SKIP() << "Ultralytics RT-DETR-L ONNX fixture or bus.jpg is unavailable";
   const auto model = hrt::model::ImageModel<hrt::postprocess::DetectResultMap>::create(algo);
-  auto bgr = cv::imread((root / "assets/yolo/images/bus.jpg").string());
-  ASSERT_FALSE(bgr.empty());
   const auto image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, bgr.data, hrt::core::ImageFormat::InterBgr,
                                             {bgr.cols, bgr.rows}, hrt::core::DataType::Uint8, bgr.step);
   ASSERT_TRUE(image);
