@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: tests/postprocess/yolo_keypoint_test.cpp
+// File: tests/postprocess/general_yolo_pose_test.cpp
 // Description: Tests decoding of single-output pose heads.
 // -----------------------------------------------------------------------------
 
@@ -21,11 +21,11 @@ auto config() -> Json {
   return Json::parse(R"({"class_num": 1, "keypoint_num": 2, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
 }
 
-TEST(YoloKeypointTest, KeepsTheBestBoxWithItsKeypoints) {
+TEST(GeneralYoloPoseTest, KeepsTheBestBoxWithItsKeypoints) {
   // [1, 4 + 1 class + 2 keypoints x 3, 2 candidates], one row per value.
   const auto output = proto(DataType::Float32, {1, 11, 2});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
-  auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("YoloKeypoint", config(), engine);
+  auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("GeneralYoloPose", config(), engine);
 
   // Candidate 0: box (10, 10)-(30, 30), score 0.9, keypoints (12, 14) visible
   // and (28, 26) hidden. Candidate 1 overlaps it with a lower score.
@@ -52,11 +52,11 @@ TEST(YoloKeypointTest, KeepsTheBestBoxWithItsKeypoints) {
   EXPECT_EQ(object.keypoints[1].visible, KeypointVisible::Invisible);
 }
 
-TEST(YoloKeypointTest, DecodesKeypointsWithoutVisibility) {
+TEST(GeneralYoloPoseTest, DecodesKeypointsWithoutVisibility) {
   // [1, 4 + 1 class + 2 keypoints x 2, 1 candidate].
   const auto output = proto(DataType::Float32, {1, 9, 1});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
-  auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("YoloKeypoint", config(), engine);
+  auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("GeneralYoloPose", config(), engine);
 
   hrt::postprocess::KeypointResultMap result;
   ASSERT_TRUE(postprocessor->process(result,
@@ -70,11 +70,11 @@ TEST(YoloKeypointTest, DecodesKeypointsWithoutVisibility) {
   EXPECT_EQ(keypoints[1].visible, KeypointVisible::Visible);
 }
 
-TEST(YoloKeypointTest, AbortsOnOutputsThatDoNotFit) {
+TEST(GeneralYoloPoseTest, AbortsOnOutputsThatDoNotFit) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {proto(DataType::Float32, {1, 10, 4})});
-  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloKeypoint", config(), engine), "");
-  EXPECT_EQ(hrt::postprocess::check_config("YoloKeypoint", Json::parse(R"({"keypoints": 17})")).size(), 1U);
+  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("GeneralYoloPose", config(), engine), "");
+  EXPECT_EQ(hrt::postprocess::check_config("GeneralYoloPose", Json::parse(R"({"keypoints": 17})")).size(), 1U);
 }
 
 } // namespace

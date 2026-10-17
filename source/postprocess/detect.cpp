@@ -40,7 +40,7 @@ auto make_detect(std::string_view type) -> UniquePtr<DetectPostprocessor> {
     return make_general_detect();
   if (type == "DetrDetect")
     return make_detr_detect();
-  if (type == "E2eDetect")
+  if (type == "E2EDetect")
     return make_e2e_detect();
   return nullptr;
 }

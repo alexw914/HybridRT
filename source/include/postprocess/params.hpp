@@ -118,7 +118,7 @@ auto make_general_classify() -> UniquePtr<ClassifyPostprocessor>;
 
 auto make_general_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
-auto make_yolo_keypoint() -> UniquePtr<KeypointPostprocessor>;
+auto make_general_yolo_pose() -> UniquePtr<KeypointPostprocessor>;
 
 auto make_rtmo_keypoint() -> UniquePtr<KeypointPostprocessor>;
 

@@ -1,7 +1,7 @@
 {
   "model": "yolov8n-pose",
   "task": "keypoint",
-  "type": "YoloKeypoint",
+  "type": "GeneralYoloPose",
   "engine": "ort",
   "images": [
     {

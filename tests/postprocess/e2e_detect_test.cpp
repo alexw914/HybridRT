@@ -26,11 +26,11 @@ using hrt::test::FakeEngine;
 using hrt::test::proto;
 using Json = kitzoo::json::Json;
 
-TEST(E2eDetectTest, MapsRowsWithoutNms) {
+TEST(E2EDetectTest, MapsRowsWithoutNms) {
   const auto output = proto(DataType::Float32, {1, 5, 6});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
   const auto config = Json::parse(R"({"class_num":2,"confidence_threshold":[0.5,0.7]})");
-  auto decoder = hrt::postprocess::create_detect_postprocessor("E2eDetect", config, engine);
+  auto decoder = hrt::postprocess::create_detect_postprocessor("E2EDetect", config, engine);
   const auto nan = std::numeric_limits<float>::quiet_NaN();
   const hrt::Vector<float> values{
       // Two overlapping boxes both stay: the export already deduplicated them.
@@ -79,13 +79,13 @@ TEST(E2eDetectTest, MapsRowsWithoutNms) {
   EXPECT_FLOAT_EQ(box.rect.height, 20.0F);
   EXPECT_FLOAT_EQ(box.score, 0.9F);
   EXPECT_EQ(box.type, 0);
-  EXPECT_EQ(hrt::model::task_of("E2eDetect"), hrt::model::Task::Detect);
+  EXPECT_EQ(hrt::model::task_of("E2EDetect"), hrt::model::Task::Detect);
 }
 
-TEST(E2eDetectTest, DequantizesAndClipsToSourceRegion) {
+TEST(E2EDetectTest, DequantizesAndClipsToSourceRegion) {
   const auto output = proto(DataType::Int8, {1, 1, 6});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 100, 100})}, {output});
-  auto decoder = hrt::postprocess::create_detect_postprocessor("E2eDetect", Json::parse(R"({"class_num":2,
+  auto decoder = hrt::postprocess::create_detect_postprocessor("E2EDetect", Json::parse(R"({"class_num":2,
       "confidence_threshold":[0.25]})"),
                                                                engine);
   // real = q: box (-20, 30)-(60, 90), score 1 after scale, class 1.
@@ -99,22 +99,22 @@ TEST(E2eDetectTest, DequantizesAndClipsToSourceRegion) {
   EXPECT_FLOAT_EQ(box.rect.height, 60.0F);
 }
 
-TEST(E2eDetectTest, AbortsOnInvalidConfigOrOutputs) {
+TEST(E2EDetectTest, AbortsOnInvalidConfigOrOutputs) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto input = proto(DataType::Float32, {1, 3, 8, 8});
   const auto config = Json::parse(R"({"class_num":80,"confidence_threshold":[0.25]})");
   for (const auto& shape : hrt::Vector<hrt::core::Shape>{{1, 84, 8400}, {1, 300, 7}, {2, 300, 6}, {300, 6}}) {
     FakeEngine engine({input}, {proto(DataType::Float32, shape)});
-    EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("E2eDetect", config, engine), "");
+    EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("E2EDetect", config, engine), "");
   }
   FakeEngine valid({input}, {proto(DataType::Float32, {1, 300, 6})});
   for (const char* text : {R"({"class_num":0,"confidence_threshold":[0.25]})", R"({"class_num":80})",
                            R"({"class_num":80,"confidence_threshold":[0.25],"iou_threshold":[0.45]})"})
-    EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("E2eDetect", Json::parse(text), valid), "");
+    EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("E2EDetect", Json::parse(text), valid), "");
 }
 
 #ifdef HRT_ORT_MODEL_TEST
-TEST(E2eDetectTest, RunsUltralyticsExportsWhenAvailable) {
+TEST(E2EDetectTest, RunsUltralyticsExportsWhenAvailable) {
   auto algo = hrt::test::template_algo("yolo26n_e2e_detect");
   const auto dir = hrt::test::template_model(algo).parent_path();
   auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/bus.jpg").string());

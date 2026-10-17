@@ -106,7 +106,7 @@
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/e2e/models/yolo26n.onnx"}]},
-        "postprocess": {"type": "E2eDetect", "class_num": 80, "confidence_threshold": [0.25]}
+        "postprocess": {"type": "E2EDetect", "class_num": 80, "confidence_threshold": [0.25]}
       }
     },
     {
@@ -122,7 +122,7 @@
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/e2e/models/yolo26n-obb.onnx"}]},
-        "postprocess": {"type": "E2eRotated", "class_num": 15, "confidence_threshold": [0.25]}
+        "postprocess": {"type": "E2ERotated", "class_num": 15, "confidence_threshold": [0.25]}
       }
     },
     {
@@ -177,7 +177,7 @@
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-pose.onnx"}]},
         "postprocess": {
-          "type": "YoloKeypoint",
+          "type": "GeneralYoloPose",
           "class_num": 1,
           "keypoint_num": 17,
           "keypoint_threshold": 0.5,
@@ -192,7 +192,7 @@
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/e2e/models/yolo26n-pose.onnx"}]},
         "postprocess": {
-          "type": "E2eKeypoint",
+          "type": "E2EKeypoint",
           "class_num": 1,
           "keypoint_num": 17,
           "keypoint_threshold": 0.5,
@@ -262,7 +262,7 @@
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/e2e/models/yolo26n-seg.onnx"}]},
-        "postprocess": {"type": "E2eSegment", "class_num": 80, "mask_threshold": 0.5, "confidence_threshold": [0.25]}
+        "postprocess": {"type": "E2ESegment", "class_num": 80, "mask_threshold": 0.5, "confidence_threshold": [0.25]}
       }
     },
     {

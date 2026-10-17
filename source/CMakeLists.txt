@@ -56,7 +56,7 @@ add_library(hybridrt STATIC
     postprocess/keypoint/general_keypoint.cpp
     postprocess/keypoint/e2e_keypoint.cpp
     postprocess/keypoint/rtmo_keypoint.cpp
-    postprocess/keypoint/yolo_keypoint.cpp
+    postprocess/keypoint/general_yolo_pose.cpp
     postprocess/segment.cpp
     postprocess/segment/instance_segment.cpp
     postprocess/segment/semantic_segment.cpp

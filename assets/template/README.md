@@ -85,15 +85,15 @@ each in [0, 1].
 | `YoloV8Detect`, `YoloV8Rotated` | `class_num`, `strides` (one per output head), `reg_max` (16), thresholds |
 | `YoloV5Detect`, `YoloV5Rotated` | `class_num`, `strides` (one per output head), `anchors` (one list per head: w0, h0, w1, h1, ...), thresholds |
 | `GeneralDetect`, `GeneralRotated` | `class_num`, thresholds; decoded `[1, 4 + classes (+ angle), N]` output |
-| `E2eDetect` | `class_num`, `confidence_threshold`; Ultralytics end-to-end `[1, N, 6]` output, no NMS |
-| `E2eRotated` | `class_num`, `confidence_threshold`; end-to-end OBB `[1, N, 7]` |
+| `E2EDetect` | `class_num`, `confidence_threshold`; Ultralytics end-to-end `[1, N, 6]` output, no NMS |
+| `E2ERotated` | `class_num`, `confidence_threshold`; end-to-end OBB `[1, N, 7]` |
 | `DetrDetect` | `class_num`, `confidence_threshold` (0.25), `output_format` (`combined`/`separate`), `score_activation` (`none`/`sigmoid`/`softmax`), `background_class` (-1: none), `boxes_output` (0), `scores_output` (1) |
-| `YoloKeypoint` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), thresholds |
-| `E2eKeypoint` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), `confidence_threshold`; end-to-end pose `[1, N, 6 + K x (2 \| 3)]` |
+| `GeneralYoloPose` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), thresholds |
+| `E2EKeypoint` | `class_num`, `keypoint_num`, `keypoint_threshold` (0.5), `confidence_threshold`; end-to-end pose `[1, N, 6 + K x (2 \| 3)]` |
 | `RtmoKeypoint` | `confidence_threshold` ([0.15]), `iou_threshold` ([0.65]), `keypoint_threshold` (0.3); one class |
 | `GeneralKeypoint` | `general_keypoint_type` (`heatmap`/`simcc`/`point_with_visible`/`point_channel_first`/`point_channel_last`), `heatmap_refine` (`dark`/`none`), `score_activation` (`none`/`sigmoid`), `keypoint_threshold` (0) |
 | `InstanceSegment` | `class_num`, `mask_threshold` (0.5), thresholds |
-| `E2eSegment` | `class_num`, `mask_threshold` (0.5), `confidence_threshold`; end-to-end `[1, N, 6 + masks]` plus prototypes |
+| `E2ESegment` | `class_num`, `mask_threshold` (0.5), `confidence_threshold`; end-to-end `[1, N, 6 + masks]` plus prototypes |
 | `SemanticSegment` | none |
 | `GeneralClassify` | `classify_postprocess_type`: `none`, `sigmoid`, `softmax` |
 
@@ -122,15 +122,15 @@ Ultralytics end-to-end exports have one row per kept object, already deduplicate
 and `iou_threshold` is not accepted; padding rows score 0. Ultralytics 8.4 writes them with
 `export(format="onnx", nms=False)` for one-to-one heads (YOLOv10, YOLO26) and `nms=True` for any
 generation; without `nms` it exports the raw `[1, 4 + classes + extra, anchors]` heads, which
-`GeneralDetect`, `YoloKeypoint`, `InstanceSegment` and `GeneralRotated` decode for YOLO26 as for
+`GeneralDetect`, `GeneralYoloPose`, `InstanceSegment` and `GeneralRotated` decode for YOLO26 as for
 YOLOv8. Columns, in network-input pixels:
 
 | Type | Row |
 | --- | --- |
-| `E2eDetect` | x1, y1, x2, y2, score, class id |
-| `E2eKeypoint` | x1, y1, x2, y2, score, class id, then x, y (and visibility) per keypoint |
-| `E2eSegment` | x1, y1, x2, y2, score, class id, mask coefficients; a second `[1, masks, mh, mw]` prototype output, in either order |
-| `E2eRotated` | center x, center y, width, height, score, class id, angle in radians |
+| `E2EDetect` | x1, y1, x2, y2, score, class id |
+| `E2EKeypoint` | x1, y1, x2, y2, score, class id, then x, y (and visibility) per keypoint |
+| `E2ESegment` | x1, y1, x2, y2, score, class id, mask coefficients; a second `[1, masks, mh, mw]` prototype output, in either order |
+| `E2ERotated` | center x, center y, width, height, score, class id, angle in radians |
 
 `RtmoKeypoint` decodes one-stage RTMO pose models with fixed outputs, boxes `[1, M, 5]` (x1, y1, x2,
 y2, score) and keypoints `[1, M, K, 3]` (x, y, visibility) in network-input pixels, in either output
@@ -212,7 +212,7 @@ Results checked against independent references on bus.jpg (ONNX Runtime 1.31.0, 
   `predict` on the same ONNX files: identical boxes, scores, classes, keypoints and angles on bus.jpg
   and airport.jpg; mask IoU 0.966 to 0.997 against `retina_masks=True`. On airport.jpg the YOLO26
   segment export keeps one more box at score 0.253 because of the rounding above.
-- Raw YOLO26 pose, segment and OBB exports (no `nms`) through `YoloKeypoint`, `InstanceSegment` and
+- Raw YOLO26 pose, segment and OBB exports (no `nms`) through `GeneralYoloPose`, `InstanceSegment` and
   `GeneralRotated`: the same objects and scores as Ultralytics `predict`, except one borderline
   airport.jpg segment box from the same rounding. These exports are not template algos.
 - `rtmo_s_pose`: identical boxes, scores and visible keypoints to the original model's in-graph NMS.

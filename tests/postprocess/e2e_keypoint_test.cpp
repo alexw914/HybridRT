@@ -25,13 +25,13 @@ using hrt::test::FakeEngine;
 using hrt::test::proto;
 using Json = kitzoo::json::Json;
 
-TEST(E2eKeypointTest, MapsRowsAndKeypointsWithoutNms) {
+TEST(E2EKeypointTest, MapsRowsAndKeypointsWithoutNms) {
   // Two keypoints with visibility: 6 + 2 x 3 columns.
   const auto output = proto(DataType::Float32, {1, 3, 12});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
   const auto config =
       Json::parse(R"({"class_num": 1, "keypoint_num": 2, "confidence_threshold": [0.5], "keypoint_threshold": 0.4})");
-  auto decoder = hrt::postprocess::create_keypoint_postprocessor("E2eKeypoint", config, engine);
+  auto decoder = hrt::postprocess::create_keypoint_postprocessor("E2EKeypoint", config, engine);
   const hrt::Vector<float> values{
       10,
       10,
@@ -89,14 +89,14 @@ TEST(E2eKeypointTest, MapsRowsAndKeypointsWithoutNms) {
   EXPECT_EQ(object.keypoints[0].visible, hrt::postprocess::KeypointVisible::Visible);
   EXPECT_FLOAT_EQ(object.keypoints[1].score, 0.2F);
   EXPECT_EQ(object.keypoints[1].visible, hrt::postprocess::KeypointVisible::Invisible);
-  EXPECT_EQ(hrt::model::task_of("E2eKeypoint"), hrt::model::Task::Keypoint);
+  EXPECT_EQ(hrt::model::task_of("E2EKeypoint"), hrt::model::Task::Keypoint);
 }
 
-TEST(E2eKeypointTest, ReadsKeypointsWithoutVisibility) {
+TEST(E2EKeypointTest, ReadsKeypointsWithoutVisibility) {
   const auto output = proto(DataType::Float32, {1, 1, 8});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
   const auto config = Json::parse(R"({"class_num": 2, "keypoint_num": 1, "confidence_threshold": [0.25]})");
-  auto decoder = hrt::postprocess::create_keypoint_postprocessor("E2eKeypoint", config, engine);
+  auto decoder = hrt::postprocess::create_keypoint_postprocessor("E2EKeypoint", config, engine);
   hrt::postprocess::KeypointResultMap result;
   ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of<float>(output, {10, 10, 30, 20, 0.9F, 1, 20, 15})},
                                hrt::test::identity(40, 40)));
@@ -107,24 +107,24 @@ TEST(E2eKeypointTest, ReadsKeypointsWithoutVisibility) {
   EXPECT_EQ(point.visible, hrt::postprocess::KeypointVisible::Visible);
 }
 
-TEST(E2eKeypointTest, AbortsOnInvalidConfigOrOutputs) {
+TEST(E2EKeypointTest, AbortsOnInvalidConfigOrOutputs) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto input = proto(DataType::Float32, {1, 3, 8, 8});
   const auto config = Json::parse(R"({"class_num": 1, "keypoint_num": 17, "confidence_threshold": [0.25]})");
   for (const auto& shape : hrt::Vector<hrt::core::Shape>{{1, 56, 8400}, {1, 300, 56}, {2, 300, 57}, {300, 57}}) {
     FakeEngine engine({input}, {proto(DataType::Float32, shape)});
-    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("E2eKeypoint", config, engine), "");
+    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("E2EKeypoint", config, engine), "");
   }
   FakeEngine valid({input}, {proto(DataType::Float32, {1, 300, 57})});
   for (const char* text : {R"({"class_num": 1, "keypoint_num": 0, "confidence_threshold": [0.25]})",
                            R"({"class_num": 1, "keypoint_num": 17})",
                            R"({"class_num": 1, "keypoint_num": 17, "confidence_threshold": [0.25],
                                "iou_threshold": [0.45]})"})
-    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("E2eKeypoint", Json::parse(text), valid), "");
+    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("E2EKeypoint", Json::parse(text), valid), "");
 }
 
 #ifdef HRT_ORT_MODEL_TEST
-TEST(E2eKeypointTest, RunsUltralyticsEndToEndExportWhenAvailable) {
+TEST(E2EKeypointTest, RunsUltralyticsEndToEndExportWhenAvailable) {
   const auto algo = hrt::test::template_algo("yolo26n_e2e_pose");
   auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/bus.jpg").string());
   if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())

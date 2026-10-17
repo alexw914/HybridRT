@@ -64,7 +64,7 @@ auto make_rotated(std::string_view type) -> UniquePtr<RotatedPostprocessor> {
     return make_yolov5_rotated();
   if (type == "GeneralRotated")
     return make_general_rotated();
-  if (type == "E2eRotated")
+  if (type == "E2ERotated")
     return make_e2e_rotated();
   return nullptr;
 }

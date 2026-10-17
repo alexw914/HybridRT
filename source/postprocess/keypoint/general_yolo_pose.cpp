@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: source/postprocess/keypoint/yolo_keypoint.cpp
+// File: source/postprocess/keypoint/general_yolo_pose.cpp
 // Description: Implements decoding of single-output pose heads, with a box
 //              per instance.
 // -----------------------------------------------------------------------------
@@ -15,7 +15,7 @@ namespace hrt::postprocess {
 
 namespace {
 
-struct YoloKeypointParam {
+struct GeneralYoloPoseParam {
   unsigned int class_num = 0;
   unsigned int keypoint_num = 0;
   Vector<float> confidence_threshold;
@@ -24,21 +24,21 @@ struct YoloKeypointParam {
   float keypoint_threshold = 0.5F;
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloKeypointParam, class_num, keypoint_num, confidence_threshold,
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralYoloPoseParam, class_num, keypoint_num, confidence_threshold,
                                                 iou_threshold, keypoint_threshold)
 
 // One output [1, 4 + classes + keypoints * (2 | 3), N]: rows center x, center
 // y, width, height, one score per class, then x, y (and visibility) per
 // keypoint, all in network-input pixels.
-class YoloKeypoint final : public KeypointPostprocessor {
+class GeneralYoloPose final : public KeypointPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    return check_section<YoloKeypointParam>(config);
+    return check_section<GeneralYoloPoseParam>(config);
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    param_ = config.get<YoloKeypointParam>();
-    KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "yolo_keypoint: keypoint_num must be positive");
+    param_ = config.get<GeneralYoloPoseParam>();
+    KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "general_yolo_pose: keypoint_num must be positive");
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
@@ -46,19 +46,19 @@ public:
     const auto& outputs = engine.output_protos();
     KZ_CHECK_RETURN(engine.proto().output_layout == engine::DataLayout::Nchw && engine.input_protos().size() == 1 &&
                         outputs.size() == 1 && outputs[0].shape.size() == 3 && outputs[0].shape[0] == 1,
-                    false, "yolo_keypoint: needs one input and one [1, rows, N] output");
+                    false, "general_yolo_pose: needs one input and one [1, rows, N] output");
     const auto rows = outputs[0].shape[1] - 4 - static_cast<std::int64_t>(param_.class_num);
     const auto keypoints = static_cast<std::int64_t>(param_.keypoint_num);
     dims_ = rows == keypoints * 3 ? 3 : (rows == keypoints * 2 ? 2 : 0);
     KZ_CHECK_RETURN(dims_ != 0, false,
-                    "yolo_keypoint: output rows {} do not fit 4 + {} classes + {} keypoints x (2 | 3)",
+                    "general_yolo_pose: output rows {} do not fit 4 + {} classes + {} keypoints x (2 | 3)",
                     outputs[0].shape[1], param_.class_num, param_.keypoint_num);
     return true;
   }
 
 protected:
-  auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool override {
+  auto decode(KeypointResultMap& result, const core::Buffers& outputs,
+              const preprocess::ImageTransform& transform) -> bool override {
     const auto* data = float_data(*outputs[0], scratch_);
     if (data == nullptr)
       return false;
@@ -111,15 +111,15 @@ protected:
   }
 
 private:
-  YoloKeypointParam param_;
+  GeneralYoloPoseParam param_;
   std::size_t dims_ = 3;
   core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
 };
 
 } // namespace
 
-auto make_yolo_keypoint() -> UniquePtr<KeypointPostprocessor> {
-  return std::make_unique<YoloKeypoint>();
+auto make_general_yolo_pose() -> UniquePtr<KeypointPostprocessor> {
+  return std::make_unique<GeneralYoloPose>();
 }
 
 } // namespace hrt::postprocess

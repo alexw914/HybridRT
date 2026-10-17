@@ -17,24 +17,24 @@ namespace hrt::postprocess {
 
 namespace {
 
-struct E2eDetectParam {
+struct E2EDetectParam {
   unsigned int class_num = 0;
   Vector<float> confidence_threshold;
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2eDetectParam, class_num, confidence_threshold)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2EDetectParam, class_num, confidence_threshold)
 
 // One output [1, N, 6]: per row x1, y1, x2, y2 in network-input pixels, score
 // and class id, as YOLOv10/YOLO26 (and YOLOv8 with nms=True) export them.
 // Rows are already deduplicated; unused rows score 0.
-class E2eDetect final : public DetectPostprocessor {
+class E2EDetect final : public DetectPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    return check_section<E2eDetectParam>(config);
+    return check_section<E2EDetectParam>(config);
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    param_ = config.get<E2eDetectParam>();
+    param_ = config.get<E2EDetectParam>();
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
       return false;
@@ -74,14 +74,14 @@ protected:
   }
 
 private:
-  E2eDetectParam param_;
+  E2EDetectParam param_;
   core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
 };
 
 } // namespace
 
 auto make_e2e_detect() -> UniquePtr<DetectPostprocessor> {
-  return std::make_unique<E2eDetect>();
+  return std::make_unique<E2EDetect>();
 }
 
 } // namespace hrt::postprocess

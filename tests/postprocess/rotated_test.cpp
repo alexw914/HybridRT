@@ -102,11 +102,11 @@ TEST(RotatedTest, RejectsNonuniformSourceMapping) {
   EXPECT_NEAR(rect.angle, 45.0F, 1e-4F);
 }
 
-TEST(RotatedTest, E2eDecodesRowsWithoutNms) {
+TEST(RotatedTest, E2EDecodesRowsWithoutNms) {
   const auto output = proto(DataType::Float32, {1, 3, 7});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 64, 64})}, {output});
   const auto config = kitzoo::json::Json::parse(R"({"class_num": 2, "confidence_threshold": [0.5]})");
-  auto postprocessor = hrt::postprocess::create_rotated_postprocessor("E2eRotated", config, engine);
+  auto postprocessor = hrt::postprocess::create_rotated_postprocessor("E2ERotated", config, engine);
   const auto angle = std::numbers::pi_v<float> / 12.0F;
   // cx, cy, w, h, score, class, angle: two identical boxes both stay (the
   // export already deduplicated them) and a padding row is skipped.
@@ -126,20 +126,20 @@ TEST(RotatedTest, E2eDecodesRowsWithoutNms) {
   EXPECT_FLOAT_EQ(box.rect.size.height, 20.0F);
   EXPECT_NEAR(box.rect.angle, 15.0F, 1e-4F);
   EXPECT_FLOAT_EQ(box.score, 0.9F);
-  EXPECT_EQ(hrt::model::task_of("E2eRotated"), hrt::model::Task::Rotated);
+  EXPECT_EQ(hrt::model::task_of("E2ERotated"), hrt::model::Task::Rotated);
 }
 
-TEST(RotatedTest, E2eAbortsOnInvalidConfigOrOutputs) {
+TEST(RotatedTest, E2EAbortsOnInvalidConfigOrOutputs) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto input = proto(DataType::Float32, {1, 3, 8, 8});
   const auto config = kitzoo::json::Json::parse(R"({"class_num": 15, "confidence_threshold": [0.25]})");
   for (const auto& shape : hrt::Vector<hrt::core::Shape>{{1, 20, 21504}, {1, 300, 6}, {2, 300, 7}}) {
     hrt::test::FakeEngine engine({input}, {proto(DataType::Float32, shape)});
-    EXPECT_DEATH(hrt::postprocess::create_rotated_postprocessor("E2eRotated", config, engine), "");
+    EXPECT_DEATH(hrt::postprocess::create_rotated_postprocessor("E2ERotated", config, engine), "");
   }
   hrt::test::FakeEngine valid({input}, {proto(DataType::Float32, {1, 300, 7})});
   EXPECT_DEATH(hrt::postprocess::create_rotated_postprocessor(
-                   "E2eRotated", kitzoo::json::Json::parse(R"({"class_num": 15, "iou_threshold": [0.45]})"), valid),
+                   "E2ERotated", kitzoo::json::Json::parse(R"({"class_num": 15, "iou_threshold": [0.45]})"), valid),
                "");
 }
 

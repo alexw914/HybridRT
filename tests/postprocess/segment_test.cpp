@@ -180,7 +180,7 @@ TEST(SegmentTest, DecodesEndToEndRowsWithoutNms) {
   const auto masks = proto(DataType::Float32, {1, 2, 4, 4});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {masks, detections});
   const auto config = Json::parse(R"({"class_num": 2, "confidence_threshold": [0.5]})");
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("E2eSegment", config, engine);
+  auto postprocessor = hrt::postprocess::create_segment_postprocessor("E2ESegment", config, engine);
   ASSERT_NE(postprocessor, nullptr);
   // x1, y1, x2, y2, score, class, coefficient 0, coefficient 1: the left-half
   // mask of class 0, a class 1 row below its threshold and a padding row.
@@ -194,7 +194,7 @@ TEST(SegmentTest, DecodesEndToEndRowsWithoutNms) {
       hrt::test::identity(16, 16)));
   ASSERT_EQ(result.size(), 1U);
   expect_left_half_mask(result);
-  EXPECT_EQ(hrt::model::task_of("E2eSegment"), hrt::model::Task::Segment);
+  EXPECT_EQ(hrt::model::task_of("E2ESegment"), hrt::model::Task::Segment);
 }
 
 TEST(SegmentTest, AbortsOnMismatchedEndToEndOutputs) {
@@ -207,11 +207,11 @@ TEST(SegmentTest, AbortsOnMismatchedEndToEndOutputs) {
                                                         {proto(DataType::Float32, {1, 3, 9}), masks},
                                                         {proto(DataType::Float32, {1, 7, 1}), masks}}) {
     FakeEngine engine({input}, outputs);
-    EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("E2eSegment", config, engine), "");
+    EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("E2ESegment", config, engine), "");
   }
   FakeEngine valid({input}, {proto(DataType::Float32, {1, 3, 8}), masks});
   EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor(
-                   "E2eSegment", Json::parse(R"({"class_num": 1, "iou_threshold": [0.5]})"), valid),
+                   "E2ESegment", Json::parse(R"({"class_num": 1, "iou_threshold": [0.5]})"), valid),
                "");
 }
 

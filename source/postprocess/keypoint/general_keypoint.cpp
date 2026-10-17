@@ -291,11 +291,11 @@ auto make_general_keypoint() -> UniquePtr<KeypointPostprocessor> {
 auto make_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor> {
   if (type == "GeneralKeypoint")
     return make_general_keypoint();
-  if (type == "YoloKeypoint")
-    return make_yolo_keypoint();
+  if (type == "GeneralYoloPose")
+    return make_general_yolo_pose();
   if (type == "RtmoKeypoint")
     return make_rtmo_keypoint();
-  if (type == "E2eKeypoint")
+  if (type == "E2EKeypoint")
     return make_e2e_keypoint();
   return nullptr;
 }

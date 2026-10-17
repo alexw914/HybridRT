@@ -16,7 +16,7 @@ namespace hrt::postprocess {
 auto make_segment(std::string_view type) -> UniquePtr<SegmentPostprocessor> {
   if (type == "InstanceSegment")
     return make_instance_segment();
-  if (type == "E2eSegment")
+  if (type == "E2ESegment")
     return make_e2e_segment();
   if (type == "SemanticSegment")
     return make_semantic_segment();

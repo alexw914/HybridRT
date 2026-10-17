@@ -97,13 +97,13 @@ private:
   cv::Mat sampled_;
 };
 
-struct E2eSegmentParam {
+struct E2ESegmentParam {
   unsigned int class_num = 0;
   Vector<float> confidence_threshold;
   float mask_threshold = 0.5F;
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2eSegmentParam, class_num, confidence_threshold, mask_threshold)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2ESegmentParam, class_num, confidence_threshold, mask_threshold)
 
 // Outputs: detections [1, 4 + classes + masks, N] and prototypes
 // [1, masks, mh, mw], identified by rank.
@@ -201,14 +201,14 @@ private:
 // (nms=False) and YOLOv8 (nms=True) segment exports write them, plus the
 // prototypes [1, masks, mh, mw]. Rows are already deduplicated; unused rows
 // score 0.
-class E2eSegment final : public SegmentPostprocessor {
+class E2ESegment final : public SegmentPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    return check_section<E2eSegmentParam>(config);
+    return check_section<E2ESegmentParam>(config);
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    param_ = config.get<E2eSegmentParam>();
+    param_ = config.get<E2ESegmentParam>();
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
       return false;
@@ -264,7 +264,7 @@ protected:
   }
 
 private:
-  E2eSegmentParam param_;
+  E2ESegmentParam param_;
   std::size_t detections_ = 0;
   std::size_t prototypes_ = 1;
   float mask_logit_ = 0.0F;
@@ -277,7 +277,7 @@ private:
 } // namespace
 
 auto make_e2e_segment() -> UniquePtr<SegmentPostprocessor> {
-  return std::make_unique<E2eSegment>();
+  return std::make_unique<E2ESegment>();
 }
 
 auto make_instance_segment() -> UniquePtr<SegmentPostprocessor> {

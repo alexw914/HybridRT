@@ -18,25 +18,25 @@ namespace hrt::postprocess {
 
 namespace {
 
-struct E2eRotatedParam {
+struct E2ERotatedParam {
   unsigned int class_num = 0;
   Vector<float> confidence_threshold;
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2eRotatedParam, class_num, confidence_threshold)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2ERotatedParam, class_num, confidence_threshold)
 
 // One output [1, N, 7]: per row center x, center y, width, height in
 // network-input pixels, score, class id and the angle in radians, as YOLO26
 // (nms=False) and YOLOv8 (nms=True) OBB exports write them. Rows are already
 // deduplicated; unused rows score 0.
-class E2eRotated final : public RotatedPostprocessor {
+class E2ERotated final : public RotatedPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    return check_section<E2eRotatedParam>(config);
+    return check_section<E2ERotatedParam>(config);
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    param_ = config.get<E2eRotatedParam>();
+    param_ = config.get<E2ERotatedParam>();
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
       return false;
@@ -71,14 +71,14 @@ protected:
   }
 
 private:
-  E2eRotatedParam param_;
+  E2ERotatedParam param_;
   core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
 };
 
 } // namespace
 
 auto make_e2e_rotated() -> UniquePtr<RotatedPostprocessor> {
-  return std::make_unique<E2eRotated>();
+  return std::make_unique<E2ERotated>();
 }
 
 } // namespace hrt::postprocess
