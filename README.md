@@ -27,13 +27,10 @@ Install the SDK for each inference backend you want to enable.
 
 | Platform | Build toolchain | Verification coverage |
 | --- | --- | --- |
-| Linux x86_64 | Clang or GCC | CI with ONNX Runtime; additional NVIDIA CUDA / TensorRT validation |
-| Windows x64 | MSVC | CI with ONNX Runtime and real-model validation; additional MNN, ncnn and TensorRT tests |
-| macOS arm64 | Apple Clang | CI with ONNX Runtime; additional CoreML and MNN CPU validation |
-| Linux aarch64 / RK3588 | Native or cross-compilation with an aarch64 C++20 toolchain | RKNN / RGA, MNN and ncnn board validation |
-
-CI coverage does not imply that every backend is tested on every platform.
-CANN integration is available but has not been validated on Ascend hardware.
+| Linux x86_64 | GCC 11.4 / 13.3; Clang 18.1.3 | CI with ONNX Runtime; additional NVIDIA CUDA / TensorRT validation |
+| Windows x64 | MSVC 19.50 | CI with ONNX Runtime and real-model validation; additional MNN, ncnn and TensorRT tests |
+| macOS arm64 | Apple Clang 21.0.0 | CI with ONNX Runtime; additional CoreML and MNN CPU validation |
+| Linux aarch64 / RK3588 | Arm GNU Toolchain 12.2 | RKNN / RGA, MNN and ncnn board validation |
 
 Build with ONNX Runtime, using Ninja:
 
@@ -54,6 +51,7 @@ target-platform OpenCV and backend SDKs.
 | `HYBRIDRT_BUILD_TESTS` | Build tests | OFF |
 | `HYBRIDRT_BUILD_TOOLS` | Build command-line tools | ON |
 | `HYBRIDRT_BUILD_EXAMPLES` | Build image examples | ON |
+| `HYBRIDRT_BUILD_BENCHMARKS` | Build benchmarks | OFF |
 
 To enable and run tests:
 
@@ -109,14 +107,14 @@ Model and backend parameters are in the [configuration reference](assets/templat
 
 Enable one or more backends by providing their SDK paths at CMake configuration time.
 
-| Backend | Engine name | Model format | CMake settings |
-| --- | --- | --- | --- |
-| [ONNX Runtime](https://github.com/microsoft/onnxruntime) | ort | ONNX | `-DORT_ROOT=<sdk>` |
-| [TensorRT](https://github.com/NVIDIA/TensorRT) | trt | TensorRT engine | `-DTensorRT_ROOT=<sdk>`; CUDA Toolkit required |
-| [MNN](https://github.com/alibaba/MNN) | mnn | MNN | `-DMNN_ROOT=<sdk>` |
-| [ncnn](https://github.com/Tencent/ncnn) | ncnn | ncnn param + bin | `-Dncnn_ROOT=<sdk>` |
-| [RKNN](https://github.com/airockchip/rknn-toolkit2) | rknn | RKNN | `-DRKNN_ROOT=<sdk>` `-DRGA_ROOT=<sdk>` |
-| [CANN](https://www.hiascend.com/en/software/cann) | cann | Ascend OM | `-DCANN_ROOT=<sdk>` |
+| Backend | Engine name | Model format | CMake settings | Minimum version | Tested version |
+| --- | --- | --- | --- | --- | --- |
+| [ONNX Runtime](https://github.com/microsoft/onnxruntime) | ort | ONNX | `-DORT_ROOT=<sdk>` | 1.20+ | 1.31.0 |
+| [TensorRT](https://github.com/NVIDIA/TensorRT) | trt | TensorRT engine | `-DTensorRT_ROOT=<sdk>`; CUDA Toolkit required | 8.5+ | 10.16.1 |
+| [MNN](https://github.com/alibaba/MNN) | mnn | MNN | `-DMNN_ROOT=<sdk>` | Not pinned | 3.0.0 |
+| [ncnn](https://github.com/Tencent/ncnn) | ncnn | ncnn param + bin | `-Dncnn_ROOT=<sdk>` | Not pinned | 1.0.20261007 |
+| [RKNN](https://github.com/airockchip/rknn-toolkit2) | rknn | RKNN | `-DRKNN_ROOT=<sdk>` `-DRGA_ROOT=<sdk>` | Not pinned | 2.3.2 |
+| [CANN](https://www.hiascend.com/en/software/cann) | cann | Ascend OM | `-DCANN_ROOT=<sdk>` | Not pinned | Not validated |
 
 ONNX Runtime supports CPU and optional CoreML execution. MNN acceleration depends on
 the selected SDK and platform; CPU is the validated macOS configuration.
