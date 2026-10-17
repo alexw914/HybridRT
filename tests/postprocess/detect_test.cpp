@@ -47,7 +47,7 @@ auto yolov8_values(bool nhwc, float scale) -> hrt::Vector<float> {
 }
 
 auto yolov8_config() -> Json {
-  return Json::parse(R"({"class_num": 1, "strides": [8], "reg_max": 2,
+  return Json::parse(R"({"class_num": 1,
                          "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
 }
 
@@ -61,6 +61,54 @@ void expect_yolov8_box(const hrt::postprocess::DetectResultMap& result) {
   EXPECT_NEAR(box.rect.width, 12.0F, 1e-3F);
   EXPECT_NEAR(box.rect.height, 12.0F, 1e-3F);
   EXPECT_NEAR(box.score, sigmoid(3.0F), 1e-5F);
+}
+
+TEST(DetectTest, InfersStridesInOutputOrderAndChecksExplicitValues) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  for (const auto& type : {"YoloV5Detect", "YoloV8Detect", "Yolo26Detect"}) {
+    const bool anchored = hrt::String(type) == "YoloV5Detect";
+    const auto channels = anchored ? 6 : 5;
+    FakeEngine engine({proto(DataType::Float32, {1, 3, 32, 64})},
+                      {proto(DataType::Float32, {1, channels, 2, 4}), proto(DataType::Float32, {1, channels, 4, 8})});
+    auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
+    if (anchored)
+      config["anchors"] = {{8, 8}, {16, 16}};
+    else if (hrt::String(type) == "YoloV8Detect")
+      config["reg_max"] = 1;
+    EXPECT_NE(hrt::postprocess::create_detect_postprocessor(type, config, engine), nullptr);
+    config["strides"] = {16, 8};
+    EXPECT_NE(hrt::postprocess::create_detect_postprocessor(type, config, engine), nullptr);
+    for (const auto& invalid : {Json::array({8, 16}), Json::array({16}), Json::array({0, 8}), Json::array({-16, 8})}) {
+      config["strides"] = invalid;
+      EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor(type, config, engine), "");
+    }
+  }
+}
+
+TEST(DetectTest, ChecksExplicitRegMaxAgainstEveryHead) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 9, 2, 2})});
+  auto config = yolov8_config();
+  config["reg_max"] = 2;
+  EXPECT_NE(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", config, engine), nullptr);
+  for (const auto bins : {0, 1, 16}) {
+    config["reg_max"] = bins;
+    EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", config, engine), "");
+  }
+  config.erase("reg_max");
+  FakeEngine inconsistent({proto(DataType::Float32, {1, 3, 16, 16})},
+                          {proto(DataType::Float32, {1, 9, 2, 2}), proto(DataType::Float32, {1, 13, 1, 1})});
+  EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", config, inconsistent), "");
+}
+
+TEST(DetectTest, RejectsInvalidGridsWithoutConfiguredStrides) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  auto config = yolov8_config();
+  config.erase("strides");
+  for (const auto& shape : hrt::Vector<hrt::core::Shape>{{1, 9, 2, 4}, {1, 9, 0, 2}, {1, 9, -1, 2}, {2, 9, 2, 2}}) {
+    FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, shape)});
+    EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", config, engine), "");
+  }
 }
 
 TEST(DetectYoloV8Test, DecodesNchwFloat) {

@@ -108,15 +108,15 @@ TEST(DetrDetectTest, ChecksConfigAndOutputContract) {
 TEST(DetrDetectTest, AppliesStableSoftmaxIncludingBackgroundOnSeparateOutputs) {
   const auto scores = proto(DataType::Float32, {1, 2, 3});
   const auto boxes = proto(DataType::Float32, {1, 2, 4});
-  FakeEngine engine({proto(DataType::Float32, {1, 3, 100, 100})}, {scores, boxes});
+  FakeEngine engine({proto(DataType::Float32, {1, 3, 100, 100})}, {boxes, scores});
   const auto config = Json::parse(R"({"class_num":2,"output_format":"separate","score_activation":"softmax",
-                                       "background_class":2,"boxes_output":1,"scores_output":0,
+                                       "background_class":2,
                                        "confidence_threshold":[0.1]})");
   auto decoder = hrt::postprocess::create_detect_postprocessor("DetrDetect", config, engine);
   const auto box_buffer = hrt::test::buffer_of<float>(boxes, {0.5F, 0.5F, 0.2F, 0.4F, 0.5F, 0.5F, 0.2F, 0.4F});
   const auto score_buffer = hrt::test::buffer_of<float>(scores, {1000, 1002, 1004, 1001, 1000, 1010});
   hrt::postprocess::DetectResultMap result;
-  ASSERT_TRUE(decoder->process(result, {score_buffer, box_buffer}, hrt::test::identity(100, 100)));
+  ASSERT_TRUE(decoder->process(result, {box_buffer, score_buffer}, hrt::test::identity(100, 100)));
   ASSERT_EQ(result.size(), 1U);
   ASSERT_EQ(result.at(1).size(), 1U);
   EXPECT_NEAR(result.at(1)[0].score, std::exp(2.0F) / (1.0F + std::exp(2.0F) + std::exp(4.0F)), 1e-6F);
@@ -158,7 +158,7 @@ TEST(DetrDetectTest, PacksStridedQueries) {
   EXPECT_FLOAT_EQ(result.at(0)[1].rect.x, 40.0F);
 }
 
-TEST(DetrDetectTest, RejectsMismatchedSeparateQueriesAndOutputIndexes) {
+TEST(DetrDetectTest, RejectsMismatchedSeparateQueriesAndRemovedOutputKeys) {
   for (const auto* text : {R"({"class_num":2,"score_activation":"auto"})", R"({"class_num":2,"output_format":"auto"})"})
     EXPECT_FALSE(hrt::postprocess::check_config("DetrDetect", Json::parse(text)).empty());
   GTEST_FLAG_SET(death_test_style, "threadsafe");
@@ -167,10 +167,20 @@ TEST(DetrDetectTest, RejectsMismatchedSeparateQueriesAndOutputIndexes) {
   EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor(
                    "DetrDetect", Json::parse(R"({"class_num":2,"output_format":"separate"})"), engine),
                "");
+  FakeEngine reversed({proto(DataType::Float32, {1, 3, 40, 40})},
+                      {proto(DataType::Float32, {1, 2, 2}), proto(DataType::Float32, {1, 2, 4})});
+  EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor(
+                   "DetrDetect", Json::parse(R"({"class_num":2,"output_format":"separate"})"), reversed),
+               "");
+  for (const auto* key : {"boxes_output", "scores_output"}) {
+    auto removed = Json::parse(R"({"class_num":2,"output_format":"separate"})");
+    removed[key] = 0;
+    EXPECT_FALSE(hrt::postprocess::check_config("DetrDetect", removed).empty());
+  }
   FakeEngine valid({proto(DataType::Float32, {1, 3, 40, 40})},
                    {proto(DataType::Float32, {1, 2, 4}), proto(DataType::Float32, {1, 2, 2})});
-  for (const auto* text : {R"({"class_num":2,"output_format":"separate","boxes_output":2})",
-                           R"({"class_num":2,"output_format":"separate","scores_output":0})",
+  for (const auto* text : {R"({"class_num":2,"output_format":"separate","boxes_output":0})",
+                           R"({"class_num":2,"output_format":"separate","scores_output":1})",
                            R"({"class_num":2,"output_format":"separate","background_class":3})",
                            R"({"class_num":2,"output_format":"separate","background_class":-2})"})
     EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("DetrDetect", Json::parse(text), valid), "");

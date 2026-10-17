@@ -21,7 +21,7 @@ struct YoloV8KeypointParam {
   unsigned int class_num = 0;
   unsigned int keypoint_num = 0;
   Vector<float> strides;
-  std::size_t reg_max = 16;
+  std::size_t reg_max = 0;
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
   // Visibility score above which a keypoint counts as visible.
@@ -43,20 +43,25 @@ public:
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     param_ = config.get<YoloV8KeypointParam>();
-    KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "yolov8_keypoint: keypoint_num must be positive");
+    KZ_CHECK_RETURN(!config.contains("reg_max") || param_.reg_max > 0, false, "reg_max must be positive when supplied");
+    KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
+                    "yolov8_keypoint: keypoint_num must be positive");
     const auto& outputs = engine.output_protos();
     const auto head = outputs.empty() ? std::nullopt : head_shape(outputs[0], engine.proto().output_layout);
     KZ_CHECK_RETURN(head.has_value(), false, "yolov8_keypoint: needs one [1, channels, h, w] output per stride");
-    const auto extra = head->channels - static_cast<std::int64_t>(param_.reg_max * 4 + param_.class_num);
-    const auto keypoints = static_cast<std::int64_t>(param_.keypoint_num);
-    dims_ = extra == keypoints * 3 ? 3 : (extra == keypoints * 2 ? 2 : 0);
-    KZ_CHECK_RETURN(dims_ != 0, false,
-                    "yolov8_keypoint: {} channels do not fit 4 x {} bins + {} classes + {} keypoints x (2 | 3)",
-                    head->channels, param_.reg_max, param_.class_num, param_.keypoint_num);
+    const auto shape = keypoint_shape(head->channels - static_cast<std::int64_t>(param_.class_num), param_.keypoint_num,
+                                      param_.reg_max);
+    if (!shape)
+      return false;
+    param_.keypoint_num = shape->count;
+    dims_ = shape->dims;
+    param_.reg_max = shape->reg_max;
     YoloV8Param heads{param_.class_num, param_.strides, param_.reg_max, param_.confidence_threshold,
                       param_.iou_threshold};
     if (!check_yolov8(heads, engine, param_.keypoint_num * dims_))
       return false;
+    param_.reg_max = heads.reg_max;
+    param_.strides = std::move(heads.strides);
     param_.confidence_threshold = heads.confidence_threshold;
     param_.iou_threshold = heads.iou_threshold;
     // Scores are compared as logits so most cells skip the sigmoid.
@@ -144,7 +149,7 @@ private:
 
   YoloV8KeypointParam param_;
   CellScan scan_;
-  std::size_t dims_ = 3;
+  std::size_t dims_ = 0;
   Vector<float> logit_threshold_;
   engine::DataLayout layout_ = engine::DataLayout::Nchw;
   Vector<KeypointResult> candidates_;

@@ -53,6 +53,23 @@ struct HeadShape {
 
 auto head_shape(const core::BufferProto& proto, engine::DataLayout layout) -> std::optional<HeadShape>;
 
+// Returns the uniform input-to-head scale for a positive batch-1 grid.
+auto head_stride(core::Size input, const core::BufferProto& proto, engine::DataLayout layout) -> std::optional<float>;
+
+// Validates an optional configured list and stores the inferred strides.
+auto resolve_strides(Vector<float>& strides, const Vector<float>& inferred) -> bool;
+
+struct KeypointShape {
+  unsigned int count = 0;
+  std::size_t dims = 0;
+  std::size_t reg_max = 0;
+};
+
+// Resolves a unique channel partition into keypoints and optional DFL bins.
+// A zero count or bin count requests inference; nullopt means no DFL channels.
+auto keypoint_shape(std::int64_t channels, unsigned int count, std::optional<std::size_t> reg_max = std::nullopt)
+    -> std::optional<KeypointShape>;
+
 // Element access into one detection head output, NCHW or NHWC, float32 or
 // quantized int8, honoring buffer strides.
 template <typename T>

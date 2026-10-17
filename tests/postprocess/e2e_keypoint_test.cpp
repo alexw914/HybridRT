@@ -95,7 +95,7 @@ TEST(E2EKeypointTest, MapsRowsAndKeypointsWithoutNms) {
 TEST(E2EKeypointTest, ReadsKeypointsWithoutVisibility) {
   const auto output = proto(DataType::Float32, {1, 1, 8});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
-  const auto config = Json::parse(R"({"class_num": 2, "keypoint_num": 1, "confidence_threshold": [0.25]})");
+  const auto config = Json::parse(R"({"class_num": 2, "confidence_threshold": [0.25]})");
   auto decoder = hrt::postprocess::create_keypoint_postprocessor("E2EKeypoint", config, engine);
   hrt::postprocess::KeypointResultMap result;
   ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of<float>(output, {10, 10, 30, 20, 0.9F, 1, 20, 15})},

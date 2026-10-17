@@ -56,7 +56,9 @@ TEST(GeneralYoloPoseTest, DecodesKeypointsWithoutVisibility) {
   // [1, 4 + 1 class + 2 keypoints x 2, 1 candidate].
   const auto output = proto(DataType::Float32, {1, 9, 1});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
-  auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("GeneralYoloPose", config(), engine);
+  auto automatic = config();
+  automatic.erase("keypoint_num");
+  auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("GeneralYoloPose", automatic, engine);
 
   hrt::postprocess::KeypointResultMap result;
   ASSERT_TRUE(postprocessor->process(result,

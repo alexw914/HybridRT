@@ -25,6 +25,7 @@ public:
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     param_ = config.get<YoloV8Param>();
+    KZ_CHECK_RETURN(!config.contains("reg_max") || param_.reg_max > 0, false, "reg_max must be positive when supplied");
     if (!check_yolov8(param_, engine, 1))
       return false;
     logit_threshold_.resize(param_.class_num);

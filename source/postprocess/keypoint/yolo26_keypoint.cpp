@@ -42,19 +42,21 @@ public:
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     param_ = config.get<Yolo26KeypointParam>();
-    KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "yolo26_keypoint: keypoint_num must be positive");
+    KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
+                    "yolo26_keypoint: keypoint_num must be positive");
     const auto& outputs = engine.output_protos();
     const auto head = outputs.empty() ? std::nullopt : head_shape(outputs[0], engine.proto().output_layout);
     KZ_CHECK_RETURN(head.has_value(), false, "yolo26_keypoint: needs one [1, channels, h, w] output per stride");
     const auto extra = head->channels - static_cast<std::int64_t>(4 + param_.class_num);
-    const auto keypoints = static_cast<std::int64_t>(param_.keypoint_num);
-    dims_ = extra == keypoints * 3 ? 3 : (extra == keypoints * 2 ? 2 : 0);
-    KZ_CHECK_RETURN(dims_ != 0, false,
-                    "yolo26_keypoint: {} channels do not fit 4 distances + {} classes + {} keypoints x (2 | 3)",
-                    head->channels, param_.class_num, param_.keypoint_num);
+    const auto shape = keypoint_shape(extra, param_.keypoint_num);
+    if (!shape)
+      return false;
+    param_.keypoint_num = shape->count;
+    dims_ = shape->dims;
     Yolo26Param heads{param_.class_num, param_.strides, param_.confidence_threshold, param_.iou_threshold};
     if (!check_yolo26(heads, engine, param_.keypoint_num * dims_))
       return false;
+    param_.strides = std::move(heads.strides);
     param_.confidence_threshold = heads.confidence_threshold;
     param_.iou_threshold = heads.iou_threshold;
     // Scores are compared as logits so most cells skip the sigmoid.

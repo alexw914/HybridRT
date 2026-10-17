@@ -45,7 +45,8 @@ public:
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
       return false;
-    const auto outputs = raw_segment_outputs(engine, param_.strides, 4, param_.class_num, "yolo26_segment");
+    std::size_t box_channels = 4;
+    const auto outputs = raw_segment_outputs(engine, param_.strides, box_channels, param_.class_num, "yolo26_segment");
     if (!outputs)
       return false;
     outputs_ = *outputs;

@@ -38,7 +38,8 @@ public:
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     param_ = config.get<E2EKeypointParam>();
-    KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "e2e_keypoint: keypoint_num must be positive");
+    KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
+                    "e2e_keypoint: keypoint_num must be positive");
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
       return false;
@@ -47,10 +48,11 @@ public:
                         outputs[0].shape[0] == 1 && outputs[0].shape[1] > 0,
                     false, "e2e_keypoint: needs one input and one [1, N, columns] output");
     const auto extra = outputs[0].shape[2] - 6;
-    const auto keypoints = static_cast<std::int64_t>(param_.keypoint_num);
-    dims_ = extra == keypoints * 3 ? 3 : (extra == keypoints * 2 ? 2 : 0);
-    KZ_CHECK_RETURN(dims_ != 0, false, "e2e_keypoint: {} columns do not fit 6 + {} keypoints x (2 | 3)",
-                    outputs[0].shape[2], param_.keypoint_num);
+    const auto shape = keypoint_shape(extra, param_.keypoint_num);
+    if (!shape)
+      return false;
+    param_.keypoint_num = shape->count;
+    dims_ = shape->dims;
     return true;
   }
 

@@ -24,6 +24,19 @@ namespace {
 using hrt::core::DataType;
 using hrt::test::proto;
 
+TEST(RotatedTest, InfersYoloV8StridesAndRegMax) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 10, 2, 2})});
+  auto config =
+      kitzoo::json::Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
+  EXPECT_NE(hrt::postprocess::create_rotated_postprocessor("YoloV8Rotated", config, engine), nullptr);
+  config["reg_max"] = 2;
+  config["strides"] = {8};
+  EXPECT_NE(hrt::postprocess::create_rotated_postprocessor("YoloV8Rotated", config, engine), nullptr);
+  config["reg_max"] = 16;
+  EXPECT_DEATH(hrt::postprocess::create_rotated_postprocessor("YoloV8Rotated", config, engine), "");
+}
+
 TEST(RotatedTest, NmsMergesOverlappingBoxes) {
   hrt::postprocess::RotatedResult boxes{
       {{{10, 10}, {10, 4}, 30}, 0.8F, 0, -1},
@@ -81,8 +94,8 @@ TEST(RotatedTest, Yolo26ReadsDistancesAndRadians) {
   // One 2x2 stride-8 head: distances in cells, theta in radians, one class.
   const auto output = proto(DataType::Float32, {1, 6, 2, 2});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
-  const auto config = kitzoo::json::Json::parse(
-      R"({"class_num": 1, "strides": [8], "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
+  const auto config =
+      kitzoo::json::Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
   auto postprocessor = hrt::postprocess::create_rotated_postprocessor("Yolo26Rotated", config, engine);
   hrt::Vector<float> values(6 * 4, -10.0F);
   const hrt::Vector<float> cell{0.5F, 0.5F, 0.5F, 0.5F, std::numbers::pi_v<float> / 12.0F, 3.0F};

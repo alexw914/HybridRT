@@ -38,7 +38,8 @@ public:
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     param_ = config.get<GeneralYoloPoseParam>();
-    KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "general_yolo_pose: keypoint_num must be positive");
+    KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
+                    "general_yolo_pose: keypoint_num must be positive");
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
@@ -48,11 +49,11 @@ public:
                         outputs.size() == 1 && outputs[0].shape.size() == 3 && outputs[0].shape[0] == 1,
                     false, "general_yolo_pose: needs one input and one [1, rows, N] output");
     const auto rows = outputs[0].shape[1] - 4 - static_cast<std::int64_t>(param_.class_num);
-    const auto keypoints = static_cast<std::int64_t>(param_.keypoint_num);
-    dims_ = rows == keypoints * 3 ? 3 : (rows == keypoints * 2 ? 2 : 0);
-    KZ_CHECK_RETURN(dims_ != 0, false,
-                    "general_yolo_pose: output rows {} do not fit 4 + {} classes + {} keypoints x (2 | 3)",
-                    outputs[0].shape[1], param_.class_num, param_.keypoint_num);
+    const auto shape = keypoint_shape(rows, param_.keypoint_num);
+    if (!shape)
+      return false;
+    param_.keypoint_num = shape->count;
+    dims_ = shape->dims;
     return true;
   }
 

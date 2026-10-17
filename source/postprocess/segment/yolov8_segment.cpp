@@ -21,7 +21,7 @@ namespace {
 struct YoloV8SegmentParam {
   unsigned int class_num = 0;
   Vector<float> strides;
-  std::size_t reg_max = 16;
+  std::size_t reg_max = 0;
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
   float mask_threshold = 0.5F;
@@ -41,14 +41,18 @@ public:
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     param_ = config.get<YoloV8SegmentParam>();
-    if (param_.class_num == 0 || param_.reg_max == 0 ||
+    KZ_CHECK_RETURN(!config.contains("reg_max") || param_.reg_max > 0, false, "reg_max must be positive when supplied");
+    if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
       return false;
-    const auto outputs =
-        raw_segment_outputs(engine, param_.strides, param_.reg_max * 4, param_.class_num, "yolov8_segment");
+    auto box_channels = param_.reg_max * 4;
+    const auto outputs = raw_segment_outputs(engine, param_.strides, box_channels, param_.class_num, "yolov8_segment");
     if (!outputs)
       return false;
+    KZ_CHECK_RETURN(param_.reg_max == 0 || param_.reg_max == box_channels / 4, false,
+                    "yolov8_segment: configured reg_max does not match output channels");
+    param_.reg_max = box_channels / 4;
     outputs_ = *outputs;
     // Scores are compared as logits so most cells skip the sigmoid.
     logit_threshold_.resize(param_.class_num);

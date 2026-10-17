@@ -34,7 +34,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV5Param, class_num, strides,
 struct YoloV8Param {
   unsigned int class_num = 0;
   Vector<float> strides;
-  std::size_t reg_max = 16;
+  // Zero requests inference from output channels during initialization.
+  std::size_t reg_max = 0;
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
 };
@@ -89,12 +90,10 @@ struct DetrParam {
   DetrOutputFormat output_format = DetrOutputFormat::Combined;
   DetrScoreActivation score_activation = DetrScoreActivation::None;
   int background_class = -1;
-  std::size_t boxes_output = 0;
-  std::size_t scores_output = 1;
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(DetrParam, class_num, confidence_threshold, output_format,
-                                                score_activation, background_class, boxes_output, scores_output)
+                                                score_activation, background_class)
 
 // Built-in postprocessor of `type` for each task, or nullptr.
 auto make_detect(std::string_view type) -> UniquePtr<DetectPostprocessor>;
@@ -167,7 +166,7 @@ auto check_yolov5(YoloV5Param& param, const engine::Engine& engine, std::size_t 
 
 auto check_yolov8(YoloV8Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
 
-// check_yolov8() for YOLO26 heads (reg_max 1); fills the per-class thresholds.
+// check_yolov8() for YOLO26 heads (reg_max 1); fills strides and per-class thresholds.
 auto check_yolo26(Yolo26Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
 
 } // namespace hrt::postprocess

@@ -148,10 +148,8 @@ TEST(SegmentTest, DecodesRawYoloV8AndYolo26Heads) {
     const auto masks = proto(DataType::Float32, {1, 2, 4, 4});
     // Prototypes first: they are found by shape, not position.
     FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {masks, head});
-    auto config = Json::parse(R"({"class_num": 1, "strides": [8], "confidence_threshold": [0.5],
+    auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5],
                                   "iou_threshold": [0.45]})");
-    if (bins > 1)
-      config["reg_max"] = bins;
     auto postprocessor = hrt::postprocess::create_segment_postprocessor(type, config, engine);
     ASSERT_NE(postprocessor, nullptr) << type;
     hrt::postprocess::SegmentResultMap result;
@@ -161,6 +159,38 @@ TEST(SegmentTest, DecodesRawYoloV8AndYolo26Heads) {
         << type;
     expect_left_half_mask(result);
     EXPECT_EQ(hrt::model::task_of(type), hrt::model::Task::Segment);
+  }
+}
+
+TEST(SegmentTest, ChecksExplicitRawHeadStrides) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  for (const auto& type : {"YoloV8Segment", "Yolo26Segment"}) {
+    FakeEngine engine({proto(DataType::Float32, {1, 3, 32, 64})},
+                      {proto(DataType::Float32, {1, 7, 2, 4}), proto(DataType::Float32, {1, 2, 8, 16}),
+                       proto(DataType::Float32, {1, 7, 4, 8})});
+    auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
+    if (hrt::String(type) == "YoloV8Segment")
+      config["reg_max"] = 1;
+    EXPECT_NE(hrt::postprocess::create_segment_postprocessor(type, config, engine), nullptr);
+    config["strides"] = {16, 8};
+    EXPECT_NE(hrt::postprocess::create_segment_postprocessor(type, config, engine), nullptr);
+    for (const auto& invalid : {Json::array({8, 16}), Json::array({16})}) {
+      config["strides"] = invalid;
+      EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor(type, config, engine), "");
+    }
+  }
+}
+
+TEST(SegmentTest, ChecksRawYoloV8RegMax) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})},
+                    {proto(DataType::Float32, {1, 11, 2, 2}), proto(DataType::Float32, {1, 2, 4, 4})});
+  auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
+  config["reg_max"] = 2;
+  EXPECT_NE(hrt::postprocess::create_segment_postprocessor("YoloV8Segment", config, engine), nullptr);
+  for (const auto bins : {0, 1, 16}) {
+    config["reg_max"] = bins;
+    EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("YoloV8Segment", config, engine), "");
   }
 }
 
@@ -217,17 +247,11 @@ TEST(SegmentTest, DecodesInt8SemanticScoresWithoutDequantizing) {
   auto postprocessor = hrt::postprocess::create_segment_postprocessor("SemanticSegment", Json::object(), engine);
   // Quantized scores keep their order; ties go to the lower class: 0, 1 / 2, 0.
   auto buffer = hrt::test::buffer_of<std::int8_t>(output, {
-                                                              90,
-                                                              -5,
-                                                              0,
+                                                              90, -5, 0,
                                                               7, // class 0
-                                                              -10,
-                                                              9,
-                                                              0,
+                                                              -10, 9, 0,
                                                               7, // class 1
-                                                              -10,
-                                                              -5,
-                                                              90,
+                                                              -10, -5, 90,
                                                               7, // class 2
                                                           });
   buffer->scale = 0.1F;

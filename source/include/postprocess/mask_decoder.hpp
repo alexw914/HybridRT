@@ -47,7 +47,7 @@ private:
   Vector<float> across_;
 };
 
-// Outputs of a raw per-stride segmentation model: `heads` in stride order and
+// Outputs of a raw per-stride segmentation model: `heads` in engine output order and
 // the prototype output [1, masks, mh, mw].
 struct RawSegmentOutputs {
   Vector<std::size_t> heads;
@@ -57,8 +57,9 @@ struct RawSegmentOutputs {
 
 // Finds the prototypes among the outputs (the one whose channel count makes
 // every other output box_channels + classes + masks) and checks one head per
-// stride against the input size; logs and returns nullopt when they do not fit.
-auto raw_segment_outputs(const engine::Engine& engine, const Vector<float>& strides, std::size_t box_channels,
+// stride against the input size, inferring strides when omitted; fails on ambiguity.
+// A zero box_channels requests inference of a positive multiple of four.
+auto raw_segment_outputs(const engine::Engine& engine, Vector<float>& strides, std::size_t& box_channels,
                          std::size_t classes, const char* name) -> std::optional<RawSegmentOutputs>;
 
 } // namespace hrt::postprocess

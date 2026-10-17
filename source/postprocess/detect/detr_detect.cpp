@@ -46,16 +46,10 @@ public:
     if (param_.output_format == DetrOutputFormat::Combined) {
       KZ_CHECK_RETURN(outputs.size() == 1 && valid(outputs[0], 4 + score_channels_), false,
                       "detr_detect: combined format needs one [1, N, 4 + score channels] output");
-      boxes_index_ = 0;
-      scores_index_ = 0;
     } else {
-      KZ_CHECK_RETURN(outputs.size() == 2 && param_.boxes_output < 2 && param_.scores_output < 2 &&
-                          param_.boxes_output != param_.scores_output && valid(outputs[param_.boxes_output], 4) &&
-                          valid(outputs[param_.scores_output], score_channels_) &&
-                          outputs[param_.boxes_output].shape[1] == outputs[param_.scores_output].shape[1],
-                      false, "detr_detect: separate format needs matching [1, N, 4] boxes and [1, N, scores]");
-      boxes_index_ = param_.boxes_output;
-      scores_index_ = param_.scores_output;
+      KZ_CHECK_RETURN(outputs.size() == 2 && valid(outputs[0], 4) && valid(outputs[1], score_channels_) &&
+                          outputs[0].shape[1] == outputs[1].shape[1],
+                      false, "detr_detect: separate format needs output 0 [1, N, 4] boxes and output 1 [1, N, scores]");
     }
     output_shapes_.clear();
     for (const auto& output : outputs)
@@ -71,14 +65,14 @@ protected:
       KZ_CHECK_RETURN(outputs[i]->shape() == output_shapes_[i], false, "detr_detect: output shape changed");
     KZ_CHECK_RETURN(transform.dst_roi.width > 0 && transform.dst_roi.height > 0, false,
                     "detr_detect: destination region is empty");
-    const auto* boxes = float_data(*outputs[boxes_index_], boxes_scratch_);
+    const auto* boxes = float_data(*outputs[0], boxes_scratch_);
     if (boxes == nullptr)
       return false;
     const bool combined = param_.output_format == DetrOutputFormat::Combined;
-    const auto* scores = combined ? boxes + 4 : float_data(*outputs[scores_index_], scores_scratch_);
+    const auto* scores = combined ? boxes + 4 : float_data(*outputs[1], scores_scratch_);
     if (scores == nullptr)
       return false;
-    const auto count = static_cast<std::size_t>(output_shapes_[boxes_index_][1]);
+    const auto count = static_cast<std::size_t>(output_shapes_[0][1]);
     const auto box_step = combined ? 4 + score_channels_ : 4;
     const auto score_step = combined ? box_step : score_channels_;
     const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
@@ -132,8 +126,6 @@ private:
   DetrParam param_;
   core::Size input_size_;
   Vector<core::Shape> output_shapes_;
-  std::size_t boxes_index_ = 0;
-  std::size_t scores_index_ = 0;
   std::size_t score_channels_ = 0;
   core::Buffer boxes_scratch_{core::MemoryType::Cpu, core::DataType::Float32};
   core::Buffer scores_scratch_{core::MemoryType::Cpu, core::DataType::Float32};
