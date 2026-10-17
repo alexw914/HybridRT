@@ -156,10 +156,10 @@
       }
     },
     {
-      "name": "yolov8_rotated",
+      "name": "yolov8n_obb_raw",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "models/yolov8_rotated.onnx"}]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/yolo/models/yolov8n-obb-raw.onnx"}]},
         "postprocess": {
           "type": "YoloV8Rotated",
           "class_num": 15,
@@ -321,10 +321,10 @@
       }
     },
     {
-      "name": "semantic_segment",
+      "name": "lraspp_voc_segment",
       "config": {
-        "preprocess": {"std": [255, 255, 255]},
-        "engine": {"backends": [{"engine_type": "ort", "data": "models/semantic_segment.onnx"}]},
+        "preprocess": {"mean": [123.675, 116.28, 103.53], "std": [58.395, 57.12, 57.375]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/semantic/models/lraspp_mobilenet_v3_voc_512.onnx"}]},
         "postprocess": {"type": "SemanticSegment"}
       }
     }

@@ -237,6 +237,24 @@ TEST(SegmentTest, RunsUltralyticsEndToEndExportWhenAvailable) {
       EXPECT_FALSE(object.mask.data.empty());
   }
 }
+
+TEST(SegmentTest, RunsSemanticModelWhenAvailable) {
+  const auto algo = hrt::test::template_algo("lraspp_voc_segment");
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/bus.jpg").string());
+  if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
+    GTEST_SKIP() << "LRASPP-MobileNetV3 ONNX fixture or bus.jpg is unavailable";
+  const auto model = hrt::model::ImageModel<hrt::postprocess::SegmentResultMap>::create(algo);
+  const auto image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, bgr.data, hrt::core::ImageFormat::InterBgr,
+                                            {bgr.cols, bgr.rows}, hrt::core::DataType::Uint8, bgr.step);
+  ASSERT_TRUE(image);
+  const auto result = model->process_sync(*image);
+  ASSERT_TRUE(result);
+  // bus.jpg: VOC background, bus and person.
+  hrt::Vector<std::int64_t> classes;
+  for (const auto& [cls, objects] : *result)
+    classes.push_back(cls);
+  EXPECT_EQ(classes, (hrt::Vector<std::int64_t>{0, 6, 15}));
+}
 #endif
 
 } // namespace

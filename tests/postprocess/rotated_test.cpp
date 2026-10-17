@@ -161,6 +161,22 @@ TEST(RotatedTest, RunsUltralyticsEndToEndExportWhenAvailable) {
   // airport.jpg: ten boxes, as Ultralytics reports for the same export.
   EXPECT_EQ(boxes, 10U);
 }
+
+TEST(RotatedTest, RunsRawObbHeadsWhenAvailable) {
+  const auto algo = hrt::test::template_algo("yolov8n_obb_raw");
+  auto bgr = cv::imread((hrt::test::source_root() / "assets/yolo/images/airport.jpg").string());
+  if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
+    GTEST_SKIP() << "YOLOv8n-obb raw-head ONNX fixture or airport.jpg is unavailable";
+  const auto model = hrt::model::ImageModel<hrt::postprocess::RotatedResultMap>::create(algo);
+  const auto image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, bgr.data, hrt::core::ImageFormat::InterBgr,
+                                            {bgr.cols, bgr.rows}, hrt::core::DataType::Uint8, bgr.step);
+  ASSERT_TRUE(image);
+  const auto result = model->process_sync(*image);
+  ASSERT_TRUE(result);
+  // airport.jpg: eleven planes.
+  ASSERT_TRUE(result->contains(0));
+  EXPECT_EQ(result->at(0).size(), 11U);
+}
 #endif
 
 } // namespace

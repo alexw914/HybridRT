@@ -208,6 +208,8 @@ hrt-validate -m yolov8n_detect.json -n yolov8n_detect -e ort -i assets/yolo/imag
 | `yolov8n_pose` | `assets/yolo/models/yolov8n-pose.onnx` | same repository, `yolov8n-pose.onnx` | `6fc546ff...` |
 | `yolov8n_obb` | `assets/yolo/models/yolov8n-obb.onnx` | same repository, `yolov8n-obb.onnx` | `d87f86b2...` |
 | `yolov8n_classify` | `assets/yolo/models/yolov8n-cls.onnx` | same repository, `yolov8n-cls.onnx` | `29e1963b...` |
+| `yolov8n_obb_raw`; also `yolov8n-raw.onnx`, `yolov8n-pose-raw.onnx` | `assets/yolo/models/yolov8n-obb-raw.onnx` (1024), `yolov8n-raw.onnx`, `yolov8n-pose-raw.onnx` (640) | `yolov8_export_raw.py` next to this file from `yolov8n{-obb,,-pose}.pt` (Ultralytics 8.4.178) | `2a5de440...`, `e2a57b77...`, `d87b2769...` |
+| `lraspp_voc_segment` | `assets/semantic/models/lraspp_mobilenet_v3_voc_512.onnx` | torchvision 0.29 `lraspp_mobilenet_v3_large(weights=COCO_WITH_VOC_LABELS_V1)`, `out` exported at 512 x 512, opset 17 | `e610481d...` |
 | `rtdetr_l_detect` | `assets/rtdetr/models/rtdetr-l.onnx` | [rtdetr-l.pt](https://github.com/ultralytics/assets/releases/download/v8.1.0/rtdetr-l.pt), Ultralytics 8.1.4 `export(format="onnx", imgsz=640, opset=17)` | `8090814f...` |
 | `yolo26n_e2e_detect` | `assets/e2e/models/yolo26n.onnx`; also `yolov10n.onnx`, `yolov8n-nms.onnx` | Ultralytics 8.4.178 `export(format="onnx", imgsz=640, opset=17, simplify=True, nms=False)`; `nms=True` for YOLOv8 | `08727943...`, `1fb68e28...`, `979da5db...` |
 | `yolo26n_e2e_pose`, `_segment`, `_obb` | `assets/e2e/models/yolo26n-pose.onnx`, `-seg.onnx`, `-obb.onnx`; also `yolov8n-{pose,seg,obb}-nms.onnx` | as above from `yolo26n-{pose,seg,obb}.pt` and `yolov8n-{pose,seg,obb}.pt`; OBB at `imgsz=1024` | `ecd85eb3...`, `10106049...`, `0dc04234...`, `84dbdb8f...`, `ac2d7015...`, `8cea4b4c...` |
@@ -248,3 +250,45 @@ Results checked against independent references on bus.jpg (ONNX Runtime 1.31.0, 
   unchecked for lack of a fire image.
 - `rtmpose_m_pose` after `yolov8n_detect`: visible keypoints within 5 px of mmpose's affine crop
   and SimCC decoding, visibility 17/17 for all 4 people.
+
+### RKNN on RK3588
+
+`rknn_convert.py` next to this file (rknn-toolkit2 2.3.2, matching the board runtime) converts each ONNX test model to
+an fp16 `.rknn` beside it, with the model's mean/std built in. Its algo then runs on RKNN with the same
+`postprocess`; `preprocess` drops `mean`/`std` and takes `dst_image_format: "inter_rgb"` (`inter_bgr` for
+RTMO), and the backend is `{"engine_type": "rknn", "config": {"image_input": true}}`. A raw-head pose model
+uses the `yolov8n_face` postprocess with `keypoint_num: 17` and `strides: [8, 16, 32]`.
+
+Against the ORT results of the same models on bus.jpg, airport.jpg and zidane.jpg (librknnrt 2.3.2):
+
+| Types | RKNN result |
+| --- | --- |
+| `GeneralDetect`, `YoloV8Detect` (raw) | same objects; boxes within 8 px, scores within 0.07 |
+| `InstanceSegment` | same objects; mask IoU 0.935 or more |
+| `GeneralYoloPose`, `YoloV8Keypoint` (raw, face) | same people and faces (one borderline person fewer for the raw pose heads); keypoints within 7.3 px |
+| `GeneralRotated`, `YoloV8Rotated` (raw) | same 11 planes; angles within 2.2 degrees |
+| `GeneralClassify` | same top 1 on airport.jpg; bus.jpg's near-flat scores (0.02) differ |
+| `SemanticSegment` | same classes; mask IoU 0.956 or more |
+| `GeneralKeypoint` (`simcc`) after `yolov8n_detect` | same 4 people, visibility 17/17; keypoints within 7.3 px |
+| `E2EDetect`, `E2EKeypoint`, `E2ESegment`, `E2ERotated` | YOLO26 exports convert but return no or wrong rows: the runtime reports GatherElements indexes out of range in the in-graph top-k; YOLOv8 `nms=True` exports do not convert (dynamic NonMaxSuppression) |
+| `DetrDetect`, `RtmoKeypoint` | RT-DETR-L and the fixed RTMO graph do not convert (shape errors in the toolkit's graph rewrites, also after onnxslim) |
+
+Use raw-head or decoded exports on RKNN. Milliseconds per call on one thread of the board (fp16, RGA
+preprocessing from a host image, 100 runs):
+
+| Algo (input) | Preprocess | Inference | Postprocess | `process_sync` |
+| --- | --- | --- | --- | --- |
+| `yolov8n_detect` (640 x 480) | 1.8 | 38.5 | 0.7 | 43.0 |
+| raw detect heads (640) | 1.8 | 43.9 | 1.7 | 51.9 |
+| `yolov8n_segment` (640 x 480) | 1.8 | 48.6 | 11.4 | 59.8 |
+| `yolov8n_pose` (640 x 480) | 1.8 | 45.1 | 0.05 | 44.8 |
+| raw pose heads (640) | 1.9 | 45.3 | 0.07 | 50.0 |
+| `yolov8n_obb` (640 x 480) | 1.6 | 38.2 | 0.5 | 39.0 |
+| `yolov8n_obb_raw` (1024) | 2.3 | 108.7 | 1.6 | 111.6 |
+| `yolov8n_classify` (640 x 480) | 1.6 | 21.3 | 0.0 | 22.3 |
+| `lraspp_voc_segment` (512) | 1.5 | 66.5 | 56.9 | 117.3 |
+| `yolov8n_face` (640) | 1.7 | 45.4 | 0.06 | 47.3 |
+| `rtmpose_m_pose` (192 x 256 crop) | 0.8 | 18.6 | 0.06 | 20.4 |
+
+A dma-buffer source saves 0.4 to 0.8 ms of preprocessing. int8 models, not measured here, cut the
+inference time. `SemanticSegment` spends its time on the per-class source-resolution masks.
