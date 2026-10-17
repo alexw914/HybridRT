@@ -53,6 +53,7 @@ target-platform OpenCV and backend SDKs.
 | `HYBRIDRT_BUILD_EXAMPLES` | Build image examples | ON |
 | `HYBRIDRT_BUILD_BENCHMARKS` | Build benchmarks | OFF |
 | `HYBRIDRT_BUILD_C_API` | Build the `hybridrt_c` shared library with the C API | OFF |
+| `HYBRIDRT_BUILD_PYTHON` | Build the C API for the Python package and register its tests | OFF |
 
 To enable and run tests:
 
@@ -97,6 +98,7 @@ Set the required backend SDK paths before configuring the parent project.
 | `hrt::hybridrt` | Image model inference, preprocessing, postprocessing and result drawing |
 | `hrt::hrtc` | Model packaging and configuration without an inference runtime dependency |
 | `hrt::hybridrt_c` | C API in [include/hrt.h](include/hrt.h): image models on host images, flattened results |
+| [Python package](bindings/python/README.md) | numpy interface over the C API, built with `pip install ./bindings/python` |
 | `hrt-compress` | Package, inspect, extract and validate model manifests |
 | `hrt-validate` | Run image-directory validation and save results and annotated images |
 | Image model example | Run a configured model on an image |

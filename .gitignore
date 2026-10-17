@@ -40,6 +40,8 @@ install/
 *.swp
 *.swo
 *.pyc
+__pycache__/
+.pytest_cache/
 
 # Local documentation
 /docs/

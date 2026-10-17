@@ -1,0 +1,32 @@
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "hybridrt"
+dynamic = ["version"]
+description = "Python bindings of the HybridRT model inference framework"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.scikit-build]
+cmake.source-dir = "../.."
+cmake.build-type = "Release"
+build-dir = "../../build/python/{wheel_tag}"
+wheel.packages = ["hybridrt"]
+wheel.py-api = "py3"
+install.components = ["python"]
+
+[tool.scikit-build.metadata.version]
+provider = "scikit_build_core.metadata.regex"
+input = "../../CMakeLists.txt"
+regex = 'VERSION\s+(?P<value>[0-9]+\.[0-9]+\.[0-9]+)'
+
+[tool.scikit-build.cmake.define]
+HYBRIDRT_BUILD_PYTHON = "ON"
+HYBRIDRT_BUILD_TOOLS = "OFF"
+HYBRIDRT_BUILD_EXAMPLES = "OFF"

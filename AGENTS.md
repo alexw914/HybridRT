@@ -46,6 +46,8 @@
   调用方分配的结构体不改布局。可预先检查的错误返回 `HrtStatus`，信息由 `hrt_last_error` 给出；
   C API 只接收主机内存输入，结果为主机数组。该共享库构建关闭 kitzoo 的 mimalloc 进程替换，
   并使用可 dlopen 的 TLS 模型。
+- 语言绑定放 `bindings/<语言>/`，只调用 C API，不链接 C++ 库，由 `HYBRIDRT_BUILD_<语言>` 启用；
+  Python 绑定用 ctypes，按 Python 惯例抛出 `HybridRTError`，用 scikit-build-core 打包。
 - `source/include/hrtc/hrtc_generated.h` 随仓库提交，不手改；修改 `fbs/hrtc.fbs` 后用
   `HYBRIDRT_BUILD_FLATC` 启用 flatc 并构建 `hrtc_schema` 重新生成。
   字段只在表末尾追加；不兼容改动更换 `file_identifier` 并重新打包。
@@ -81,6 +83,7 @@
   // -----------------------------------------------------------------------------
   ```
 
+- Python 文件使用相同内容的 `#` 注释文件头。
 - 使用 include guard，禁止 pragma once。宏名 `HRT_<目录>_<文件名>_HPP`，全大写、点换下划线，
   冲突时增加一级目录；末尾 endif 注释标明宏名。.hpp.in 按生成的 .hpp 命名，
   保持 `@变量@` 完整，必要时用 clang-format off/on。
@@ -137,7 +140,7 @@
 - `examples/<name>.cpp` 对应 `hybridrt_example_<name>`，展示典型用法；
   资源通过命令行传入，图片用 OpenCV imgcodecs 读写。
 - 测试放 `tests/<模块>/<源文件>_test.cpp`，根目录只留构建入口，同源场景合并；
-  C API 测试放 `tests/c/`。
+  C API 测试放 `tests/c/`，Python 测试放 `bindings/python/tests/`（pytest，经 CTest 运行）。
   用例组为源文件大驼峰名加 Test，目标为 `hybridrt_test_<源文件>`，重名时加目录前缀。
   命令行程序和示例用 `tests/tools/run_tool.hpp` 做黑盒测试，检查退出码、输出、产物；
   前后处理用构造的小数据验证。
