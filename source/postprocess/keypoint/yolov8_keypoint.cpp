@@ -31,6 +31,10 @@ struct YoloV8KeypointParam {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8KeypointParam, class_num, keypoint_num, strides, reg_max,
                                                 confidence_threshold, iou_threshold, keypoint_threshold)
 
+auto has_shape_parameters(const kitzoo::json::Json& config) -> bool {
+  return config.contains("class_num") + config.contains("reg_max") + config.contains("keypoint_num") >= 2;
+}
+
 // One output per stride with channels 4 * reg_max distance bins, class
 // logits, then x, y (and visibility logit) per keypoint, as Ultralytics pose
 // heads emit them before decoding (e.g. YOLOv8 face models with 5 landmarks).
@@ -38,17 +42,38 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8KeypointParam, class_num, 
 class YoloV8Keypoint final : public KeypointPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    return check_section<YoloV8KeypointParam>(config);
+    auto problems = check_section<YoloV8KeypointParam>(config);
+    if (!has_shape_parameters(config))
+      problems.emplace_back("postprocess: YoloV8Keypoint needs at least two of class_num, reg_max and keypoint_num");
+    return problems;
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    KZ_CHECK_RETURN(has_shape_parameters(config), false,
+                    "yolov8_keypoint: supply at least two of class_num, reg_max and keypoint_num");
     param_ = config.get<YoloV8KeypointParam>();
+    KZ_CHECK_RETURN(!config.contains("class_num") || param_.class_num > 0, false,
+                    "yolov8_keypoint: class_num must be positive when supplied");
     KZ_CHECK_RETURN(!config.contains("reg_max") || param_.reg_max > 0, false, "reg_max must be positive when supplied");
     KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
                     "yolov8_keypoint: keypoint_num must be positive");
     const auto& outputs = engine.output_protos();
     const auto head = outputs.empty() ? std::nullopt : head_shape(outputs[0], engine.proto().output_layout);
     KZ_CHECK_RETURN(head.has_value(), false, "yolov8_keypoint: needs one [1, channels, h, w] output per stride");
+    if (!config.contains("class_num")) {
+      KZ_CHECK_RETURN(head->channels > 0 && param_.reg_max <= static_cast<std::size_t>((head->channels - 1) / 4), false,
+                      "yolov8_keypoint: reg_max exceeds output channels");
+      for (const std::int64_t dims : {2, 3}) {
+        const auto classes = head->channels - static_cast<std::int64_t>(param_.reg_max) * 4 -
+                             static_cast<std::int64_t>(param_.keypoint_num) * dims;
+        if (classes <= 0 || classes > std::numeric_limits<unsigned int>::max())
+          continue;
+        KZ_CHECK_RETURN(param_.class_num == 0, false,
+                        "yolov8_keypoint: ambiguous class count and keypoint dimensions; supply class_num");
+        param_.class_num = static_cast<unsigned int>(classes);
+      }
+      KZ_CHECK_RETURN(param_.class_num > 0, false, "yolov8_keypoint: no positive class count fits the outputs");
+    }
     const auto shape = keypoint_shape(head->channels - static_cast<std::int64_t>(param_.class_num), param_.keypoint_num,
                                       param_.reg_max);
     if (!shape)

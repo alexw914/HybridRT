@@ -90,17 +90,54 @@ TEST(YoloV8KeypointTest, InfersAndValidatesKeypointCountsAcrossPoseFormats) {
   }
 }
 
-TEST(YoloV8KeypointTest, RequiresAUniquePartitionWhenBothCountsAreOmitted) {
+TEST(YoloV8KeypointTest, RequiresTwoExplicitShapeParameters) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 24, 2, 2})});
   auto options = Json::parse(R"({"class_num":1,"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
   EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, engine), "");
+  EXPECT_FALSE(hrt::postprocess::check_config("YoloV8Keypoint", options).empty());
   options["reg_max"] = 2;
   EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, engine), nullptr);
   options["keypoint_num"] = 5;
   EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, engine), nullptr);
   options["keypoint_num"] = 4;
   EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, engine), "");
+}
+
+TEST(YoloV8KeypointTest, InfersMissingClassCountAndChecksExplicitValues) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  FakeEngine unique({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 13, 2, 2})});
+  auto options = Json::parse(R"({"reg_max":2,"keypoint_num":2,"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
+  EXPECT_TRUE(hrt::postprocess::check_config("YoloV8Keypoint", options).empty());
+  auto decoder = hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, unique);
+  hrt::Vector<float> values(13 * 4, -20.0F);
+  values[8 * 4] = 3.0F;
+  values[9 * 4] = 0.25F;
+  values[10 * 4] = 0.5F;
+  hrt::postprocess::KeypointResultMap result;
+  const auto output = proto(DataType::Float32, {1, 13, 2, 2});
+  ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(16, 16)));
+  ASSERT_EQ(result.at(0).size(), 1U);
+  ASSERT_EQ(result.at(0)[0].keypoints.size(), 2U);
+  EXPECT_FLOAT_EQ(result.at(0)[0].keypoints[0].point.x, 4.0F);
+  EXPECT_FLOAT_EQ(result.at(0)[0].keypoints[0].score, 1.0F);
+  FakeEngine ambiguous({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 15, 2, 2})});
+  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, ambiguous), "");
+  options["class_num"] = 1;
+  EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, ambiguous), nullptr);
+  for (const auto classes : {0, 2, 7}) {
+    options["class_num"] = classes;
+    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, ambiguous), "");
+  }
+  for (const auto* key : {"class_num", "reg_max", "keypoint_num"}) {
+    auto one = Json::parse(R"({"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
+    one[key] = 1;
+    EXPECT_FALSE(hrt::postprocess::check_config("YoloV8Keypoint", one).empty());
+    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", one, unique), "");
+  }
+  auto empty = Json::parse(R"({"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
+  EXPECT_FALSE(hrt::postprocess::check_config("YoloV8Keypoint", empty).empty());
+  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", empty, unique), "");
 }
 
 TEST(YoloV8KeypointTest, RequiresRegMaxForAmbiguousKeypointDimensions) {

@@ -228,6 +228,7 @@
           "type": "YoloV8Keypoint",
           "class_num": 1,
           "reg_max": 16,
+          "keypoint_num": 5,
           "keypoint_threshold": 0.5,
           "confidence_threshold": [0.25],
           "iou_threshold": [0.45]

@@ -90,7 +90,7 @@ each in [0, 1].
 | `E2ERotated` | `class_num`, `confidence_threshold`; end-to-end OBB `[1, N, 7]` |
 | `DetrDetect` | `class_num`, `confidence_threshold` (0.25), `output_format` (`combined`/`separate`), `score_activation` (`none`/`sigmoid`/`softmax`), `background_class` (-1: none) |
 | `GeneralYoloPose` | `class_num`, `keypoint_num` (optional; inferred when unambiguous), `keypoint_threshold` (0.5), thresholds |
-| `YoloV8Keypoint` | `class_num`, `keypoint_num` (optional; inferred when unambiguous), `strides` (optional; inferred from input/head sizes), `reg_max` (optional; inferred from output channels), `keypoint_threshold` (0.5), thresholds |
+| `YoloV8Keypoint` | at least two of `class_num`, `reg_max`, `keypoint_num`; `strides` (optional; inferred), `keypoint_threshold` (0.5), thresholds |
 | `Yolo26Keypoint` | `class_num`, `keypoint_num` (optional; inferred when unambiguous), `strides` (optional; inferred from input/head sizes), `keypoint_threshold` (0.5), thresholds |
 | `E2EKeypoint` | `class_num`, `keypoint_num` (optional; inferred when unambiguous), `keypoint_threshold` (0.5), `confidence_threshold`; end-to-end pose `[1, N, 6 + K x (2 \| 3)]` |
 | `RtmoKeypoint` | `confidence_threshold` ([0.15]), `iou_threshold` ([0.65]), `keypoint_threshold` (0.3); one class |
@@ -112,10 +112,13 @@ An explicit `reg_max` must be positive and match every head.
 `GeneralYoloPose`, `E2EKeypoint`, `Yolo26Keypoint` and `YoloV8Keypoint` also infer
 `keypoint_num` during initialization. An explicit value must be positive and match the
 output shape. Keypoints may contain two coordinates or two coordinates plus visibility;
-if both interpretations fit, supply `keypoint_num` to disambiguate. Raw YOLOv8 additionally
-shares its channel count with `reg_max`, so normally one of those two parameters must be
-provided. The face template supplies `reg_max: 16` and infers five keypoints. When both are
-provided, both are checked. Initialization fails if the partition is invalid or ambiguous;
+if both interpretations fit, supply `keypoint_num` to disambiguate. Raw YOLOv8 requires at
+least two explicitly supplied positive values among
+`class_num`, `reg_max` and `keypoint_num`; the omitted parameter is inferred. If all three
+are supplied, all are checked. Two supplied values do not resolve every two-versus-three
+component ambiguity: initialization still rejects multiple valid partitions, including
+ambiguous inferred class counts. The face template explicitly lists all three:
+`class_num: 1`, `reg_max: 16`, and `keypoint_num: 5`. Initialization fails if the partition is invalid or ambiguous;
 it does not assume three components or a particular bin count. Segmentation likewise
 requires an unambiguous prototype/head structure; explicit `reg_max` can constrain that match.
 Engines report outputs sorted by name on every backend; `anchors`, output indices and any
@@ -247,6 +250,50 @@ hrt-validate -m yolov8n_detect.json -n yolov8n_detect -e ort -i assets/yolo/imag
 | `person_head_detect`, `fire_detect`, `person_heatmap_keypoint` | `assets/rknn/models/yolov8_person_head_1280_int8.rknn`, `yolov8_fire_1280_int8.rknn`, `person_heatmap_keypoint_256x256_int8.rknn` | private RKNN models (RK3588, int8, mean 0 / std 255 built in); use your own with the same outputs | `73745b16...`, `91290dc2...`, `7a0f60b4...` |
 | `rtmpose_m_pose` | `assets/rtmpose/models/rtmpose-m_simcc-body7_256x192.onnx` | `end2end.onnx` of the [RTMPose-m body7 SDK](https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504.zip) | `5c0a4bf6...` |
 | `rtmo_s_pose` | `assets/rtmo/models/rtmo-s_body7_640x640.onnx` | `end2end.onnx` of the [RTMO-s body7 SDK](https://download.openmmlab.com/mmpose/v1/projects/rtmo/onnx_sdk/rtmo-s_8xb32-600e_body7-640x640-dac2bf74_20231211.zip) through `rtmo_fix_outputs.py` (300 candidates) | `86aefe58...` |
+
+### Fixed ONNX collection by postprocess type
+
+The local, untracked `assets/postprocess_onnx/` contains one `<type>.onnx` for each of the
+23 postprocess types in this template. It selects the representative ONNX above for each
+type, using `yolov8n-raw.onnx` for `YoloV8Detect` and RTMPose SimCC for `GeneralKeypoint`.
+Original fixed input sizes are retained; they are not all 640 x 640. The template paths
+remain the original fixture paths.
+
+`yolov5_export_raw.py` exposes the three convolution logits of the
+[official YOLOv5n v7.0 ONNX](https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5n.onnx)
+as `head0`, `head1`, `head2`, promoting the FP16 release asset to FP32 for `YoloV5Detect`.
+The represented weights are preserved. `YoloV5Rotated.onnx` is the user-provided
+`v0013_obbczs_detection_0808int8.onnx`, copied without modification: input `[1,3,1280,1280]`,
+heads `[1,24,160,160]`, `[1,24,80,80]`, `[1,24,40,40]`, internally INT8 Q/DQ with float32 I/O.
+Its channel layout fits 3 anchors and 2 classes, unlike the 15-class template demonstration.
+Its original anchors, preprocessing and angle convention were not confirmed; runtime
+validation used template anchors with `class_num: 2` and does not establish accuracy.
+
+`onnx_fix_shapes.py` fixes RT-DETR, RTMO and RTMPose inputs using onnxsim while preserving
+floating-point arithmetic (no algebraic optimization or constant folding). It verifies
+onnxsim equivalence and invariant output shapes on zero/random inputs before completing
+symbolic output annotations. RTMO already uses fixed TopK candidates from
+`rtmo_fix_outputs.py`; image-dependent NMS outputs cannot simply be annotated as fixed.
+
+```sh
+python assets/template/yolov5_export_raw.py yolov5n.onnx assets/postprocess_onnx/YoloV5Detect.onnx
+python assets/template/onnx_fix_shapes.py assets/rtdetr/models/rtdetr-l.onnx assets/postprocess_onnx/DetrDetect.onnx --input images=1,3,640,640
+python assets/template/onnx_fix_shapes.py assets/rtmo/models/rtmo-s_body7_640x640.onnx assets/postprocess_onnx/RtmoKeypoint.onnx --input input=1,3,640,640
+python assets/template/onnx_fix_shapes.py assets/rtmpose/models/rtmpose-m_simcc-body7_256x192.onnx assets/postprocess_onnx/GeneralKeypoint.onnx --input input=1,3,256,192
+```
+
+The 23 files passed ONNX checker, ONNX Runtime zero/random-input runs and `hrt-validate`
+(45 image runs, no pipeline errors). This confirms fixed I/O and runnable postprocessing,
+not detection accuracy. Re-exported or newly supplied files have these SHA256 values;
+unchanged copies retain the source hashes listed above:
+
+| File | SHA256 |
+| --- | --- |
+| `YoloV5Detect.onnx` | `797416533eed5eb4c82098ec221bbe55368ad3c062f9d0217db87f129a78f172` |
+| `DetrDetect.onnx` | `599b9b7484cb831312f585d4ec4885a95ae10d1e84dada14833f5c570828c9b9` |
+| `YoloV5Rotated.onnx` | `afffc7a2813e15e9137648bc7655155827b1cdace2a0999b1919d1196be57dfb` |
+| `RtmoKeypoint.onnx` | `91d97d8251f7624d4da9cead6b2a8bd6ea36850cfe329122eebeb89b41f108d2` |
+| `GeneralKeypoint.onnx` | `81e1025f9c938450d2ef88c0fba274fb57b0f9b49711dc7a52fef99c7ea3548d` |
 
 The `yolov8n_*` models have a 480 x 640 input; `yolov8n_classify` resizes directly instead of the
 square center crop, so it is a pipeline check, not an accuracy reference. `rtmpose_m_pose` runs on
