@@ -42,6 +42,31 @@ struct YoloV8Param {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8Param, class_num, strides, reg_max, confidence_threshold,
                                                 iou_threshold)
 
+// Generation of raw anchor-free heads where keypoint or angle decoding
+// differs: YOLOv8 keypoints at (raw * 2 + cell) and angles (sigmoid(raw) -
+// 0.25) * pi; YOLO26 keypoints at (raw + cell + 0.5) and raw angles in radians.
+enum class YoloHeadVersion {
+  YoloV8,
+  Yolo26,
+};
+
+NLOHMANN_JSON_SERIALIZE_ENUM(YoloHeadVersion, {
+                                                  {YoloHeadVersion::YoloV8, "yolov8"},
+                                                  {YoloHeadVersion::Yolo26, "yolo26"},
+                                              })
+
+struct YoloV8RotatedParam {
+  unsigned int class_num = 0;
+  Vector<float> strides;
+  std::size_t reg_max = 16;
+  YoloHeadVersion head_version = YoloHeadVersion::YoloV8;
+  Vector<float> confidence_threshold;
+  Vector<float> iou_threshold;
+};
+
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8RotatedParam, class_num, strides, reg_max, head_version,
+                                                confidence_threshold, iou_threshold)
+
 struct GeneralDetectParam {
   unsigned int class_num = 0;
   Vector<float> confidence_threshold;

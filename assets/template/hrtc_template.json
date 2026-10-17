@@ -165,6 +165,7 @@
           "class_num": 15,
           "strides": [8, 16, 32],
           "reg_max": 16,
+          "head_version": "yolov8",
           "confidence_threshold": [0.25],
           "iou_threshold": [0.45]
         }
@@ -227,6 +228,7 @@
           "keypoint_num": 5,
           "strides": [16, 32, 8],
           "reg_max": 16,
+          "head_version": "yolov8",
           "keypoint_threshold": 0.5,
           "confidence_threshold": [0.25],
           "iou_threshold": [0.45]

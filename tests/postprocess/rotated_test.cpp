@@ -77,6 +77,37 @@ TEST(RotatedTest, GeneralDecodesObb) {
             1U);
 }
 
+TEST(RotatedTest, YoloV8ReadsYolo26AnglesInRadians) {
+  // One 2x2 stride-8 head, reg_max 1: distances, theta, one class.
+  const auto output = proto(DataType::Float32, {1, 6, 2, 2});
+  hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
+  const auto angle = std::numbers::pi_v<float> / 12.0F;
+  for (const auto* version : {"yolov8", "yolo26"}) {
+    const kitzoo::json::Json config{{"class_num", 1},
+                                    {"strides", {8}},
+                                    {"reg_max", 1},
+                                    {"head_version", version},
+                                    {"confidence_threshold", {0.5F}},
+                                    {"iou_threshold", {0.45F}}};
+    auto postprocessor = hrt::postprocess::create_rotated_postprocessor("YoloV8Rotated", config, engine);
+    hrt::Vector<float> values(6 * 4, -10.0F);
+    const hrt::Vector<float> cell{0.5F, 0.5F, 0.5F, 0.5F, angle, 3.0F};
+    for (std::size_t c = 0; c < cell.size(); ++c)
+      values[c * 4 + 3] = cell[c];
+    hrt::postprocess::RotatedResultMap result;
+    ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(16, 16)));
+    ASSERT_EQ(result.at(0).size(), 1U);
+    const auto& rect = result.at(0)[0].rect;
+    EXPECT_NEAR(rect.center.x, 12.0F, 1e-4F);
+    EXPECT_NEAR(rect.center.y, 12.0F, 1e-4F);
+    EXPECT_NEAR(rect.size.width, 8.0F, 1e-4F);
+    // YOLOv8 maps theta through (sigmoid - 0.25) * 180, YOLO26 reads radians.
+    const auto expected =
+        version == hrt::String("yolo26") ? 15.0F : (1.0F / (1.0F + std::exp(-angle)) - 0.25F) * 180.0F;
+    EXPECT_NEAR(rect.angle, expected, 1e-3F);
+  }
+}
+
 TEST(RotatedTest, RejectsNonuniformSourceMapping) {
   const auto output = proto(DataType::Float32, {1, 6, 1});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 64, 64})}, {output});

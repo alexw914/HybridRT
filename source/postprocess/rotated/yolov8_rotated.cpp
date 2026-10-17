@@ -16,17 +16,22 @@ namespace hrt::postprocess {
 
 namespace {
 
-// Channels per cell: 4 * reg_max distance bins, theta, classes.
+// Channels per cell: 4 * reg_max distance bins, theta, classes; head_version
+// selects how theta decodes (YOLOv8 or YOLO26, see YoloHeadVersion).
 class YoloV8Rotated final : public RotatedPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    return check_section<YoloV8Param>(config);
+    return check_section<YoloV8RotatedParam>(config);
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    param_ = config.get<YoloV8Param>();
-    if (!check_yolov8(param_, engine, 1))
+    param_ = config.get<YoloV8RotatedParam>();
+    YoloV8Param heads{param_.class_num, param_.strides, param_.reg_max, param_.confidence_threshold,
+                      param_.iou_threshold};
+    if (!check_yolov8(heads, engine, 1))
       return false;
+    param_.confidence_threshold = heads.confidence_threshold;
+    param_.iou_threshold = heads.iou_threshold;
     logit_threshold_.resize(param_.class_num);
     std::transform(param_.confidence_threshold.begin(), param_.confidence_threshold.end(), logit_threshold_.begin(),
                    logit);
@@ -64,7 +69,10 @@ private:
           if (score < logit_threshold_[cls])
             continue;
           if (!decoded) {
-            const auto theta = (sigmoid(grid.at(y, x, bins * 4)) - 0.25F) * 180.0F;
+            const auto angle = grid.at(y, x, bins * 4);
+            const auto theta = param_.head_version == YoloHeadVersion::Yolo26
+                                   ? angle * 180.0F / std::numbers::pi_v<float>
+                                   : (sigmoid(angle) - 0.25F) * 180.0F;
             const auto rad = theta / 180.0F * std::numbers::pi_v<float>;
             const auto cos = std::cos(rad);
             const auto sin = std::sin(rad);
@@ -86,7 +94,7 @@ private:
     }
   }
 
-  YoloV8Param param_;
+  YoloV8RotatedParam param_;
   Vector<float> logit_threshold_;
   engine::DataLayout layout_ = engine::DataLayout::Nchw;
 };

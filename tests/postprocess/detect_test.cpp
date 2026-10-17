@@ -128,6 +128,30 @@ TEST(DetectYoloV8Test, AbortsOnMismatchedConfig) {
   EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", negative, engine), "");
 }
 
+TEST(DetectYoloV8Test, ReadsRawDistancesWithOneBin) {
+  // YOLO26 heads: reg_max 1, so the four box channels are the distances in
+  // cells. Cell (x=0, y=1) of a 2x2 stride-8 head: 1 cell left and up, 0.5
+  // right and down.
+  const auto output = proto(DataType::Float32, {1, 5, 2, 2});
+  FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
+  auto config = yolov8_config();
+  config["reg_max"] = 1;
+  auto postprocessor = hrt::postprocess::create_detect_postprocessor("YoloV8Detect", config, engine);
+  hrt::Vector<float> values(5 * 4, -10.0F);
+  const hrt::Vector<float> cell{1.0F, 1.0F, 0.5F, 0.5F, 3.0F};
+  for (std::size_t c = 0; c < cell.size(); ++c)
+    values[c * 4 + 2] = cell[c];
+  hrt::postprocess::DetectResultMap result;
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(16, 16)));
+  ASSERT_EQ(result.at(0).size(), 1U);
+  const auto& box = result.at(0)[0];
+  // Center (0.5, 1.5) cells: (-0.5, 0.5) to (1, 2) cells, clipped at x = 0.
+  EXPECT_FLOAT_EQ(box.rect.x, 0.0F);
+  EXPECT_FLOAT_EQ(box.rect.y, 4.0F);
+  EXPECT_FLOAT_EQ(box.rect.width, 8.0F);
+  EXPECT_FLOAT_EQ(box.rect.height, 12.0F);
+}
+
 TEST(DetectYoloV5Test, KeepsLowObjectnessAboveThreshold) {
   // Objectness 0.4 (logit < 0.25) with a confident class still clears 0.25.
   const auto output = proto(DataType::Float32, {1, 6, 2, 2});
