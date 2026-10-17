@@ -50,34 +50,35 @@ protected:
 
 private:
   template <typename Grid>
-  auto decode_head(DetectResultMap& result, const Grid& grid, float stride) const -> void {
+  auto decode_head(DetectResultMap& result, const Grid& grid, float stride) -> void {
     const auto bins = param_.reg_max;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
-    for (std::int64_t y = 0; y < grid.rows(); ++y) {
-      for (std::int64_t x = 0; x < grid.cols(); ++x) {
-        bool decoded = false;
-        core::Rect2f box;
-        for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
-          if (grid.raw(y, x, bins * 4 + cls) < min_score)
-            continue;
-          const auto score = grid.at(y, x, bins * 4 + cls);
-          if (score < logit_threshold_[cls])
-            continue;
-          if (!decoded) {
-            const auto cx = static_cast<float>(x) + 0.5F;
-            const auto cy = static_cast<float>(y) + 0.5F;
-            box = core::Rect2f::from_points(
-                {(cx - dfl(grid, y, x, 0, bins)) * stride, (cy - dfl(grid, y, x, bins, bins)) * stride},
-                {(cx + dfl(grid, y, x, bins * 2, bins)) * stride, (cy + dfl(grid, y, x, bins * 3, bins)) * stride});
-            decoded = true;
-          }
-          result[cls].push_back({box, sigmoid(score), static_cast<std::int64_t>(cls)});
+    for (const auto cell : scan_cells(grid, bins * 4, param_.class_num, min_score, scan_)) {
+      const std::int64_t y = cell / grid.cols();
+      const std::int64_t x = cell % grid.cols();
+      bool decoded = false;
+      core::Rect2f box;
+      for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
+        if (grid.raw(y, x, bins * 4 + cls) < min_score)
+          continue;
+        const auto score = grid.at(y, x, bins * 4 + cls);
+        if (score < logit_threshold_[cls])
+          continue;
+        if (!decoded) {
+          const auto cx = static_cast<float>(x) + 0.5F;
+          const auto cy = static_cast<float>(y) + 0.5F;
+          box = core::Rect2f::from_points(
+              {(cx - dfl(grid, y, x, 0, bins)) * stride, (cy - dfl(grid, y, x, bins, bins)) * stride},
+              {(cx + dfl(grid, y, x, bins * 2, bins)) * stride, (cy + dfl(grid, y, x, bins * 3, bins)) * stride});
+          decoded = true;
         }
+        result[cls].push_back({box, sigmoid(score), static_cast<std::int64_t>(cls)});
       }
     }
   }
 
   YoloV8Param param_;
+  CellScan scan_;
   Vector<float> logit_threshold_;
   engine::DataLayout layout_ = engine::DataLayout::Nchw;
 };

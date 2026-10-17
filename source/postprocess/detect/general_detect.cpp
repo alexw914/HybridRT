@@ -44,19 +44,21 @@ public:
 protected:
   auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const auto* data = float_data(*outputs[0], scratch_);
-    if (data == nullptr)
+    const RowView rows(*outputs[0], scratch_);
+    if (!rows.valid())
       return false;
-    const auto count = static_cast<std::size_t>(outputs[0]->shape()[2]);
-    for (std::size_t i = 0; i < count; ++i) {
-      const auto [l, t, r, b] = center_box(data[i], data[count + i], data[count * 2 + i], data[count * 3 + i]);
-      // Also skips NaN boxes.
-      if (!(r - l > 0.0F && b - t > 0.0F))
-        continue;
-      for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
-        const auto score = data[(4 + cls) * count + i];
-        if (score > param_.confidence_threshold[cls])
-          result[cls].push_back({core::Rect2f::from_points({l, t}, {r, b}), score, static_cast<std::int64_t>(cls)});
+    // One class row at a time, in memory order; boxes only for scores above
+    // the threshold. Anchors stay in order within a class.
+    for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
+      candidates_.clear();
+      rows.above(4 + cls, param_.confidence_threshold[cls], candidates_);
+      for (const auto i : candidates_) {
+        const auto [l, t, r, b] = center_box(rows.at(0, i), rows.at(1, i), rows.at(2, i), rows.at(3, i));
+        // Also skips NaN boxes.
+        if (!(r - l > 0.0F && b - t > 0.0F))
+          continue;
+        result[cls].push_back(
+            {core::Rect2f::from_points({l, t}, {r, b}), rows.at(4 + cls, i), static_cast<std::int64_t>(cls)});
       }
     }
     finish_detect(result, param_.iou_threshold, transform);
@@ -65,6 +67,7 @@ protected:
 
 private:
   GeneralDetectParam param_;
+  Vector<std::uint32_t> candidates_;
   core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
 };
 

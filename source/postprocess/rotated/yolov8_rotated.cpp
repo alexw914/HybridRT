@@ -55,46 +55,46 @@ protected:
 
 private:
   template <typename Grid>
-  auto decode_head(RotatedResultMap& result, const Grid& grid, float stride) const -> void {
+  auto decode_head(RotatedResultMap& result, const Grid& grid, float stride) -> void {
     const auto bins = param_.reg_max;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
-    for (std::int64_t y = 0; y < grid.rows(); ++y) {
-      for (std::int64_t x = 0; x < grid.cols(); ++x) {
-        bool decoded = false;
-        core::RotatedRect rect;
-        for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
-          if (grid.raw(y, x, bins * 4 + 1 + cls) < min_score)
-            continue;
-          const auto score = grid.at(y, x, bins * 4 + 1 + cls);
-          if (score < logit_threshold_[cls])
-            continue;
-          if (!decoded) {
-            const auto angle = grid.at(y, x, bins * 4);
-            const auto theta = param_.head_version == YoloHeadVersion::Yolo26
-                                   ? angle * 180.0F / std::numbers::pi_v<float>
-                                   : (sigmoid(angle) - 0.25F) * 180.0F;
-            const auto rad = theta / 180.0F * std::numbers::pi_v<float>;
-            const auto cos = std::cos(rad);
-            const auto sin = std::sin(rad);
-            const auto l = dfl(grid, y, x, 0, bins);
-            const auto t = dfl(grid, y, x, bins, bins);
-            const auto r = dfl(grid, y, x, bins * 2, bins);
-            const auto b = dfl(grid, y, x, bins * 3, bins);
-            const auto xf = (r - l) / 2.0F;
-            const auto yf = (b - t) / 2.0F;
-            rect.center = {(xf * cos - yf * sin + static_cast<float>(x) + 0.5F) * stride,
-                           (xf * sin + yf * cos + static_cast<float>(y) + 0.5F) * stride};
-            rect.size = {(r + l) * stride, (b + t) * stride};
-            rect.angle = theta;
-            decoded = true;
-          }
-          result[cls].push_back({rect, sigmoid(score), static_cast<std::int64_t>(cls)});
+    for (const auto cell : scan_cells(grid, bins * 4 + 1, param_.class_num, min_score, scan_)) {
+      const std::int64_t y = cell / grid.cols();
+      const std::int64_t x = cell % grid.cols();
+      bool decoded = false;
+      core::RotatedRect rect;
+      for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
+        if (grid.raw(y, x, bins * 4 + 1 + cls) < min_score)
+          continue;
+        const auto score = grid.at(y, x, bins * 4 + 1 + cls);
+        if (score < logit_threshold_[cls])
+          continue;
+        if (!decoded) {
+          const auto angle = grid.at(y, x, bins * 4);
+          const auto theta = param_.head_version == YoloHeadVersion::Yolo26 ? angle * 180.0F / std::numbers::pi_v<float>
+                                                                            : (sigmoid(angle) - 0.25F) * 180.0F;
+          const auto rad = theta / 180.0F * std::numbers::pi_v<float>;
+          const auto cos = std::cos(rad);
+          const auto sin = std::sin(rad);
+          const auto l = dfl(grid, y, x, 0, bins);
+          const auto t = dfl(grid, y, x, bins, bins);
+          const auto r = dfl(grid, y, x, bins * 2, bins);
+          const auto b = dfl(grid, y, x, bins * 3, bins);
+          const auto xf = (r - l) / 2.0F;
+          const auto yf = (b - t) / 2.0F;
+          rect.center = {(xf * cos - yf * sin + static_cast<float>(x) + 0.5F) * stride,
+                         (xf * sin + yf * cos + static_cast<float>(y) + 0.5F) * stride};
+          rect.size = {(r + l) * stride, (b + t) * stride};
+          rect.angle = theta;
+          decoded = true;
         }
+        result[cls].push_back({rect, sigmoid(score), static_cast<std::int64_t>(cls)});
       }
     }
   }
 
   YoloV8RotatedParam param_;
+  CellScan scan_;
   Vector<float> logit_threshold_;
   engine::DataLayout layout_ = engine::DataLayout::Nchw;
 };

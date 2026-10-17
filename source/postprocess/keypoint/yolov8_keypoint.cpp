@@ -116,38 +116,39 @@ private:
     const auto scale = yolo26 ? 1.0F : 2.0F;
     const auto shift = yolo26 ? 0.5F : 0.0F;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
-    for (std::int64_t y = 0; y < grid.rows(); ++y) {
-      for (std::int64_t x = 0; x < grid.cols(); ++x) {
-        for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
-          if (grid.raw(y, x, bins * 4 + cls) < min_score)
-            continue;
-          const auto score = grid.at(y, x, bins * 4 + cls);
-          if (score < logit_threshold_[cls])
-            continue;
-          const auto cx = static_cast<float>(x) + 0.5F;
-          const auto cy = static_cast<float>(y) + 0.5F;
-          auto& object = candidates_[cls].emplace_back();
-          object.box = {
-              core::Rect2f::from_points(
-                  {(cx - dfl(grid, y, x, 0, bins)) * stride, (cy - dfl(grid, y, x, bins, bins)) * stride},
-                  {(cx + dfl(grid, y, x, bins * 2, bins)) * stride, (cy + dfl(grid, y, x, bins * 3, bins)) * stride}),
-              sigmoid(score), static_cast<std::int64_t>(cls), -1};
-          object.keypoints.reserve(param_.keypoint_num);
-          for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
-            const auto channel = first_keypoint + j * dims_;
-            const core::Point2f point{(grid.at(y, x, channel) * scale + static_cast<float>(x) + shift) * stride,
-                                      (grid.at(y, x, channel + 1) * scale + static_cast<float>(y) + shift) * stride};
-            const auto visibility = dims_ == 3 ? sigmoid(grid.at(y, x, channel + 2)) : 1.0F;
-            object.keypoints.push_back(
-                {point, visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
-                 visibility});
-          }
+    for (const auto cell : scan_cells(grid, bins * 4, param_.class_num, min_score, scan_)) {
+      const std::int64_t y = cell / grid.cols();
+      const std::int64_t x = cell % grid.cols();
+      for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
+        if (grid.raw(y, x, bins * 4 + cls) < min_score)
+          continue;
+        const auto score = grid.at(y, x, bins * 4 + cls);
+        if (score < logit_threshold_[cls])
+          continue;
+        const auto cx = static_cast<float>(x) + 0.5F;
+        const auto cy = static_cast<float>(y) + 0.5F;
+        auto& object = candidates_[cls].emplace_back();
+        object.box = {
+            core::Rect2f::from_points(
+                {(cx - dfl(grid, y, x, 0, bins)) * stride, (cy - dfl(grid, y, x, bins, bins)) * stride},
+                {(cx + dfl(grid, y, x, bins * 2, bins)) * stride, (cy + dfl(grid, y, x, bins * 3, bins)) * stride}),
+            sigmoid(score), static_cast<std::int64_t>(cls), -1};
+        object.keypoints.reserve(param_.keypoint_num);
+        for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
+          const auto channel = first_keypoint + j * dims_;
+          const core::Point2f point{(grid.at(y, x, channel) * scale + static_cast<float>(x) + shift) * stride,
+                                    (grid.at(y, x, channel + 1) * scale + static_cast<float>(y) + shift) * stride};
+          const auto visibility = dims_ == 3 ? sigmoid(grid.at(y, x, channel + 2)) : 1.0F;
+          object.keypoints.push_back(
+              {point, visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
+               visibility});
         }
       }
     }
   }
 
   YoloV8KeypointParam param_;
+  CellScan scan_;
   std::size_t dims_ = 3;
   Vector<float> logit_threshold_;
   engine::DataLayout layout_ = engine::DataLayout::Nchw;

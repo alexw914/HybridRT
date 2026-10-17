@@ -59,28 +59,30 @@ public:
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const auto* data = float_data(*outputs[0], scratch_);
-    if (data == nullptr)
+    const RowView rows(*outputs[0], scratch_);
+    if (!rows.valid())
       return false;
-    const auto count = static_cast<std::size_t>(outputs[0]->shape()[2]);
     const auto classes = param_.class_num;
 
-    // Candidates per class in network coordinates.
-    Vector<Vector<core::Rect2f>> rects(classes);
-    Vector<Vector<float>> scores(classes);
-    Vector<Vector<std::size_t>> anchors(classes);
-    for (std::size_t i = 0; i < count; ++i) {
-      const auto [l, t, r, b] = center_box(data[i], data[count + i], data[count * 2 + i], data[count * 3 + i]);
-      // Also skips NaN boxes.
-      if (!(r - l > 0.0F && b - t > 0.0F))
-        continue;
-      for (std::size_t cls = 0; cls < classes; ++cls) {
-        const auto score = data[(4 + cls) * count + i];
-        if (!(score > param_.confidence_threshold[cls]))
+    // Candidates per class in network coordinates, one class row at a time
+    // in memory order; anchors stay in order within a class.
+    rects_.resize(classes);
+    scores_.resize(classes);
+    anchors_.resize(classes);
+    for (std::size_t cls = 0; cls < classes; ++cls) {
+      rects_[cls].clear();
+      scores_[cls].clear();
+      anchors_[cls].clear();
+      candidates_.clear();
+      rows.above(4 + cls, param_.confidence_threshold[cls], candidates_);
+      for (const auto i : candidates_) {
+        const auto [l, t, r, b] = center_box(rows.at(0, i), rows.at(1, i), rows.at(2, i), rows.at(3, i));
+        // Also skips NaN boxes.
+        if (!(r - l > 0.0F && b - t > 0.0F))
           continue;
-        rects[cls].push_back(core::Rect2f::from_points({l, t}, {r, b}));
-        scores[cls].push_back(score);
-        anchors[cls].push_back(i);
+        rects_[cls].push_back(core::Rect2f::from_points({l, t}, {r, b}));
+        scores_[cls].push_back(rows.at(4 + cls, i));
+        anchors_[cls].push_back(i);
       }
     }
 
@@ -89,18 +91,18 @@ protected:
                               static_cast<float>(transform.src_roi.height)};
     const auto first_row = 4 + classes;
     for (std::size_t cls = 0; cls < classes; ++cls) {
-      for (auto k : nms_keep(rects[cls], scores[cls], param_.iou_threshold[cls])) {
-        const auto box = core::intersect(to_source(rects[cls][k], transform), bounds);
+      for (auto k : nms_keep(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
+        const auto box = core::intersect(to_source(rects_[cls][k], transform), bounds);
         if (box.empty())
           continue;
         auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
-        object.box = {box, scores[cls][k], static_cast<std::int64_t>(cls), -1};
-        const auto anchor = anchors[cls][k];
+        object.box = {box, scores_[cls][k], static_cast<std::int64_t>(cls), -1};
+        const auto anchor = anchors_[cls][k];
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
           const auto row = first_row + j * dims_;
-          const core::Point2f point{data[row * count + anchor], data[(row + 1) * count + anchor]};
-          const auto score = dims_ == 3 ? data[(row + 2) * count + anchor] : 1.0F;
+          const core::Point2f point{rows.at(row, anchor), rows.at(row + 1, anchor)};
+          const auto score = dims_ == 3 ? rows.at(row + 2, anchor) : 1.0F;
           object.keypoints.push_back(
               {to_source(point, transform),
                score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
@@ -113,6 +115,10 @@ protected:
 private:
   GeneralYoloPoseParam param_;
   std::size_t dims_ = 3;
+  Vector<std::uint32_t> candidates_;
+  Vector<Vector<core::Rect2f>> rects_;
+  Vector<Vector<float>> scores_;
+  Vector<Vector<std::uint32_t>> anchors_;
   core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
 };
 

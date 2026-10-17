@@ -4,6 +4,57 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-17: candidate scans of detection heads
+
+**Bottleneck.** Raw anchor-free heads (`YoloV8Detect`, `YoloV8Rotated`, `YoloV8Keypoint`) visited every
+cell and, for each, read the score of every class from a different NCHW plane: 80 planes per cell for
+COCO heads, more concurrent streams than the prefetcher follows. Decoded single outputs
+(`GeneralDetect`, `GeneralRotated`, `GeneralYoloPose`, `InstanceSegment`) walked anchors first,
+reading every class row per anchor, and converted whole int8 tensors to float before looking at
+them. On RK3588 the A55 cores (cpu0 to cpu3) run the same decoder about 3.5 times slower than the A76
+cores (cpu4 to cpu7), which made unpinned timings bimodal.
+
+**Change.**
+
+- `scan_cells()` first reduces the class planes of a head to the best raw score per cell, one plane
+  after another into a running maximum (a sequential pass the compiler vectorizes; int8 stays int8),
+  and returns the cells reaching the threshold's raw bound. Decoders then run their unchanged
+  per-class checks, distance bins and keypoints on those cells only.
+- `RowView` reads decoded `[1, rows, N]` outputs in place: each class row is scanned in order, int8
+  scores are compared as integers against the quantized threshold (one step below it, then checked
+  exactly), and only the values of passing anchors are dequantized, with the same formula as
+  before. Per-call candidate vectors became reused members.
+- Results are identical: every ORT test model gives the same boxes, scores, keypoints, angles and
+  masks before and after; int8 decoding equals decoding the dequantized float32 tensor (largest
+  difference 6e-5 from operation order).
+
+**Measurement.** RK3588 (Rock 5B+, librknnrt 2.3.2), postprocess only on one RKNN inference, pinned
+to cpu4 with `taskset`, best of 3 rounds of 300 calls after 50 warm-up calls. x86: Ryzen 5 5600X,
+ONNX Runtime 1.31.0, `hybridrt_bench_postprocess`, pinned, median of 3 repetitions.
+
+| Case | Before | After |
+| --- | --- | --- |
+| RK3588 `YoloV8Detect`, YOLOv8n raw heads, 80 classes, int8 | 1.078 ms | 0.145 ms |
+| RK3588 `YoloV8Detect`, YOLO26n raw heads, 80 classes, int8 | 1.031 ms | 0.112 ms |
+| RK3588 `YoloV8Detect`, 2 classes, 1280 input, int8 | 0.415 ms | 0.091 ms |
+| RK3588 `YoloV8Rotated`, YOLOv8n-obb raw heads, 15 classes, int8 | 1.003 ms | 0.490 ms |
+| RK3588 `YoloV8Keypoint`, YOLOv8n-pose raw heads, int8 | 0.070 ms | 0.044 ms |
+| RK3588 `GeneralDetect`, YOLOv8n, fp16 | 0.771 ms | 0.456 ms |
+| RK3588 `GeneralRotated`, YOLOv8n-obb, fp16 | 0.457 ms | 0.413 ms |
+| RK3588 `GeneralYoloPose`, YOLOv8n-pose, fp16 | 0.051 ms | 0.008 ms |
+| RK3588 `InstanceSegment`, YOLOv8n-seg, fp16 | 1.244 ms | 1.257 ms (masks dominate) |
+| x86 `GeneralDetect` (yolov8n) | 0.400 ms | 0.225 ms |
+| x86 `InstanceSegment` (yolov8n-seg) | 0.661 ms | 0.551 ms |
+| x86 `GeneralYoloPose` (yolov8n-pose) | 0.021 ms | 0.004 ms |
+| x86 `GeneralRotated` (yolov8n-obb) | 0.223 ms | 0.207 ms |
+
+On int8 heads the integer prefilter also beats dequantizing first: 0.22 ms against 1.07 ms for the
+2-class 1280 detector before this change.
+
+Remaining: rotated NMS (polygon IoU) dominates `YoloV8Rotated` now; the RKNN engine still copies
+each output from NPU memory (0.07 ms per MB); decoding threads are not pinned to big cores by the
+framework, so applications should pin them.
+
 ## 2026-10-17: segmentation postprocessing
 
 **Bottleneck.** On the RK3588 board, `InstanceSegment` took 11.4 ms and `SemanticSegment` 54 to 57 ms

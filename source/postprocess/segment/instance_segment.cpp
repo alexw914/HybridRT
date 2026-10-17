@@ -182,33 +182,33 @@ public:
 protected:
   auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const auto* det = float_data(*outputs[detections_], scratch_[0]);
+    const RowView det(*outputs[detections_], scratch_[0]);
     const auto* proto = float_data(*outputs[prototypes_], scratch_[1]);
-    if (det == nullptr || proto == nullptr)
+    if (!det.valid() || proto == nullptr)
       return false;
-    const auto count = static_cast<std::size_t>(outputs[detections_]->shape()[2]);
     const auto& proto_shape = outputs[prototypes_]->shape();
     const MaskDecoder::Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
                                              static_cast<int>(proto_shape[3])};
 
     const auto classes = param_.class_num;
-    Vector<Vector<core::Rect2f>> rects(classes);
-    Vector<Vector<float>> scores(classes);
-    Vector<Vector<std::size_t>> anchors(classes);
+    rects_.resize(classes);
+    scores_.resize(classes);
+    anchors_.resize(classes);
     // Class rows are read in order; walking anchors first strides every row
     // per anchor. Boxes are only built for scores above the threshold.
     for (std::size_t cls = 0; cls < classes; ++cls) {
-      const auto* row = det + (4 + cls) * count;
-      const auto threshold = param_.confidence_threshold[cls];
-      for (std::size_t i = 0; i < count; ++i) {
-        if (!(row[i] > threshold))
-          continue;
-        const auto [l, t, r, b] = center_box(det[i], det[count + i], det[count * 2 + i], det[count * 3 + i]);
+      rects_[cls].clear();
+      scores_[cls].clear();
+      anchors_[cls].clear();
+      candidates_.clear();
+      det.above(4 + cls, param_.confidence_threshold[cls], candidates_);
+      for (const auto i : candidates_) {
+        const auto [l, t, r, b] = center_box(det.at(0, i), det.at(1, i), det.at(2, i), det.at(3, i));
         if (!(r - l > 0.0F && b - t > 0.0F))
           continue;
-        rects[cls].push_back(core::Rect2f::from_points({l, t}, {r, b}));
-        scores[cls].push_back(row[i]);
-        anchors[cls].push_back(i);
+        rects_[cls].push_back(core::Rect2f::from_points({l, t}, {r, b}));
+        scores_[cls].push_back(det.at(4 + cls, i));
+        anchors_[cls].push_back(i);
       }
     }
 
@@ -217,15 +217,15 @@ protected:
                               static_cast<float>(transform.src_roi.height)};
     Vector<float> coefficients(static_cast<std::size_t>(prototypes.channels));
     for (std::size_t cls = 0; cls < classes; ++cls) {
-      for (auto k : nms_keep(rects[cls], scores[cls], param_.iou_threshold[cls])) {
-        const auto box = core::intersect(to_source(rects[cls][k], transform), bounds);
+      for (auto k : nms_keep(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
+        const auto box = core::intersect(to_source(rects_[cls][k], transform), bounds);
         if (box.empty())
           continue;
         for (std::size_t j = 0; j < coefficients.size(); ++j)
-          coefficients[j] = det[(4 + classes + j) * count + anchors[cls][k]];
+          coefficients[j] = det.at(4 + classes + j, anchors_[cls][k]);
         auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
-        object.box = {box, scores[cls][k], static_cast<std::int64_t>(cls), -1};
-        object.mask = masks_.make(prototypes, coefficients, rects[cls][k], box, transform, mask_logit_);
+        object.box = {box, scores_[cls][k], static_cast<std::int64_t>(cls), -1};
+        object.mask = masks_.make(prototypes, coefficients, rects_[cls][k], box, transform, mask_logit_);
       }
     }
     return true;
@@ -233,6 +233,10 @@ protected:
 
 private:
   InstanceSegmentParam param_;
+  Vector<std::uint32_t> candidates_;
+  Vector<Vector<core::Rect2f>> rects_;
+  Vector<Vector<float>> scores_;
+  Vector<Vector<std::uint32_t>> anchors_;
   std::size_t detections_ = 0;
   std::size_t prototypes_ = 1;
   float mask_logit_ = 0.0F;

@@ -85,6 +85,13 @@ public:
 
   KZ_NODISCARD auto cols() const -> std::int64_t { return cols_; }
 
+  // Cell (y, 0) of `channel`; cells of a row are col_step() elements apart.
+  KZ_NODISCARD auto row(std::int64_t y, std::size_t channel) const -> const T* {
+    return data_ + static_cast<std::size_t>(y) * row_step_ + channel * channel_step_;
+  }
+
+  KZ_NODISCARD auto col_step() const -> std::size_t { return col_step_; }
+
   KZ_NODISCARD auto raw(std::int64_t y, std::int64_t x, std::size_t channel) const -> T {
     return data_[static_cast<std::size_t>(y) * row_step_ + static_cast<std::size_t>(x) * col_step_ +
                  channel * channel_step_];
@@ -120,6 +127,60 @@ private:
   std::size_t col_step_ = 0;
   std::size_t channel_step_ = 0;
 };
+
+// Reusable buffers of scan_cells().
+struct CellScan {
+  Vector<float> float_best;
+  Vector<std::int8_t> int8_best;
+  Vector<std::int32_t> cells;
+
+  template <typename T>
+  auto best() -> Vector<T>& {
+    if constexpr (std::is_same_v<T, float>)
+      return float_best;
+    else
+      return int8_best;
+  }
+};
+
+// Cells (y * cols + x) whose largest raw score over channels [first, first +
+// count) is at least `bound`, in row-major order. With NCHW heads the class
+// planes are read one after another into a running maximum, a sequential
+// pass the compiler vectorizes, instead of striding every plane for every
+// cell; int8 scores are compared without dequantizing.
+template <typename T, typename Bound>
+auto scan_cells(const HeadGrid<T>& grid, std::size_t first, std::size_t count, Bound bound, CellScan& scan)
+    -> const Vector<std::int32_t>& {
+  const auto rows = grid.rows();
+  const auto cols = grid.cols();
+  auto& best = scan.best<T>();
+  best.assign(static_cast<std::size_t>(rows * cols), std::numeric_limits<T>::lowest());
+  if (grid.col_step() == 1) {
+    for (std::size_t c = first; c < first + count; ++c) {
+      for (std::int64_t y = 0; y < rows; ++y) {
+        const auto* in = grid.row(y, c);
+        auto* out = best.data() + y * cols;
+        for (std::int64_t x = 0; x < cols; ++x)
+          out[x] = std::max(out[x], in[x]);
+      }
+    }
+  } else {
+    for (std::int64_t y = 0; y < rows; ++y) {
+      for (std::int64_t x = 0; x < cols; ++x) {
+        auto value = std::numeric_limits<T>::lowest();
+        for (std::size_t c = first; c < first + count; ++c)
+          value = std::max(value, grid.raw(y, x, c));
+        best[static_cast<std::size_t>(y * cols + x)] = value;
+      }
+    }
+  }
+  scan.cells.clear();
+  for (std::size_t i = 0; i < best.size(); ++i) {
+    if (best[i] >= bound)
+      scan.cells.push_back(static_cast<std::int32_t>(i));
+  }
+  return scan.cells;
+}
 
 // Calls `decode(grid)` with a HeadGrid of the buffer's element type; false for
 // types other than float32 and int8.
@@ -162,6 +223,36 @@ auto dfl(const Grid& grid, std::int64_t y, std::int64_t x, std::size_t first, st
 // Contiguous float32 view of an output: the output itself, or `scratch`
 // holding a dequantized or packed copy. Null for other data types.
 auto float_data(const core::Buffer& output, core::Buffer& scratch) -> const float*;
+
+// Rows of a decoded [1, rows, N] output read where they are needed: int8
+// values are dequantized one at a time, as float_data() would, so scanning a
+// score row compares integers and never converts the whole tensor.
+class RowView {
+public:
+  // Contiguous float32 or int8 outputs are read in place; others are packed
+  // or converted into `scratch` through float_data(). Invalid on failure.
+  RowView(const core::Buffer& output, core::Buffer& scratch);
+
+  KZ_NODISCARD auto valid() const -> bool { return data_ != nullptr; }
+
+  KZ_NODISCARD auto count() const -> std::size_t { return count_; }
+
+  KZ_NODISCARD auto at(std::size_t row, std::size_t i) const -> float {
+    const auto index = row * count_ + i;
+    return int8_ ? dequantize(static_cast<const std::int8_t*>(data_)[index], scale_, zero_point_)
+                 : static_cast<const float*>(data_)[index];
+  }
+
+  // Appends, in order, the indexes whose value in `row` exceeds `threshold`.
+  auto above(std::size_t row, float threshold, Vector<std::uint32_t>& out) const -> void;
+
+private:
+  const void* data_ = nullptr;
+  bool int8_ = false;
+  float scale_ = 1.0F;
+  std::int32_t zero_point_ = 0;
+  std::size_t count_ = 0;
+};
 
 auto nms_keep(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
     -> Vector<std::size_t>;

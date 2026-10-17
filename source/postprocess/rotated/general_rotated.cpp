@@ -45,22 +45,21 @@ public:
 protected:
   auto decode(RotatedResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const auto* data = float_data(*outputs[0], scratch_);
-    if (data == nullptr)
+    const RowView rows(*outputs[0], scratch_);
+    if (!rows.valid())
       return false;
-    const auto count = static_cast<std::size_t>(outputs[0]->shape()[2]);
-    const auto angle_row = (param_.class_num + 4) * count;
-    for (std::size_t i = 0; i < count; ++i) {
-      const core::RotatedRect rect{{data[i], data[count + i]},
-                                   {data[count * 2 + i], data[count * 3 + i]},
-                                   data[angle_row + i] * 180.0F / std::numbers::pi_v<float>};
-      // Also skips NaN boxes.
-      if (!(rect.size.width > 0.0F && rect.size.height > 0.0F) || std::isnan(rect.angle))
-        continue;
-      for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
-        const auto score = data[(4 + cls) * count + i];
-        if (score > param_.confidence_threshold[cls])
-          result[cls].push_back({rect, score, static_cast<std::int64_t>(cls)});
+    const auto angle_row = param_.class_num + 4;
+    for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
+      candidates_.clear();
+      rows.above(4 + cls, param_.confidence_threshold[cls], candidates_);
+      for (const auto i : candidates_) {
+        const core::RotatedRect rect{{rows.at(0, i), rows.at(1, i)},
+                                     {rows.at(2, i), rows.at(3, i)},
+                                     rows.at(angle_row, i) * 180.0F / std::numbers::pi_v<float>};
+        // Also skips NaN boxes.
+        if (!(rect.size.width > 0.0F && rect.size.height > 0.0F) || std::isnan(rect.angle))
+          continue;
+        result[cls].push_back({rect, rows.at(4 + cls, i), static_cast<std::int64_t>(cls)});
       }
     }
     return finish_rotated(result, param_.iou_threshold, transform);
@@ -68,6 +67,7 @@ protected:
 
 private:
   GeneralDetectParam param_;
+  Vector<std::uint32_t> candidates_;
   core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
 };
 

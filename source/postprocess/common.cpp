@@ -108,6 +108,43 @@ auto float_data(const core::Buffer& output, core::Buffer& scratch) -> const floa
   return nullptr;
 }
 
+RowView::RowView(const core::Buffer& output, core::Buffer& scratch) {
+  const auto& shape = output.shape();
+  if (shape.empty())
+    return;
+  count_ = static_cast<std::size_t>(shape.back());
+  if (output.data_type() == core::DataType::Int8 && output.is_contiguous()) {
+    data_ = output.memory()->cpu();
+    int8_ = true;
+    scale_ = output.scale;
+    zero_point_ = output.zero_point;
+    return;
+  }
+  data_ = float_data(output, scratch);
+}
+
+auto RowView::above(std::size_t row, float threshold, Vector<std::uint32_t>& out) const -> void {
+  if (!int8_) {
+    const auto* values = static_cast<const float*>(data_) + row * count_;
+    for (std::size_t i = 0; i < count_; ++i) {
+      if (values[i] > threshold)
+        out.push_back(static_cast<std::uint32_t>(i));
+    }
+    return;
+  }
+  const auto* values = static_cast<const std::int8_t*>(data_) + row * count_;
+  // value > threshold needs q > threshold / scale + zero_point; one integer
+  // below that bound guards float rounding, and at() decides exactly.
+  const auto bound = scale_ > 0.0F
+                         ? std::floor(static_cast<double>(threshold) / static_cast<double>(scale_) + zero_point_) - 1.0
+                         : -129.0;
+  const auto integer = static_cast<std::int32_t>(std::clamp(bound, -129.0, 127.0));
+  for (std::size_t i = 0; i < count_; ++i) {
+    if (values[i] > integer && dequantize(values[i], scale_, zero_point_) > threshold)
+      out.push_back(static_cast<std::uint32_t>(i));
+  }
+}
+
 auto nms_keep(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
     -> Vector<std::size_t> {
   Vector<std::size_t> order(rects.size());
