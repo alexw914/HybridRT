@@ -136,10 +136,10 @@ protected:
     double score = 0;
     for (std::int64_t t = 0; t < shape_[1]; ++t) {
       const auto* row = data + t * shape_[2];
-      KZ_CHECK_RETURN(
-          std::all_of(row, row + shape_[2], [](float v) -> bool { return std::isfinite(v) && v >= 0 && v <= 1; }),
-          false, "Ocr CTC: expected finite probabilities in [0, 1]");
       const auto index = static_cast<std::size_t>(std::max_element(row, row + shape_[2]) - row);
+      // Only the maximum is checked: logits usually exceed 1 there, and a full scan costs more than decoding.
+      KZ_CHECK_RETURN(std::isfinite(row[index]) && row[index] >= 0 && row[index] <= 1, false,
+                      "Ocr CTC: expected probabilities in [0, 1]");
       if (index != 0 && index != previous) {
         text.text += characters_[index];
         score += static_cast<double>(row[index]);

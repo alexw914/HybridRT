@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: benchmarks/yolo_fixture.hpp
-// Description: Loads the YOLO task algos of the reference manifest shared by
-//              the benchmarks.
+// Description: Loads the YOLO task and OCR algos of the reference manifest
+//              shared by the benchmarks.
 // -----------------------------------------------------------------------------
 
 #ifndef HRT_BENCHMARKS_YOLO_FIXTURE_HPP
@@ -29,19 +29,23 @@ enum class Provider {
   CoreMl,
 };
 
-// The template algo of `task` on the ORT `provider`, or null when its local
+// OCR algos in the template and the image they read.
+inline constexpr Array<const char*, 3> kOcrAlgos{"ppocrv6_tiny_det", "ppocrv6_tiny_rec", "ppocrv6_small_rec"};
+inline constexpr const char* kOcrImage = "ocr_document.png";
+
+// The template algo `name` on the ORT `provider`, or null when its local
 // model under assets/ is missing and `need_model`. Model paths are relative to
 // the repository root, which becomes the working directory.
-inline auto algo_entry(std::size_t task, Provider provider = Provider::Cpu, bool need_model = true)
+inline auto template_entry(std::string_view name, Provider provider = Provider::Cpu, bool need_model = true)
     -> kitzoo::json::Json {
   std::filesystem::current_path(HRT_SOURCE_DIR);
   const kitzoo::json::Reader reader(std::filesystem::path("assets/template/hrtc_template.json"));
   const auto& json = reader.raw();
   const auto algos = json.is_object() ? json.find("algos") : json.end();
-  if (algos == json.end() || !algos->is_array() || task >= kAlgos.size())
+  if (algos == json.end() || !algos->is_array())
     return {};
   for (auto algo : *algos) {
-    if (algo.value("name", String{}) != kAlgos.at(task))
+    if (algo.value("name", String{}) != name)
       continue;
     auto& backend = algo["config"]["engine"]["backends"][0];
     if (need_model && !std::filesystem::is_regular_file(backend.value("data", String{})))
@@ -53,10 +57,18 @@ inline auto algo_entry(std::size_t task, Provider provider = Provider::Cpu, bool
   return {};
 }
 
+inline auto algo_entry(std::size_t task, Provider provider = Provider::Cpu, bool need_model = true)
+    -> kitzoo::json::Json {
+  return task < kAlgos.size() ? template_entry(kAlgos.at(task), provider, need_model) : kitzoo::json::Json{};
+}
+
+inline auto read_image(std::string_view name) -> cv::Mat {
+  return cv::imread((std::filesystem::path(HRT_SOURCE_DIR) / "assets/test/images" / name).string(), cv::IMREAD_COLOR);
+}
+
 // The test image of `task` as BGR: the airport for OBB, the bus otherwise.
 inline auto task_image(std::size_t task) -> cv::Mat {
-  const auto name = std::string_view(kTasks.at(task)) == "obb" ? "airport.jpg" : "bus.jpg";
-  return cv::imread((std::filesystem::path(HRT_SOURCE_DIR) / "assets/test/images" / name).string(), cv::IMREAD_COLOR);
+  return read_image(std::string_view(kTasks.at(task)) == "obb" ? "airport.jpg" : "bus.jpg");
 }
 
 inline auto wrap_bgr(const cv::Mat& bgr) -> std::optional<core::Image> {

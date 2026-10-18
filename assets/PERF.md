@@ -4,6 +4,36 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-18: OCR CTC decoding
+
+**Bottleneck.** `OcrModel` recognizes each detected line separately, so CTC decoding runs once per
+line. Each of the 40 time steps scanned all classes twice, once to check every value was a finite
+probability and once for the maximum: 0.31 ms per PP-OCRv6 tiny line (6906 classes), a third of
+the 0.92 ms ORT CPU inference, about 11 ms of a 37-line document.
+
+**Change.** One `max_element` pass per step; only the maximum is checked to lie in [0, 1], which
+still rejects logits. Decoded text and scores are unchanged.
+
+**Measurement.** Apple M5 Pro, macOS, ONNX Runtime 1.31.0, `hybridrt_bench_postprocess` and
+`hybridrt_bench_pipeline` (`BM_Ocr`), one OpenCV thread, median of 3 repetitions, on the local
+`ocr_document.png` (896 x 528, 37 lines); CoreML uses the MLProgram options of
+`hrtc_device_config.json`.
+
+| Case | Before | After |
+| --- | --- | --- |
+| CTC postprocess, tiny recognizer, one 241 x 50 line | 0.311 ms | 0.121 ms |
+| `OcrModel`, tiny det + tiny rec, ORT CPU | 63.4 ms | 54.9 ms |
+| `OcrModel`, tiny det + small rec, ORT CPU | 179 ms | 157 ms |
+| `OcrModel`, tiny det + tiny rec, ORT CoreML | not measured | 37.9 ms |
+| `OcrModel`, tiny det + small rec, ORT CoreML | not measured | 74.6 ms |
+
+Other stages, unchanged: detection preprocess 0.48 ms, line crop plus `text_line` preprocess
+0.02 ms, DB postprocess 0.34 ms. `hrt-model-bench` engine means: tiny det 11.7 ms (CoreML 2.3),
+tiny rec 0.92 ms (CoreML 0.76), small rec 3.5 ms (CoreML 1.3).
+
+**Remaining.** Recognition is about 70 % of a CPU call: one batch-1 inference per line. Batched
+recognition needs batch > 1 exports, and very long lines are still squeezed into 320 pixels.
+
 ## 2026-10-17: candidate scans of detection heads
 
 **Bottleneck.** Raw anchor-free heads (`YoloV8Detect`, `YoloV8Rotated`, `YoloV8Keypoint`) visited every

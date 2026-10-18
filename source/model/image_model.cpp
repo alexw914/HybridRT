@@ -149,6 +149,8 @@ auto builtin_postprocessor(std::string_view type, const kitzoo::json::Json& conf
     return postprocess::create_classify_postprocessor(type, config, engine);
   else if constexpr (std::is_same_v<Result, postprocess::SegmentResultMap>)
     return postprocess::create_segment_postprocessor(type, config, engine);
+  else if constexpr (std::is_same_v<Result, postprocess::OcrResult>)
+    return postprocess::create_ocr_postprocessor(config, engine);
   else
     return postprocess::create_keypoint_postprocessor(type, config, engine);
 }
@@ -402,5 +404,6 @@ template class ImageModel<postprocess::RotatedResultMap>;
 template class ImageModel<postprocess::ClassifyResult>;
 template class ImageModel<postprocess::KeypointResultMap>;
 template class ImageModel<postprocess::SegmentResultMap>;
+template class ImageModel<postprocess::OcrResult>;
 
 } // namespace hrt::model

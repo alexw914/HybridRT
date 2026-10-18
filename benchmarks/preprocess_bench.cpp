@@ -2,10 +2,11 @@
 // HybridRT | C++20 Model Inference Framework
 // File: benchmarks/preprocess_bench.cpp
 // Description: Benchmarks image preprocessing: format conversions checked
-//              against OpenCV, YOLO task configs, and video resolutions.
+//              against OpenCV, YOLO task and OCR configs, and video resolutions.
 // -----------------------------------------------------------------------------
 
 #include <hrt/core/context.hpp>
+#include <hrt/preprocess/text_cropper.hpp>
 
 #include <benchmark/benchmark.h>
 #include <cmath>
@@ -110,6 +111,34 @@ auto BM_Task(benchmark::State& state) -> void {
   auto processor = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Cpu);
   for (auto _ : state) {
     if (!processor->process(target, *source, {}, param)) {
+      state.SkipWithError("Preprocessing failed");
+      break;
+    }
+    benchmark::DoNotOptimize(target.memory()->cpu());
+  }
+}
+
+// OCR preprocess configs on the document image: 0 detection into 640x640, 1 crop of a
+// 241x50 text line and recognition text_line into 48x320.
+auto BM_Ocr(benchmark::State& state) -> void {
+  cv::setNumThreads(1);
+  const auto stage = static_cast<std::size_t>(state.range(0));
+  state.SetLabel(stage == 0 ? "detection" : "recognition");
+  const auto entry = hrt::bench::template_entry(hrt::bench::kOcrAlgos.at(stage), hrt::bench::Provider::Cpu, false);
+  const auto bgr = hrt::bench::read_image(hrt::bench::kOcrImage);
+  const auto source = hrt::bench::wrap_bgr(bgr);
+  if (!entry.is_object() || !source) {
+    state.SkipWithError("assets/test/images/ocr_document.png is missing");
+    return;
+  }
+  const auto param = entry["config"]["preprocess"].get<hrt::preprocess::ImagePreprocessorParam>();
+  hrt::core::Image target(hrt::core::MemoryType::Cpu, param.dst_image_format, hrt::core::DataType::Float32,
+                          stage == 0 ? hrt::core::Size{640, 640} : hrt::core::Size{320, 48});
+  auto processor = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Cpu);
+  hrt::preprocess::TextCropper cropper;
+  for (auto _ : state) {
+    auto crop = stage == 0 ? source : cropper.process(*source, {419, 16, 241, 50});
+    if (!crop || !processor->process(target, *crop, {}, param)) {
       state.SkipWithError("Preprocessing failed");
       break;
     }
@@ -238,6 +267,7 @@ auto cuda_cases(benchmark::Benchmark* bench) -> void {
 
 BENCHMARK(BM_Convert)->DenseRange(0, 8)->Unit(benchmark::kMillisecond)->UseRealTime();
 BENCHMARK(BM_Task)->DenseRange(0, 4)->Unit(benchmark::kMillisecond)->UseRealTime();
+BENCHMARK(BM_Ocr)->DenseRange(0, 1)->Unit(benchmark::kMillisecond)->UseRealTime();
 BENCHMARK(BM_Resolution)
     ->Apply(resolution_cases)
     ->Unit(benchmark::kMillisecond)

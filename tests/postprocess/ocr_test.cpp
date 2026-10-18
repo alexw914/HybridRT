@@ -34,6 +34,8 @@ TEST(OcrTest, DecodesUtf8DuplicatesBlanksAndSpace) {
   std::fill(scores.begin(), scores.end(), 0.0F);
   ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of<float>(output, scores)}, hrt::test::identity(320, 48)));
   EXPECT_TRUE(result[0].text.empty());
+  scores[5] = 3.5F; // A logit.
+  EXPECT_FALSE(decoder->process(result, {hrt::test::buffer_of<float>(output, scores)}, hrt::test::identity(320, 48)));
   scores[0] = std::numeric_limits<float>::quiet_NaN();
   EXPECT_FALSE(decoder->process(result, {hrt::test::buffer_of<float>(output, scores)}, hrt::test::identity(320, 48)));
 }

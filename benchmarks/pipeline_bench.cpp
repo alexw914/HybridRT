@@ -1,9 +1,11 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: benchmarks/pipeline_bench.cpp
-// Description: Benchmarks ImageModel::process_sync end to end: preprocessing,
-//              inference and postprocessing of each YOLO task.
+// Description: Benchmarks ImageModel::process_sync end to end for each YOLO
+//              task, and OcrModel::process_sync for OCR.
 // -----------------------------------------------------------------------------
+
+#include <hrt/model/ocr_model.hpp>
 
 #include <benchmark/benchmark.h>
 #include <mutex>
@@ -70,11 +72,54 @@ auto BM_Pooled(benchmark::State& state) -> void {
   state.SetItemsProcessed(state.iterations());
 }
 
+// OcrModel on the document image; args: recognizer (0 tiny, 1 small), provider. Counter
+// "lines" is the number of recognized text lines per call.
+auto BM_Ocr(benchmark::State& state) -> void {
+  cv::setNumThreads(1);
+  const auto recognizer = static_cast<std::size_t>(state.range(0));
+  const auto provider = static_cast<hrt::bench::Provider>(state.range(1));
+  state.SetLabel(hrt::String(recognizer == 0 ? "tiny" : "small") + "/" +
+                 kProviders.at(static_cast<std::size_t>(state.range(1))));
+  auto det = hrt::bench::template_entry(hrt::bench::kOcrAlgos[0], provider);
+  auto rec = hrt::bench::template_entry(hrt::bench::kOcrAlgos.at(recognizer + 1), provider);
+  // As in hrtc_device_config.json; the default NeuralNetwork format runs these models several times slower.
+  for (auto* entry : {&det, &rec}) {
+    if (provider == hrt::bench::Provider::CoreMl && entry->is_object())
+      (*entry)["config"]["engine"]["backends"][0]["config"]["provider_options"] = {{"ModelFormat", "MLProgram"},
+                                                                                   {"RequireStaticInputShapes", "1"}};
+  }
+  const auto bgr = hrt::bench::read_image(hrt::bench::kOcrImage);
+  const auto image = hrt::bench::wrap_bgr(bgr);
+  const auto det_algo = det.is_object() ? hrt::hrtc::load_algo(det) : std::nullopt;
+  const auto rec_algo = rec.is_object() ? hrt::hrtc::load_algo(rec) : std::nullopt;
+  if (!det_algo || !rec_algo || !image) {
+    state.SkipWithError("OCR models, dictionaries or assets/test/images is missing");
+    return;
+  }
+  const auto model = hrt::model::OcrModel::create(*det_algo, *rec_algo);
+  std::size_t lines = 0;
+  for (auto _ : state) {
+    auto result = model->process_sync(*image);
+    if (!result) {
+      state.SkipWithError("process_sync failed");
+      break;
+    }
+    lines = result->size();
+    benchmark::DoNotOptimize(result);
+  }
+  state.counters["lines"] = static_cast<double>(lines);
+}
+
 } // namespace
 
 BENCHMARK(BM_Task)
     ->ArgNames({"task", "provider"})
     ->ArgsProduct({{0, 1, 2, 3, 4}, {0, 1}})
+    ->Unit(benchmark::kMillisecond)
+    ->UseRealTime();
+BENCHMARK(BM_Ocr)
+    ->ArgNames({"rec", "provider"})
+    ->ArgsProduct({{0, 1}, {0, 1}})
     ->Unit(benchmark::kMillisecond)
     ->UseRealTime();
 BENCHMARK(BM_Pooled)

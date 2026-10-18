@@ -14,6 +14,7 @@
 #include <hrt/postprocess/classify.hpp>
 #include <hrt/postprocess/detect.hpp>
 #include <hrt/postprocess/keypoint.hpp>
+#include <hrt/postprocess/ocr.hpp>
 #include <hrt/postprocess/rotated.hpp>
 #include <hrt/postprocess/segment.hpp>
 #include <hrt/preprocess/image_preprocessor.hpp>
@@ -131,6 +132,7 @@ extern template class ImageModel<postprocess::RotatedResultMap>;
 extern template class ImageModel<postprocess::ClassifyResult>;
 extern template class ImageModel<postprocess::KeypointResultMap>;
 extern template class ImageModel<postprocess::SegmentResultMap>;
+extern template class ImageModel<postprocess::OcrResult>;
 
 } // namespace hrt::model
 

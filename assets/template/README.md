@@ -241,7 +241,7 @@ and `results`, whose items always carry every field, empty when the task has non
 are alternatives, not successive stages. Each algo keeps its own backend alternatives;
 no package schema or existing image-model result type changes.
 
-One engine, preprocessor, stream and reusable IO set are held per stage, without pools.
+Each stage is an `ImageModel<postprocess::OcrResult>` with default options (one engine).
 `process_sync(image)` returns an optional vector of `OcrText`: an axis-aligned `rect`
 (`core::Rect2f` in original image pixels), UTF-8 `text`, `detection_score`, and `recognition_score`.
 The C++ and C models require serialized access; create separate instances for concurrency.
@@ -272,8 +272,8 @@ needs no external dictionary. LF/CRLF are supported, trailing newline is allowed
 empty entries are invalid. The output class count must equal dictionary entries + blank +
 optional space. Tiny and small need their respective dictionaries. CTC removes blank,
 collapses consecutive identical classes, and averages retained character probabilities;
-an all-blank sequence returns empty text and score zero. Inputs must contain finite
-probabilities in [0, 1]; logits require conversion before this decoder.
+an all-blank sequence returns empty text and score zero. Inputs must be probabilities;
+the maximum of each step must lie in [0, 1], so logits are rejected and need conversion first.
 
 DB takes one `[1, 1, H, W]` probability map. It scores minimum-area contour rectangles,
 expands them analytically, maps and clips their corners to the source image, and reports
