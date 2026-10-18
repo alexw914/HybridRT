@@ -183,7 +183,12 @@ class ClassifyResult:
 
 
 def _array(pointer, count):
-    return np.ctypeslib.as_array(pointer, (count,)) if count else None
+    if not count:
+        return None
+    # ctypes' PEP3118 format omits the trailing padding of C structs on Python 3.11.
+    element = pointer._type_
+    buffer = (ctypes.c_ubyte * (count * ctypes.sizeof(element))).from_address(ctypes.addressof(pointer.contents))
+    return np.frombuffer(buffer, dtype=np.dtype(element), count=count)
 
 
 def _boxes(data):

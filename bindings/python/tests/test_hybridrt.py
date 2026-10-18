@@ -7,6 +7,7 @@
 
 import json
 import logging
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -14,6 +15,7 @@ import numpy as np
 import pytest
 
 import hybridrt as hrt
+from hybridrt import _capi, _model
 
 ROOT = Path(__file__).resolve().parents[3]
 TEMPLATE = ROOT / "assets" / "template" / "hrtc_template.json"
@@ -83,6 +85,20 @@ def uniform_bgr(width=8, height=8):
 def test_reports_version_and_engines():
     assert hrt.version()
     assert not hrt.engine_available("unknown")
+
+
+def test_reads_padded_result_structs():
+    boxes = (_capi.HrtBox * 2)(
+        _capi.HrtBox(1, 2, 3, 4, 0.5, 2**40, -1),
+        _capi.HrtBox(5, 6, 7, 8, 0.75, 7, 2**42),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        result = _model._boxes(_capi.HrtResultData(count=2, boxes=boxes))
+    np.testing.assert_array_equal(result["boxes"], [[1, 2, 3, 4], [5, 6, 7, 8]])
+    np.testing.assert_array_equal(result["class_ids"], [2**40, 7])
+    np.testing.assert_array_equal(result["track_ids"], [-1, 2**42])
+    np.testing.assert_array_equal(result["scores"], [0.5, 0.75])
 
 
 def test_reports_load_and_create_errors(manifest, tmp_path):
@@ -170,19 +186,27 @@ def test_reports_process_errors_through_logging(manifest, caplog):
 
 
 @pytest.fixture
-def template(monkeypatch):
+def template(monkeypatch, tmp_path):
     """Models of the template, whose fixture paths are relative to the repository root, and bus.jpg as BGR."""
     cv2 = pytest.importorskip("cv2")
     if not hrt.engine_available("ort") or not BUS.is_file():
         pytest.skip("ONNX Runtime or bus.jpg is unavailable")
     monkeypatch.chdir(ROOT)
     config = json.loads(TEMPLATE.read_text())
+    config["algos"] = [
+        algo for algo in config["algos"]
+        if (ROOT / algo["config"]["engine"]["backends"][0]["data"]).is_file()
+    ]
+    if not config["algos"]:
+        pytest.skip("template models are unavailable")
     models = {algo["name"]: algo["config"]["engine"]["backends"][0]["data"] for algo in config["algos"]}
     # Loading a manifest reads every model file it names, so the test loads it once.
-    package = hrt.Package(TEMPLATE)
+    manifest = tmp_path / "template.json"
+    manifest.write_text(json.dumps(config))
+    package = hrt.Package(manifest)
 
     def load(name):
-        if not (ROOT / models[name]).is_file():
+        if name not in models:
             pytest.skip(f"model of {name} is unavailable")
         return package.model(name)
 
@@ -190,9 +214,8 @@ def template(monkeypatch):
     package.close()
 
 
-def test_runs_template_models(template):
+def test_runs_template_detect(template):
     load, bus = template
-    height, width = bus.shape[:2]
 
     detect = load("yolov8n_detect")(bus)
     assert isinstance(detect, hrt.DetectResult)
@@ -200,6 +223,10 @@ def test_runs_template_models(template):
     assert 0 in detect.class_ids
     assert np.all(detect.boxes[:, 2:] > 0)
 
+
+def test_runs_template_segment(template):
+    load, bus = template
+    height, width = bus.shape[:2]
     # Three people and the bus, as the C++ segment test reports.
     segment = load("yolo26n_e2e_segment")(bus)
     assert isinstance(segment, hrt.SegmentResult)
@@ -210,15 +237,32 @@ def test_runs_template_models(template):
         assert 0 <= x and 0 <= y and x + w <= width and y + h <= height
         assert mask.data.max() == 1
 
+
+def test_runs_template_pose(template):
+    load, bus = template
     pose = load("yolov8n_pose")(bus)
     assert isinstance(pose, hrt.KeypointResult)
     assert pose.keypoints.shape == (len(pose), 17, 3)
     assert pose.visible.shape == (len(pose), 17)
 
-    rotated = load("yolov8n_obb")(bus)
-    assert isinstance(rotated, hrt.RotatedResult)
-    assert rotated.boxes.shape == (len(rotated), 5)
 
+def test_runs_template_rotated(template):
+    load, _ = template
+    airport = ROOT / "assets/test/images/airport.jpg"
+    if not airport.is_file():
+        pytest.skip("airport.jpg is unavailable")
+    rotated = load("yolov8n_obb")(pytest.importorskip("cv2").imread(str(airport)))
+    assert isinstance(rotated, hrt.RotatedResult)
+    assert len(rotated) > 0
+    assert rotated.boxes.shape == (len(rotated), 5)
+    assert np.all(np.isfinite(rotated.boxes))
+    assert np.all(rotated.boxes[:, 2:4] > 0)
+
+
+def test_runs_template_classify(template):
+    load, bus = template
     classify = load("yolov8n_classify")(bus)
     assert len(classify.scores) == 1
     assert classify.scores[0].shape == (1000,)
+    assert np.all(np.isfinite(classify.scores[0]))
+    np.testing.assert_allclose(classify.scores[0].sum(), 1, atol=1e-5)

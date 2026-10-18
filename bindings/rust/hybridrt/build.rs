@@ -9,7 +9,7 @@ fn main() {
     if let Ok(dir) = std::env::var("DEP_HYBRIDRT_C_LIB_DIR") {
         let target = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
         if target != "windows" {
-            println!("cargo:rustc-link-arg-tests=-Wl,-rpath,{dir}");
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{dir}");
         }
     }
 }

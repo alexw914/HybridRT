@@ -233,13 +233,15 @@ and `results`, whose items always carry every field, empty when the task has non
 
 ## Test models
 
-All template model files live in `assets/test/onnx/`, with one `<type>.onnx` per
-postprocessor and positive, fixed input/output dimensions. Previous model directories and
-extra variants were removed. Test resources share `assets/test/`: `images/` contains `bus.jpg`, `airport.jpg` and
-`zidane.jpg`; `calib/` contains calibration data; `onnx/` contains the 23 models.
-Models and test resources are not committed.
+Template model files live in `assets/test/onnx/`, with one `<type>.onnx` per
+postprocessor and positive, fixed input/output dimensions. Models and test resources are not committed.
+The original collection was deleted. The local binding test collection now contains five official
+Ultralytics exports: `GeneralDetect`, `GeneralYoloPose`, `GeneralRotated`, `GeneralClassify`
+and `E2ESegment`. `images/` contains `bus.jpg`, `airport.jpg` and `zidane.jpg`;
+`weights/` holds source `.pt` files and `scripts/` holds local export/validation scripts.
+Other entries below describe the previous collection and are not locally available.
 
-The 23 files passed ONNX checker, ONNX Runtime zero/random-input runs and `hrt-validate`
+The previous 23 files passed ONNX checker, ONNX Runtime zero/random-input runs and `hrt-validate`
 (45 image runs, no pipeline errors). This verifies shape compatibility and runnable
 postprocessing, not detection accuracy. The user-provided `YoloV5Rotated` model has 2 classes;
 its anchors, normalization and angle convention remain unconfirmed. Template anchors and
@@ -252,14 +254,14 @@ preprocessing allow pipeline checks only, as requested.
 | `yolov5_detect` | `YoloV5Detect.onnx` | `1 x 3 x 640 x 640` | `797416533eed5eb4c82098ec221bbe55368ad3c062f9d0217db87f129a78f172` |
 | `rtdetr_l_detect` | `DetrDetect.onnx` | `1 x 3 x 640 x 640` | `599b9b7484cb831312f585d4ec4885a95ae10d1e84dada14833f5c570828c9b9` |
 | `yolo26n_e2e_detect` | `E2EDetect.onnx` | `1 x 3 x 640 x 640` | `08727943f090f5e8472cae3c08bcbb7b93c927820d3104ef7792f1d31277ec77` |
-| `yolov8n_detect` | `GeneralDetect.onnx` | `1 x 3 x 480 x 640` | `fa2c856b0effedce4f49fffd121f438247a64c8f633bf0e6d5e5960e869ccc5a` |
+| `yolov8n_detect` | `GeneralDetect.onnx` | `1 x 3 x 640 x 640` | `c8ed00825b62420ebf5c834bcd1ae802035e70a398af7ec656348c569d38967d` |
 | `yolo26n_e2e_obb` | `E2ERotated.onnx` | `1 x 3 x 1024 x 1024` | `0dc04234b1d82d87b8aebe5c364b4c298de0e2380ce61b74f9b117478e690e41` |
 | `yolov8n_obb_raw` | `YoloV8Rotated.onnx` | `1 x 3 x 1024 x 1024` | `2a5de440d72ecb80cc4fbce50c59f6293e4bc89cb1fe8aaee8ca7d9ed3b89566` |
 | `yolo26n_obb_raw` | `Yolo26Rotated.onnx` | `1 x 3 x 1024 x 1024` | `003dc108ae1be9b94f7bbf3f154d871385224da96ca15fa0bc07bccb0bc2148f` |
 | `yolov5_rotated` | `YoloV5Rotated.onnx` | `1 x 3 x 1280 x 1280` | `afffc7a2813e15e9137648bc7655155827b1cdace2a0999b1919d1196be57dfb` |
-| `yolov8n_obb` | `GeneralRotated.onnx` | `1 x 3 x 480 x 640` | `d87f86b2e475deccfd57410fdcb6d2de3886fcab4f6395888ddca4c35a2c12ee` |
-| `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 480 x 640` | `29e1963b77c3d1e38d3c8772ecbce294e48aa3287c3f703c39bc4e8d0b1a0f1c` |
-| `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 480 x 640` | `6fc546ff26e38b25e29c047fcacd71d3607705c0b5a590f0bd97492aed459f94` |
+| `yolov8n_obb` | `GeneralRotated.onnx` | `1 x 3 x 1024 x 1024` | `c207d49b65f8173265f2e2ff66f59bfef54b0b6d6da578a31c223b190e13dd60` |
+| `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 224 x 224` | `b3b8c37ac7d6bfe052fcc17e4d018bd79a68f354bee845e9073f080b3705ce95` |
+| `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 640 x 640` | `09ecef03a3b398c2d40a6435acb2fe94bfc5185306605b7e6ad65b0b2f2ef14d` |
 | `yolov8n_face` | `YoloV8Keypoint.onnx` | `1 x 3 x 640 x 640` | `af09683be4937ebe23e9da0346cbf46cd937b73ed5fac986e6205e6c7cdd2c25` |
 | `yolo26n_pose_raw` | `Yolo26Keypoint.onnx` | `1 x 3 x 640 x 640` | `513e12cd94482f799e2d1ad66fcb9603d7c3eb41ad38863e7ae566374e0eddc8` |
 | `yolo26n_e2e_pose` | `E2EKeypoint.onnx` | `1 x 3 x 640 x 640` | `ecd85eb31cf6889ab62600164d27698b881fcb27bd27c548b2dd4a67fb52c814` |
@@ -268,12 +270,34 @@ preprocessing allow pipeline checks only, as requested.
 | `yolov8n_segment` | `GeneralYoloSegment.onnx` | `1 x 3 x 480 x 640` | `9373c971598d799b54e6911e5a665b99653eb0be611471c28ae9dc3676a6a995` |
 | `yolov8n_segment_raw` | `YoloV8Segment.onnx` | `1 x 3 x 640 x 640` | `a21888dd7bc2e6d478ceb438a2ec520c60e5aa03ab898b1bc65fb3598d2afd83` |
 | `yolo26n_segment_raw` | `Yolo26Segment.onnx` | `1 x 3 x 640 x 640` | `85e5ec69cb0a06f82e6a27b4cdb6be36d91e041b3829d75887183f6506b18221` |
-| `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `101060498337592b2c671f479001ca725d92049f99118e5b666f4c2273d9f096` |
+| `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `78cb9fff568e1a006523a54ae96c1f43ea6b376e93dd637e10eede16128335f4` |
 | `lraspp_voc_segment` | `SemanticSegment.onnx` | `1 x 3 x 512 x 512` | `e610481d6dfedf62285bf7de02c1a67a786dc3abb342a5e5db108b67c89daf6b` |
 
 Sources and export steps:
 
-- Decoded YOLOv8 detection, segmentation, pose, OBB and classification models come from
+- The current binding fixtures use official [YOLOv8 weights](https://github.com/ultralytics/assets/releases/tag/v8.3.0)
+  (`yolov8n.pt`, `yolov8n-pose.pt`, `yolov8n-obb.pt`, `yolov8n-cls.pt`) and
+  [YOLO26 weights](https://github.com/ultralytics/assets/releases/tag/v8.4.0) (`yolo26n-seg.pt`).
+  Local `assets/test/scripts/export_binding_models.py` exports with Ultralytics 8.4.182,
+  PyTorch 2.7.0, ONNX opset 17, fixed batch 1, FP32, `simplify=False`, `nms=False`, CPU,
+  and the input sizes listed above. Preprocessing and postprocessing use the template algos.
+  Images come from official Ultralytics assets: [bus.jpg](https://raw.githubusercontent.com/ultralytics/assets/main/im/bus.jpg),
+  [airport.jpg](https://raw.githubusercontent.com/ultralytics/assets/main/im/airport.jpg) and
+  [zidane.jpg](https://raw.githubusercontent.com/ultralytics/ultralytics/main/ultralytics/assets/zidane.jpg).
+- Local validation on macOS arm64 (Apple M5 Pro), ONNX Runtime 1.31.0 CPU, Python 3.11.16:
+  all five exports passed ONNX checker; Python passed 11 tests without warnings; Rust passed
+  8 tests plus the documentation example, including ABI layouts, threads and all five tasks.
+  The reference script `assets/test/scripts/compare_binding_models.py` compares the same resized
+  pixels against Ultralytics ONNX inference (classification against ONNX Runtime directly).
+  Original-resolution geometry is also exercised by the binding tests. OpenCV 4.10 (C++) and
+  5.0 (Python) resizing can produce different predictions, so numerical comparisons share pixels.
+  This is a fixture and binding check, not a model accuracy evaluation.
+  The matched outputs contained 5 detections, 4 poses (17 keypoints each), 4 instance masks
+  and 11 rotated boxes. Maximum box/keypoint error was 0.000123 pixels, minimum mask IoU
+  0.9982, minimum rotated-box IoU 0.999999; classification top-1 was 654 with maximum
+  score error below 0.000001. Full metrics are local in `assets/test/binding_reference_results.json`.
+
+- Previous decoded YOLOv8 detection, segmentation, pose, OBB and classification models came from
   [unileon-robotics/YOLO8-ONNX](https://huggingface.co/unileon-robotics/YOLO8-ONNX).
 Conversion scripts are local, untracked files in assets/test/scripts/ and are not distributed with the repository.
 

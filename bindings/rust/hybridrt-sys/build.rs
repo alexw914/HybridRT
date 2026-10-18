@@ -17,6 +17,9 @@ fn main() {
     };
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=dylib=hybridrt_c");
+    if env::var("CARGO_CFG_TARGET_OS").unwrap_or_default() != "windows" {
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir.display());
+    }
     // Dependents read it as DEP_HYBRIDRT_C_LIB_DIR to find the library at run time.
     println!("cargo:lib_dir={}", lib_dir.display());
 }

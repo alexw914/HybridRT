@@ -26,21 +26,32 @@ fn runs_template_models_when_available() {
     let image = Image::new(&rgb, ImageFormat::InterRgb, width as u32, height as u32).unwrap();
 
     std::env::set_current_dir(&root).unwrap();
-    let package = Package::load("assets/template/hrtc_template.json").unwrap();
-    let run = |algo: &str, model_file: &str| {
+    let mut config: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(root.join("assets/template/hrtc_template.json")).unwrap()).unwrap();
+    config["algos"].as_array_mut().unwrap().retain(|algo| {
+        root.join(algo["config"]["engine"]["backends"][0]["data"].as_str().unwrap())
+            .is_file()
+    });
+    if config["algos"].as_array().unwrap().is_empty() {
+        return;
+    }
+    let manifest = common::temp_dir("template").join("template.json");
+    std::fs::write(&manifest, serde_json::to_vec(&config).unwrap()).unwrap();
+    let package = Package::load(manifest).unwrap();
+    let run = |algo: &str, model_file: &str, input: &Image<'_>| {
         if !models.join(model_file).is_file() {
             return None;
         }
         let model = Model::new(&package, Some(algo), ModelOptions::default()).unwrap();
-        Some((model.task(), model.run(&image, None).unwrap()))
+        Some((model.task(), model.run(input, None).unwrap()))
     };
 
-    if let Some((task, results)) = run("yolov8n_detect", "GeneralDetect.onnx") {
+    if let Some((task, results)) = run("yolov8n_detect", "GeneralDetect.onnx", &image) {
         assert_eq!(task, Task::Detect);
         assert!(results.boxes().iter().any(|object| object.class_id == 0));
     }
     // Three people and the bus, as the C++ segment test reports.
-    if let Some((task, results)) = run("yolo26n_e2e_segment", "E2ESegment.onnx") {
+    if let Some((task, results)) = run("yolo26n_e2e_segment", "E2ESegment.onnx", &image) {
         assert_eq!(task, Task::Segment);
         let classes: Vec<i64> = results.boxes().iter().map(|object| object.class_id).collect();
         assert_eq!(classes, [0, 0, 0, 5]);
@@ -50,16 +61,23 @@ fn runs_template_models_when_available() {
             assert_eq!(mask.data.iter().max(), Some(&1));
         }
     }
-    if let Some((task, results)) = run("yolov8n_pose", "GeneralYoloPose.onnx") {
+    if let Some((task, results)) = run("yolov8n_pose", "GeneralYoloPose.onnx", &image) {
         assert_eq!(task, Task::Keypoint);
         assert!(!results.is_empty());
         assert!((0..results.len()).all(|index| results.keypoints(index).unwrap().len() == 17));
     }
-    if let Some((task, results)) = run("yolov8n_obb", "GeneralRotated.onnx") {
-        assert_eq!(task, Task::Rotated);
-        assert_eq!(results.rotated_boxes().len(), results.len());
+    if let Ok(jpeg) = std::fs::read(root.join("assets/test/images/airport.jpg")) {
+        let mut decoder = zune_jpeg::JpegDecoder::new(&jpeg);
+        let rgb = decoder.decode().unwrap();
+        let (width, height) = decoder.dimensions().unwrap();
+        let airport = Image::new(&rgb, ImageFormat::InterRgb, width as u32, height as u32).unwrap();
+        if let Some((task, results)) = run("yolov8n_obb", "GeneralRotated.onnx", &airport) {
+            assert_eq!(task, Task::Rotated);
+            assert!(!results.is_empty());
+            assert_eq!(results.rotated_boxes().len(), results.len());
+        }
     }
-    if let Some((task, results)) = run("yolov8n_classify", "GeneralClassify.onnx") {
+    if let Some((task, results)) = run("yolov8n_classify", "GeneralClassify.onnx", &image) {
         assert_eq!(task, Task::Classify);
         assert_eq!(results.scores(0).unwrap().len(), 1000);
     }

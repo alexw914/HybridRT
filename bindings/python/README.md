@@ -50,3 +50,8 @@ Errors raise `hrt.HybridRTError` with a `status`. Library logs go to the
 console; `hrt.use_python_logging()` forwards them to the `hybridrt` logger.
 An engine whose outputs do not fit the postprocess config still aborts the
 process, as in C++.
+
+With `HYBRIDRT_BUILD_TESTS=ON`, run `ctest --test-dir <build> -R hybridrt_test_python --output-on-failure`.
+Real-model tests use available entries from the reference template, so missing unrelated models do not
+prevent loading. Detection, segmentation, pose and classification use `assets/test/images/bus.jpg`;
+rotated boxes use `airport.jpg`. See [test model sources and exports](../../assets/template/README.md#test-models).
