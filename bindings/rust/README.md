@@ -53,3 +53,18 @@ With `HYBRIDRT_BUILD_TESTS=ON`, run `ctest --test-dir <build> -R hybridrt_test_r
 Real-model tests load only available entries from the reference template: detection, segmentation,
 pose and classification on `bus.jpg`, and rotated boxes on `airport.jpg` in `assets/test/images/`.
 See [test model sources and exports](../../assets/template/README.md#test-models).
+
+## OCR
+
+```rust
+let package = Package::load("ocr.hrtc")?;
+let mut model = hybridrt::OcrModel::new(&package, "ppocrv6_tiny_det", "ppocrv6_small_rec")?;
+for item in model.run(&image)? {
+    println!("{} {:?}", item.text, item.rect);
+}
+```
+
+`run(&mut self, ...)` returns owned `OcrText` values with UTF-8 text, an `[x, y, width, height]`
+rect and separate detection/recognition scores. Each stage holds one engine without pools.
+The package can be dropped after creation. Existing `Model`/`Results` APIs are unchanged.
+CoreML is selected by the ORT engine config. See [OCR configuration](../../assets/template/README.md#ocr-model).

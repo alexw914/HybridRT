@@ -29,7 +29,11 @@ fn runs_template_models_when_available() {
     let mut config: serde_json::Value =
         serde_json::from_slice(&std::fs::read(root.join("assets/template/hrtc_template.json")).unwrap()).unwrap();
     config["algos"].as_array_mut().unwrap().retain(|algo| {
-        root.join(algo["config"]["engine"]["backends"][0]["data"].as_str().unwrap())
+        matches!(
+            algo["name"].as_str().unwrap(),
+            "yolov8n_detect" | "yolo26n_e2e_segment" | "yolov8n_pose" | "yolov8n_obb" | "yolov8n_classify"
+        ) && root
+            .join(algo["config"]["engine"]["backends"][0]["data"].as_str().unwrap())
             .is_file()
     });
     if config["algos"].as_array().unwrap().is_empty() {

@@ -76,6 +76,28 @@ TEST(ImagePreprocessorTest, PadOutsideClipsAtImageBorder) {
   EXPECT_EQ(dst_roi, (hrt::core::Rect{50, 0, 150, 200}));
 }
 
+TEST(ImagePreprocessorTest, TextLineUsesCeilingWidthAndZeroNormalizedPadding) {
+  hrt::core::Image source(hrt::core::MemoryType::Cpu, hrt::core::ImageFormat::InterBgr, hrt::core::DataType::Uint8,
+                          {5, 3});
+  auto* pixels = static_cast<std::uint8_t*>(source.memory()->mutable_cpu());
+  std::fill(pixels, pixels + source.buffer()->byte_size(), 255);
+  hrt::core::Image output(hrt::core::MemoryType::Cpu, hrt::core::ImageFormat::PlanarBgr, hrt::core::DataType::Float32,
+                          {16, 4});
+  auto processor = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Cpu);
+  hrt::preprocess::ImagePreprocessorParam param;
+  param.dst_image_format = hrt::core::ImageFormat::PlanarBgr;
+  param.resize_type = hrt::preprocess::ResizeType::TextLine;
+  param.normalize_type = hrt::preprocess::NormalizeType::Roi;
+  param.mean = {127.5F, 127.5F, 127.5F};
+  param.std = param.mean;
+  const auto transform = processor->process(output, source, {}, param);
+  ASSERT_TRUE(transform);
+  EXPECT_EQ(transform->dst_roi, (hrt::core::Rect{0, 0, 7, 4}));
+  const auto* data = static_cast<const float*>(output.memory()->cpu());
+  EXPECT_FLOAT_EQ(data[0], 1);
+  EXPECT_FLOAT_EQ(data[15], 0);
+}
+
 } // namespace
 
 namespace {
@@ -362,7 +384,8 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForCroppedSources) {
   for (std::size_t s = 0; s < sources.size(); ++s) {
     const auto* source = sources[s];
     for (const auto& crop : crops) {
-      for (const auto resize : {ResizeType::Normal, ResizeType::LetterBox, ResizeType::PadOutside}) {
+      for (const auto resize :
+           {ResizeType::Normal, ResizeType::LetterBox, ResizeType::PadOutside, ResizeType::TextLine}) {
         for (const auto format : {ImageFormat::InterRgb, ImageFormat::PlanarRgb}) {
           SCOPED_TRACE(testing::Message() << "source " << s << " crop " << crop.x << ',' << crop.y << ' ' << crop.width
                                           << 'x' << crop.height << " resize " << static_cast<int>(resize) << " format "
@@ -478,7 +501,7 @@ TEST(ImagePreprocessorTest, MetalMatchesCpuAcrossGeometryStridesAndFrameChanges)
       Image expected(MemoryType::Cpu, format, DataType::Float32, {side, side});
       Image actual(MemoryType::Cpu, format, DataType::Float32, {side, side}, {plane * 3, plane, row});
       for (const auto resize : {ResizeType::Normal, ResizeType::LetterBox, ResizeType::KeepRatio,
-                                ResizeType::CenterCrop, ResizeType::PadOutside}) {
+                                ResizeType::CenterCrop, ResizeType::PadOutside, ResizeType::TextLine}) {
         for (const auto interpolation :
              {InterpolationMode::Linear, InterpolationMode::Nearest, InterpolationMode::Cubic}) {
           for (const auto normalization : {NormalizeType::Full, NormalizeType::Roi, NormalizeType::None}) {

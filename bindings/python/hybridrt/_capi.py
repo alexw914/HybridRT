@@ -89,6 +89,19 @@ class HrtResultData(ctypes.Structure):
     ]
 
 
+class HrtOcrText(ctypes.Structure):
+    _fields_ = [
+        ("x", ctypes.c_float),
+        ("y", ctypes.c_float),
+        ("width", ctypes.c_float),
+        ("height", ctypes.c_float),
+        ("text", ctypes.c_void_p),
+        ("text_size", _c_size),
+        ("detection_score", ctypes.c_float),
+        ("recognition_score", ctypes.c_float),
+    ]
+
+
 LOG_CALLBACK = ctypes.CFUNCTYPE(None, _c_int, ctypes.c_char_p, _c_size, ctypes.c_void_p)
 
 
@@ -117,6 +130,13 @@ def _load():
     handle = ctypes.c_void_p
     out_handle = ctypes.POINTER(ctypes.c_void_p)
     signatures = {
+        "hrt_ocr_model_create": (_c_int, [handle, ctypes.c_char_p, ctypes.c_char_p, out_handle]),
+        "hrt_ocr_model_destroy": (None, [handle]),
+        "hrt_ocr_result_create": (_c_int, [out_handle]),
+        "hrt_ocr_result_destroy": (None, [handle]),
+        "hrt_ocr_result_count": (_c_size, [handle]),
+        "hrt_ocr_result_text": (ctypes.POINTER(HrtOcrText), [handle, _c_size]),
+        "hrt_ocr_model_process": (_c_int, [handle, ctypes.POINTER(HrtImage), handle]),
         "hrt_version": (ctypes.c_char_p, []),
         "hrt_last_error": (ctypes.c_char_p, []),
         "hrt_set_log_level": (None, [_c_int]),

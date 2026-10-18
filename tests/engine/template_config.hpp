@@ -43,6 +43,12 @@ inline auto template_algo(std::string_view name) -> kitzoo::json::Json {
       if (backend.contains("data") && backend["data"].is_string())
         backend["data"] = (source_root() / backend["data"].get_ref<const String&>()).string();
     }
+    auto& post = algo["config"]["postprocess"];
+    if (post.contains("dictionary") && post["dictionary"].is_string()) {
+      auto& dictionary = post["dictionary"].get_ref<String&>();
+      if (!dictionary.starts_with("string:"))
+        dictionary = (source_root() / dictionary).string();
+    }
     return algo;
   }
   return {};

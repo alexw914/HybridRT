@@ -29,6 +29,9 @@ use std::sync::RwLock;
 
 use hybridrt_sys as sys;
 
+mod ocr;
+pub use ocr::{OcrModel, OcrText};
+
 pub use sys::HrtBox as ObjectBox;
 pub use sys::HrtKeypoint as Keypoint;
 pub use sys::HrtRect as Rect;

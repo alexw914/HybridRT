@@ -55,3 +55,19 @@ With `HYBRIDRT_BUILD_TESTS=ON`, run `ctest --test-dir <build> -R hybridrt_test_p
 Real-model tests use available entries from the reference template, so missing unrelated models do not
 prevent loading. Detection, segmentation, pose and classification use `assets/test/images/bus.jpg`;
 rotated boxes use `airport.jpg`. See [test model sources and exports](../../assets/template/README.md#test-models).
+
+## OCR
+
+`OcrModel` selects detection and recognition algos from one JSON/.hrtc package:
+
+```python
+with hrt.OcrModel("ocr.hrtc", "ppocrv6_tiny_det", "ppocrv6_small_rec") as model:
+    for item in model(cv2.imread("document.png")):
+        print(item.text, item.rect, item.detection_score, item.recognition_score)
+```
+
+Results are owned `OcrText` objects; `rect` is a float32 `(4,)` array of x, y, width, height
+in source coordinates. Calls on one instance are serialized; each stage has one engine and
+reuses its buffers. Dictionaries are embedded by the JSON loader when building packages.
+Set the ORT engine config's `execution_provider` to `coreml` to enable CoreML on macOS.
+See [OCR configuration](../../assets/template/README.md#ocr-model) for parameters and limits.

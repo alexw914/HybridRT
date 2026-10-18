@@ -135,6 +135,18 @@ auto read_algo(const Json& json, AlgoParam& algo) -> bool {
   engine->erase("backends");
   if (engine->empty())
     config.erase("engine");
+  // Resolve the character table while packing, so an OCR package is self-contained.
+  if (auto post = config.find("postprocess"); post != config.end() && post->is_object() && post->contains("type") &&
+                                              (*post)["type"] == "Ocr" && post->contains("dictionary")) {
+    if (!(*post)["dictionary"].is_string()) {
+      KZ_LOG_ERROR("hrtc manifest: OCR dictionary must be a path or string: text");
+      return false;
+    }
+    String dictionary;
+    if (!read_text(*post, "dictionary", dictionary))
+      return false;
+    (*post)["dictionary"] = String(kInlinePrefix) + dictionary;
+  }
   algo.config = config.dump();
   return true;
 }

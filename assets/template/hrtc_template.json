@@ -268,6 +268,30 @@
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/SemanticSegment.onnx"}]},
         "postprocess": {"type": "SemanticSegment"}
       }
+    },
+    {
+      "name": "ppocrv6_tiny_det",
+      "config": {
+        "preprocess": {"dst_image_format": "planar_bgr", "resize_type": "keep_ratio", "mean": [123.675, 116.28, 103.53], "std": [58.395, 57.12, 57.375]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/PP-OCRv6_tiny_det.onnx"}]},
+        "postprocess": {"type": "Ocr", "stage": "detection", "decoder": "db", "threshold": 0.2, "box_threshold": 0.4, "unclip_ratio": 1.4, "min_size": 3.0, "max_candidates": 3000}
+      }
+    },
+    {
+      "name": "ppocrv6_tiny_rec",
+      "config": {
+        "preprocess": {"dst_image_format": "planar_bgr", "resize_type": "text_line", "mean": [127.5, 127.5, 127.5], "std": [127.5, 127.5, 127.5], "default_color": [0, 0, 0], "normalize_type": "roi"},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/PP-OCRv6_tiny_rec.onnx"}]},
+        "postprocess": {"type": "Ocr", "stage": "recognition", "decoder": "ctc", "dictionary": "assets/test/weights/ocr/PP-OCRv6_tiny_rec/characters.txt", "append_space": true}
+      }
+    },
+    {
+      "name": "ppocrv6_small_rec",
+      "config": {
+        "preprocess": {"dst_image_format": "planar_bgr", "resize_type": "text_line", "mean": [127.5, 127.5, 127.5], "std": [127.5, 127.5, 127.5], "default_color": [0, 0, 0], "normalize_type": "roi"},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/PP-OCRv6_small_rec.onnx"}]},
+        "postprocess": {"type": "Ocr", "stage": "recognition", "decoder": "ctc", "dictionary": "assets/test/weights/ocr/PP-OCRv6_small_rec/characters.txt", "append_space": true}
+      }
     }
   ]
 }

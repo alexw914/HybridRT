@@ -1,6 +1,6 @@
 # Manifest reference
 
-`hrtc_template.json` contains one representative model for each postprocessor type. All 23
+`hrtc_template.json` contains one representative model for each postprocessor type. The image-task and OCR
 algos use ONNX Runtime and `assets/test/onnx/<type>.onnx`, relative to the repository
 root. The first algo shows every preprocess key. Engine-specific `config` keys are
 collected in `hrtc_device_config.json`, using the same raw YOLOv8 detector as an example;
@@ -32,7 +32,7 @@ most 64) to `ImageModel::create`.
 | --- | --- | --- |
 | `device` | `auto` | `auto` (device of the engine input), `cpu`, `cuda`, `rga`, `dvpp`, `metal` (macOS, never picked by `auto`) |
 | `interpolation_mode` | `linear` | `linear`, `nearest`, `cubic` |
-| `resize_type` | `normal` | `normal` (stretch), `keep_ratio` (top-left), `letter_box` (centered; alias `center_keep_ratio`), `center_crop` (square input, needs `resize_short_size`), `pad_outside` (grows the source rect to the input aspect ratio, scaled by `pad_scale`) |
+| `resize_type` | `normal` | `normal` (stretch), `keep_ratio` (top-left), `letter_box` (centered; alias `center_keep_ratio`), `center_crop` (square input, needs `resize_short_size`), `pad_outside` (grows the source rect to the input aspect ratio, scaled by `pad_scale`), `text_line` (full input height, proportional width rounded up and capped at input width, right padding) |
 | `dst_image_format` | `planar_rgb` | `planar_rgb`, `planar_bgr`, `inter_rgb`, `inter_bgr`, `inter_rgba`, `gray`, `nv12`, `nv21`, `yu12`, `yv12`; planar and gray need an NCHW input, interleaved NHWC |
 | `normalize_type` | `full` | `full`, `roi` (only the resized region), `none` |
 | `mean`, `std` | `[0, 0, 0]`, `[1, 1, 1]` | Per channel: `x = (x - mean) / std` |
@@ -114,6 +114,7 @@ each in [0, 1].
 | `E2ESegment` | `class_num`, `mask_threshold` (0.5), `confidence_threshold`; end-to-end `[1, N, 6 + masks]` plus prototypes |
 | `SemanticSegment` | none |
 | `GeneralClassify` | `classify_postprocess_type`: `none`, `sigmoid`, `softmax` |
+| `Ocr` | DB detection or CTC recognition; parameters and cascade usage are in [OCR model](#ocr-model) |
 
 Raw YOLO postprocessors compute each stride during initialization from the input width/height
 and the corresponding output grid. Both ratios must be positive and equal. Omit `strides`
@@ -231,6 +232,90 @@ and `results`, whose items always carry every field, empty when the task has non
 | `mask` | `{"rect": [x, y, w, h], "rle": [...]}`: row-major run lengths over `rect`, alternating 0 and 1, starting with 0; `null` without a mask. |
 | `cls` | Classify, one item per engine output: `output` index, `topk` `[[class, score], ...]` (5), `scores` by class. |
 
+## OCR model
+
+`model::OcrModel` combines one detection algo and one recognition algo from a loaded
+`hrtc::Package`. Load `.json` with `hrtc::load_json` or `.hrtc` with `hrtc::load`, then call
+`OcrModel::create(package, "ppocrv6_tiny_det", "ppocrv6_tiny_rec")`. Select
+`ppocrv6_small_rec` instead for the alternative recognizer. The two recognition models
+are alternatives, not successive stages. Each algo keeps its own backend alternatives;
+no package schema or existing image-model result type changes.
+
+One engine, preprocessor, stream and reusable IO set are held per stage, without pools.
+`process_sync(image)` returns an optional vector of `OcrText`: an axis-aligned `rect`
+(`core::Rect2f` in original image pixels), UTF-8 `text`, `detection_score`, and `recognition_score`.
+The C++ and C models require serialized access; create separate instances for concurrency.
+Empty detection is a successful empty vector; a failed stage returns no result, not partial text.
+Standalone recognition and detection postprocessors use the same vector result, leaving
+fields unrelated to that stage empty/zero. Text regions follow PP-OCR `sorted_boxes`: sorted
+by top then left, after which boxes whose tops differ by less than 10 pixels are ordered by
+left edge. This is not full document layout analysis.
+
+`postprocess.type: "Ocr"` has the following parameters. `stage` is required, and keys from
+the other stage or unknown keys are rejected.
+
+| Stage | Parameter | Default | Meaning |
+| --- | --- | --- | --- |
+| Both | `stage` | required | `detection` or `recognition` |
+| Detection | `decoder` | `db` | Only DB box mode (PP-OCR `fast` scoring) is supported |
+| Detection | `threshold` | 0.2 | Pixel probability threshold, [0, 1] |
+| Detection | `box_threshold` | 0.4 | Minimum mean probability inside the enclosing rectangle, [0, 1] |
+| Detection | `unclip_ratio` | 1.4 | Offset distance is rectangle area times ratio divided by perimeter, [0, 10] |
+| Detection | `min_size` | 3 | Minimum short side in output-map pixels before expansion; after expansion requires min_size + 2, (0, 1000] |
+| Detection | `max_candidates` | 3000 | Maximum contours examined, [1, 10000] |
+| Recognition | `decoder` | `ctc` | Greedy CTC over probabilities `[1, T, C]`; blank is class zero |
+| Recognition | `dictionary` | required | UTF-8 file path relative to the working directory, or `string:` followed by newline-separated entries |
+| Recognition | `append_space` | true | Append a space entry after dictionary entries |
+
+The JSON loader resolves `dictionary` into inline `string:` text before packing; `.hrtc`
+needs no external dictionary. LF/CRLF are supported, trailing newline is allowed, interior
+empty entries are invalid. The output class count must equal dictionary entries + blank +
+optional space. Tiny and small need their respective dictionaries. CTC removes blank,
+collapses consecutive identical classes, and averages retained character probabilities;
+an all-blank sequence returns empty text and score zero. Inputs must contain finite
+probabilities in [0, 1]; logits require conversion before this decoder.
+
+DB takes one `[1, 1, H, W]` probability map. It scores minimum-area contour rectangles,
+expands them analytically, maps and clips their corners to the source image, and reports
+the axis-aligned bounds of those corners. The analytic expansion avoids a polygon-offset
+dependency; integer polygon-offset rounding in PaddleOCR can shift reference boundaries
+slightly. As in PP-OCR, boxes whose truncated top or left side is at most 3 pixels are
+discarded. Rotated or curved text output, dilation and slow contour scoring are not
+supported; tilted lines are recognized from their axis-aligned bounds.
+
+The fixed 640 x 640 detector uses BGR, `keep_ratio` (aspect-preserving, top-left, padded)
+and ImageNet normalization, with pixel-space mean/std from the template. PP-OCR resizes
+dynamically to multiples of 32; the fixed-shape model keeps the aspect ratio instead. Recognition uses `text_line`, planar BGR,
+mean/std 127.5 and `normalize_type: "roi"`: padding is filled with zero and remains zero
+after normalization. Long lines exceeding the 320-pixel width are compressed to fit;
+there is no automatic splitting. Existing resize modes retain their previous behavior.
+
+`preprocess::TextCropper` crops a box from host uint8 interleaved BGR/RGB, truncating
+its origin and size to whole pixels like PP-OCR. Boxes must lie inside the image and be
+at least 2 x 2 pixels. Crops with height >= 1.5 times width are rotated counterclockwise
+into reused storage, valid until the next crop; other crops view the source directly. `OcrModel` converts other input formats to host BGR through the
+existing preprocessor before cropping. Crop storage is reused; no direction classifier,
+page deskew, curved-text rectification or automatic 180-degree orientation is included.
+
+Run from the repository root, with the local models, dictionaries and image available:
+
+```sh
+build/release/examples/hybridrt_example_ocr_model -m assets/template/hrtc_template.json \
+  -i assets/test/images/ocr_document.png -p coreml -o assets/test/ocr_coreml_tiny.json
+```
+
+Use `-r ppocrv6_small_rec` for the small recognizer, `-p cpu` for CPU, or omit `-p` to keep
+the package's engine configs. The JSON example loads only the two selected algos so absent
+unrelated template models do not prevent execution. JSON output contains text, `rect` as `[x, y, width, height]` and
+both scores. The C API uses separate `HrtOcrModel`/`HrtOcrResult` handles and `hrt_ocr_*`
+functions, leaving existing structs/enums unchanged. Result text views remain valid until
+the next process call or destruction; a failed call clears the previous result.
+
+CoreML is ONNX Runtime's execution provider, configured in the engine's `config` with
+`execution_provider: "coreml"`, `provider_options: {"ModelFormat": "MLProgram",
+"RequireStaticInputShapes": "1"}`. Unsupported operators may execute on the ORT CPU
+provider; selecting CoreML does not guarantee every operator uses the GPU/ANE.
+
 ## Test models
 
 Template model files live in `assets/test/onnx/`, with one `<type>.onnx` per
@@ -273,7 +358,45 @@ preprocessing allow pipeline checks only, as requested.
 | `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `78cb9fff568e1a006523a54ae96c1f43ea6b376e93dd637e10eede16128335f4` |
 | `lraspp_voc_segment` | `SemanticSegment.onnx` | `1 x 3 x 512 x 512` | `e610481d6dfedf62285bf7de02c1a67a786dc3abb342a5e5db108b67c89daf6b` |
 
-Sources and export steps:
+Additional OCR fixtures use official PaddlePaddle ONNX weights. The `ppocrv6_tiny_det`,
+`ppocrv6_tiny_rec` and `ppocrv6_small_rec` template algos run through `OcrModel`.
+
+| ONNX file in `assets/test/onnx/` | Input NCHW | Output | SHA256 |
+| --- | --- | --- | --- |
+| `PP-OCRv6_tiny_det.onnx` | `1 x 3 x 640 x 640` | `1 x 1 x 640 x 640` | `7373329bed2ea0b66c173278112a6dab68a5f9f244723a302e4b1a674f9435c9` |
+| `PP-OCRv6_tiny_rec.onnx` | `1 x 3 x 48 x 320` | `1 x 40 x 6906` | `71b480e58fa36017c5e542b1157f659cc58da1233d64c716b7a26240ed2c1f31` |
+| `PP-OCRv6_small_rec.onnx` | `1 x 3 x 48 x 320` | `1 x 40 x 18710` | `e01ba7ec62993bd6328fd737bc7bf39873d3c8d6f146b6752a0b651bc9929920` |
+
+Sources: [tiny detection](https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_det_onnx),
+[tiny recognition](https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_rec_onnx),
+[small recognition](https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx).
+Original `inference.onnx` and `inference.yml` files live under
+`assets/test/weights/ocr/<model>/`; recognition `characters.txt` files contain the original
+dictionary entries, without the CTC blank or appended space. Tiny and small dictionaries differ.
+Local `assets/test/scripts/fix_ocr_shapes.py` fixes batch and image dimensions, sets output
+dimensions from real inference and runs ONNX shape inference; the files remain FP32 at their
+original opsets (14 for detection, 11 for recognition).
+
+ONNX 1.17.0 checker and ONNX Runtime 1.31.0 CPU zero/random-input runs passed on macOS arm64.
+All external input/output dimensions are positive integers. Original and fixed model outputs
+agree within `rtol=1e-4, atol=1e-4`; maximum absolute errors were 2.09e-7 (det),
+2.74e-5 (tiny rec) and 5.07e-6 (small rec). Recognition argmax sequences are identical.
+Fixed shapes can enable different fused runtime kernels. These checks establish runnable,
+fixed-shape models, not OCR accuracy or compatibility with other backends.
+Local `assets/test/ocr_shape_validation.json` records shapes, source hashes and comparison results.
+
+End-to-end OCR was compared with PaddleOCR 3.7.0 (PaddlePaddle 3.3.1, CPU, macOS arm64) on
+the local `assets/test/images/ocr_document.png` (896 x 528), with document orientation,
+unwarping and textline orientation disabled. With PaddleOCR detection limited to a 640 long
+side, matched boxes reach IoU >= 0.9; 28 of 34 reference lines match exactly with
+`ppocrv6_tiny_rec` and 29 of 34 with `ppocrv6_small_rec`. Most remaining differences are
+spaces or single characters from integer axis-aligned crops versus PaddleOCR's rotated
+sub-pixel crops. PaddleOCR widens recognition input beyond 320 for long lines; the fixed
+48 x 320 recognizers compress the 737 x 39 footer line and misread it. A 48 x 960 export
+fixes that line but loses spaces on short lines, so 320 is kept. At PaddleOCR's default
+detection resolution (native size, multiple of 32), 24 of 33 lines match with tiny.
+
+Sources and export steps for the existing image tasks:
 
 - The current binding fixtures use official [YOLOv8 weights](https://github.com/ultralytics/assets/releases/tag/v8.3.0)
   (`yolov8n.pt`, `yolov8n-pose.pt`, `yolov8n-obb.pt`, `yolov8n-cls.pt`) and

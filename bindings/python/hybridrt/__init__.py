@@ -4,6 +4,7 @@
 # Description: Exports the Python API over the HybridRT C library.
 # -----------------------------------------------------------------------------
 
+from ._ocr import OcrModel, OcrText
 from ._model import (
     ClassifyResult,
     DetectResult,
@@ -25,6 +26,8 @@ from ._model import (
 )
 
 __all__ = [
+    "OcrModel",
+    "OcrText",
     "ClassifyResult",
     "DetectResult",
     "HybridRTError",

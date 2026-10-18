@@ -11,6 +11,7 @@
 #include <hrt/postprocess/classify.hpp>
 #include <hrt/postprocess/detect.hpp>
 #include <hrt/postprocess/keypoint.hpp>
+#include <hrt/postprocess/ocr.hpp>
 #include <hrt/postprocess/rotated.hpp>
 #include <hrt/postprocess/segment.hpp>
 
@@ -105,6 +106,8 @@ auto make_classify(std::string_view type) -> UniquePtr<ClassifyPostprocessor>;
 auto make_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor>;
 
 auto make_segment(std::string_view type) -> UniquePtr<SegmentPostprocessor>;
+
+auto make_ocr(std::string_view type) -> UniquePtr<OcrPostprocessor>;
 
 auto make_yolov5_detect() -> UniquePtr<DetectPostprocessor>;
 

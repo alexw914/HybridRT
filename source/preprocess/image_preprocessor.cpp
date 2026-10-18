@@ -108,6 +108,13 @@ auto calc_resize_position(core::Rect& dst_roi, core::Rect& src_roi, const core::
     src_roi = src_rect;
     return true;
   }
+  case ResizeType::TextLine: {
+    const auto width = std::clamp(std::ceil(static_cast<double>(dst_rect.height) * src_rect.width / src_rect.height),
+                                  1.0, static_cast<double>(dst_rect.width));
+    dst_roi = {dst_rect.x, dst_rect.y, static_cast<int>(width), dst_rect.height};
+    src_roi = src_rect;
+    return true;
+  }
   case ResizeType::LetterBox: {
     const auto size = scaled(src_rect.size(), ratio);
     dst_roi = core::intersect({dst_rect.x + (dst_rect.width - size.width) / 2,

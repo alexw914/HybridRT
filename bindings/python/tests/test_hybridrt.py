@@ -193,9 +193,10 @@ def template(monkeypatch, tmp_path):
         pytest.skip("ONNX Runtime or bus.jpg is unavailable")
     monkeypatch.chdir(ROOT)
     config = json.loads(TEMPLATE.read_text())
+    names = {"yolov8n_detect", "yolo26n_e2e_segment", "yolov8n_pose", "yolov8n_obb", "yolov8n_classify"}
     config["algos"] = [
         algo for algo in config["algos"]
-        if (ROOT / algo["config"]["engine"]["backends"][0]["data"]).is_file()
+        if algo["name"] in names and (ROOT / algo["config"]["engine"]["backends"][0]["data"]).is_file()
     ]
     if not config["algos"]:
         pytest.skip("template models are unavailable")

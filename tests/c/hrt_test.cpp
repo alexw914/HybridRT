@@ -286,3 +286,61 @@ TEST(HrtTest, RunsSegmentModelWhenAvailable) {
   hrt_model_destroy(model);
 }
 #endif
+
+TEST(HrtTest, ReportsOcrErrorsAndClearsFailedResults) {
+  HrtOcrModel* model = nullptr;
+  EXPECT_EQ(hrt_ocr_model_create(nullptr, "det", "rec", &model), HRT_STATUS_INVALID_ARGUMENT);
+  EXPECT_EQ(model, nullptr);
+  HrtOcrResult* result = nullptr;
+  ASSERT_EQ(hrt_ocr_result_create(&result), HRT_STATUS_OK);
+  EXPECT_EQ(hrt_ocr_result_count(result), 0U);
+  EXPECT_EQ(hrt_ocr_result_text(result, 0), nullptr);
+  EXPECT_EQ(hrt_ocr_model_process(nullptr, nullptr, result), HRT_STATUS_INVALID_ARGUMENT);
+  EXPECT_EQ(hrt_ocr_result_count(result), 0U);
+  hrt_ocr_result_destroy(result);
+  hrt_ocr_model_destroy(nullptr);
+}
+
+TEST(HrtTest, RunsPackedOcrModelWhenAvailable) {
+#ifdef HRT_ORT_MODEL_TEST
+  hrt::Vector<hrt::hrtc::AlgoParam> algos;
+  for (const auto name : {"ppocrv6_tiny_det", "ppocrv6_tiny_rec"}) {
+    const auto entry = hrt::test::template_algo(name);
+    if (entry.is_null() || !std::filesystem::exists(hrt::test::template_model(entry)))
+      GTEST_SKIP() << "OCR models unavailable";
+    if (entry["config"]["postprocess"].contains("dictionary") &&
+        !std::filesystem::exists(entry["config"]["postprocess"]["dictionary"].get<hrt::String>()))
+      GTEST_SKIP() << "OCR dictionary unavailable";
+    auto algo = hrt::hrtc::load_algo(entry);
+    ASSERT_TRUE(algo);
+    algos.push_back(std::move(*algo));
+  }
+  const auto bgr = cv::imread((hrt::test::source_root() / "assets/test/images/ocr_document.png").string());
+  if (bgr.empty())
+    GTEST_SKIP() << "OCR image unavailable";
+  auto* package = load_package(algos);
+  ASSERT_NE(package, nullptr);
+  HrtOcrModel* model = nullptr;
+  ASSERT_EQ(hrt_ocr_model_create(package, "ppocrv6_tiny_det", "ppocrv6_tiny_rec", &model), HRT_STATUS_OK);
+  hrt_package_destroy(package);
+  HrtOcrResult* result = nullptr;
+  ASSERT_EQ(hrt_ocr_result_create(&result), HRT_STATUS_OK);
+  HrtImage image{bgr.data, HRT_IMAGE_FORMAT_INTER_BGR, bgr.cols, bgr.rows, bgr.step};
+  ASSERT_EQ(hrt_ocr_model_process(model, &image, result), HRT_STATUS_OK) << hrt_last_error();
+  ASSERT_GT(hrt_ocr_result_count(result), 0U);
+  bool found = false;
+  for (std::size_t i = 0; i < hrt_ocr_result_count(result); ++i) {
+    const auto* item = hrt_ocr_result_text(result, i);
+    ASSERT_NE(item, nullptr);
+    found = found || std::string_view(item->text, item->text_size).find("BOARDING") != std::string_view::npos;
+  }
+  EXPECT_TRUE(found);
+  image.width = 0;
+  EXPECT_EQ(hrt_ocr_model_process(model, &image, result), HRT_STATUS_INVALID_ARGUMENT);
+  EXPECT_EQ(hrt_ocr_result_count(result), 0U);
+  hrt_ocr_result_destroy(result);
+  hrt_ocr_model_destroy(model);
+#else
+  GTEST_SKIP() << "Needs ONNX Runtime and OpenCV imgcodecs";
+#endif
+}

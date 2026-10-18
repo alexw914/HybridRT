@@ -64,6 +64,29 @@ pub struct HrtResult {
 }
 
 #[repr(C)]
+pub struct HrtOcrModel {
+    _private: [u8; 0],
+}
+
+#[repr(C)]
+pub struct HrtOcrResult {
+    _private: [u8; 0],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct HrtOcrText {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub text: *const c_char,
+    pub text_size: usize,
+    pub detection_score: f32,
+    pub recognition_score: f32,
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HrtModelOptions {
     pub preprocess: usize,
@@ -149,6 +172,22 @@ pub type HrtLogCallback =
     Option<unsafe extern "C" fn(level: HrtLogLevel, message: *const c_char, length: usize, user_data: *mut c_void)>;
 
 extern "C" {
+    pub fn hrt_ocr_model_create(
+        package: *const HrtPackage,
+        detection: *const c_char,
+        recognition: *const c_char,
+        model: *mut *mut HrtOcrModel,
+    ) -> HrtStatus;
+    pub fn hrt_ocr_model_destroy(model: *mut HrtOcrModel);
+    pub fn hrt_ocr_result_create(result: *mut *mut HrtOcrResult) -> HrtStatus;
+    pub fn hrt_ocr_result_destroy(result: *mut HrtOcrResult);
+    pub fn hrt_ocr_result_count(result: *const HrtOcrResult) -> usize;
+    pub fn hrt_ocr_result_text(result: *const HrtOcrResult, index: usize) -> *const HrtOcrText;
+    pub fn hrt_ocr_model_process(
+        model: *mut HrtOcrModel,
+        image: *const HrtImage,
+        result: *mut HrtOcrResult,
+    ) -> HrtStatus;
     pub fn hrt_version() -> *const c_char;
     pub fn hrt_last_error() -> *const c_char;
     pub fn hrt_set_log_level(level: HrtLogLevel);
@@ -201,5 +240,7 @@ mod tests {
         assert_eq!(size_of::<HrtKeypoint>(), 16);
         assert_eq!(size_of::<HrtMask>(), 24);
         assert_eq!(size_of::<HrtResultData>(), 72);
+        assert_eq!(size_of::<HrtOcrText>(), 40);
+        assert_eq!(align_of::<HrtOcrText>(), 8);
     }
 }

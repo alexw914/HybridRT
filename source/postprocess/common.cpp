@@ -238,6 +238,8 @@ auto check_config(std::string_view type, const kitzoo::json::Json& config) -> Ve
   if (postprocessor == nullptr)
     postprocessor = make_segment(type);
   if (postprocessor == nullptr)
+    postprocessor = make_ocr(type);
+  if (postprocessor == nullptr)
     return {"postprocess.type: unknown \"" + String(type) + "\""};
   return postprocessor->check_config(config);
 }

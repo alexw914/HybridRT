@@ -150,3 +150,28 @@ TEST_F(HrtcTest, RejectsInvalidManifests) {
 }
 
 } // namespace
+
+TEST_F(HrtcTest, EmbedsOcrDictionaryBeforePacking) {
+  kitzoo::os::write_file(dir_ / "characters.txt", "中\na\n");
+  const kitzoo::json::Json entry{
+      {"name", "recognition"},
+      {"config",
+       {{"engine", {{"backends", {{{"engine_type", "ort"}, {"data", "string:weights"}}}}}},
+        {"postprocess", {{"type", "Ocr"}, {"stage", "recognition"}, {"dictionary", "characters.txt"}}}}}};
+  auto algo = hrt::hrtc::load_algo(entry);
+  ASSERT_TRUE(algo);
+  std::filesystem::remove(dir_ / "characters.txt");
+  const kitzoo::json::Reader config{algo->config};
+  EXPECT_EQ(config.raw()["postprocess"]["dictionary"], "string:中\na\n");
+  hrt::hrtc::Package package;
+  package.name = "ocr";
+  package.version = "1.0.0";
+  package.algos.push_back(std::move(*algo));
+  ASSERT_TRUE(hrt::hrtc::save(package, dir_ / "ocr.hrtc"));
+  const auto loaded = hrt::hrtc::load(dir_ / "ocr.hrtc");
+  ASSERT_TRUE(loaded);
+  EXPECT_EQ(loaded->algos[0].config, package.algos[0].config);
+  auto bad = entry;
+  bad["config"]["postprocess"]["dictionary"] = 42;
+  EXPECT_FALSE(hrt::hrtc::load_algo(bad));
+}

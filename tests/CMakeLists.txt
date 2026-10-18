@@ -65,6 +65,10 @@ if(TARGET hybridrt_example_image_model AND HRT_USE_ORT)
     hybridrt_add_program_test(example_image_model PROGRAM hybridrt_example_image_model
         DEFINE HRT_EXAMPLE_IMAGE_MODEL SOURCES examples/image_model_test.cpp DEPENDS hrt::hrtc opencv_imgcodecs)
 endif()
+if(TARGET hybridrt_example_ocr_model AND HRT_USE_ORT)
+    hybridrt_add_program_test(example_ocr_model PROGRAM hybridrt_example_ocr_model
+        DEFINE HRT_EXAMPLE_OCR_MODEL SOURCES examples/ocr_model_test.cpp DEPENDS hrt::hrtc)
+endif()
 
 if(TARGET hybridrt_c)
     hybridrt_add_unit_test(hrt SOURCES c/hrt_test.cpp DEPENDS hrt::hybridrt_c hrt::hrtc kitzoo::os)
@@ -78,6 +82,10 @@ hybridrt_add_unit_test(hrtc SOURCES hrtc/hrtc_test.cpp DEPENDS hrt::hrtc kitzoo:
 hybridrt_add_unit_test(define SOURCES core/define_test.cpp DEPENDS hrt::hybridrt)
 hybridrt_add_unit_test(memory SOURCES core/memory_test.cpp DEPENDS hrt::hybridrt)
 hybridrt_add_unit_test(image_preprocessor SOURCES preprocess/image_preprocessor_test.cpp DEPENDS hrt::hybridrt)
+hybridrt_add_unit_test(text_cropper SOURCES preprocess/text_cropper_test.cpp DEPENDS hrt::hybridrt)
+hybridrt_add_unit_test(ocr SOURCES postprocess/ocr_test.cpp DEPENDS hrt::hybridrt)
+hybridrt_add_unit_test(ocr_model SOURCES model/ocr_model_test.cpp DEPENDS hrt::hybridrt)
+hybridrt_enable_model_test(ocr_model)
 
 if(HRT_USE_CUDA)
     hybridrt_add_unit_test(image SOURCES core/image_test.cpp DEPENDS hrt::hybridrt CUDA::cudart)

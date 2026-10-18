@@ -11,6 +11,7 @@
 #include <hrt/engine/engine.hpp>
 #include <hrt/hrtc/hrtc.hpp>
 #include <hrt/model/image_model.hpp>
+#include <hrt/model/ocr_model.hpp>
 #include <hrt/preprocess/image_preprocessor.hpp>
 
 #include <kitzoo/core/macro.hpp>
@@ -42,6 +43,15 @@ static_assert(static_cast<int>(spdlog::level::off) == HRT_LOG_LEVEL_OFF);
 
 struct HrtPackage {
   hrt::hrtc::Package package;
+};
+
+struct HrtOcrModel {
+  hrt::UniquePtr<model::OcrModel> model;
+};
+
+struct HrtOcrResult {
+  postprocess::OcrResult value;
+  hrt::Vector<HrtOcrText> texts;
 };
 
 struct HrtModel {
@@ -267,6 +277,87 @@ auto assign(HrtResult& result, HrtTask task, Result&& value) -> void {
 } // namespace
 
 extern "C" {
+
+auto hrt_ocr_model_create(const HrtPackage* package, const char* detection, const char* recognition,
+                          HrtOcrModel** output) -> HrtStatus {
+  begin();
+  if (output == nullptr)
+    return fail(HRT_STATUS_INVALID_ARGUMENT, "hrt_ocr_model_create: null output");
+  *output = nullptr;
+  if (package == nullptr || detection == nullptr || recognition == nullptr)
+    return fail(HRT_STATUS_INVALID_ARGUMENT, "hrt_ocr_model_create: null argument");
+  const auto* det = package->package.find(detection);
+  const auto* rec = package->package.find(recognition);
+  if (det == nullptr || rec == nullptr)
+    return fail(HRT_STATUS_NOT_FOUND, "OCR detection or recognition algo is missing");
+  const auto problems = model::check_ocr_config(*det, *rec);
+  if (!problems.empty())
+    return fail(HRT_STATUS_INVALID_CONFIG, core::join(problems));
+  for (const auto* algo : {det, rec}) {
+    if (const auto status = check_engines(*algo); status != HRT_STATUS_OK)
+      return status;
+  }
+  *output = new HrtOcrModel{model::OcrModel::create(*det, *rec)};
+  return HRT_STATUS_OK;
+}
+
+auto hrt_ocr_model_destroy(HrtOcrModel* value) -> void {
+  delete value;
+}
+
+auto hrt_ocr_result_create(HrtOcrResult** result) -> HrtStatus {
+  if (result == nullptr)
+    return fail(HRT_STATUS_INVALID_ARGUMENT, "hrt_ocr_result_create: null output");
+  *result = new HrtOcrResult;
+  return HRT_STATUS_OK;
+}
+
+auto hrt_ocr_result_destroy(HrtOcrResult* result) -> void {
+  delete result;
+}
+
+auto hrt_ocr_result_count(const HrtOcrResult* result) -> std::size_t {
+  return result == nullptr ? 0 : result->texts.size();
+}
+
+auto hrt_ocr_result_text(const HrtOcrResult* result, std::size_t index) -> const HrtOcrText* {
+  return result != nullptr && index < result->texts.size() ? &result->texts[index] : nullptr;
+}
+
+auto hrt_ocr_model_process(HrtOcrModel* value, const HrtImage* image, HrtOcrResult* result) -> HrtStatus {
+  begin();
+  if (result != nullptr) {
+    result->texts.clear();
+    result->value.clear();
+  }
+  if (value == nullptr || image == nullptr || result == nullptr)
+    return fail(HRT_STATUS_INVALID_ARGUMENT, "hrt_ocr_model_process: null argument");
+  if (image->data == nullptr || image->width <= 0 || image->height <= 0 || image->width > 32768 ||
+      image->height > 32768 || image->format <= HRT_IMAGE_FORMAT_UNKNOWN || image->format > HRT_IMAGE_FORMAT_GRAY)
+    return fail(HRT_STATUS_INVALID_ARGUMENT, "hrt_ocr_model_process: invalid image");
+  auto src = core::Image::wrap(core::MemoryType::Cpu, const_cast<void*>(image->data),
+                               static_cast<core::ImageFormat>(image->format), {image->width, image->height},
+                               core::DataType::Uint8, image->row_pitch);
+  if (!src)
+    return fail_logged(HRT_STATUS_INVALID_ARGUMENT, "hrt_ocr_model_process: cannot wrap image");
+  auto output = value->model->process_sync(*src);
+  if (!output)
+    return fail_logged(HRT_STATUS_PROCESS_FAILED, "OCR processing failed");
+  result->value = std::move(*output);
+  for (const auto& text : result->value) {
+    HrtOcrText view{};
+    view.x = text.rect.x;
+    view.y = text.rect.y;
+    view.width = text.rect.width;
+    view.height = text.rect.height;
+    view.text = text.text.c_str();
+    view.text_size = text.text.size();
+    view.detection_score = text.detection_score;
+    view.recognition_score = text.recognition_score;
+    result->texts.push_back(view);
+  }
+  return HRT_STATUS_OK;
+}
 
 auto hrt_version() -> const char* {
   return hrt::core::kVersion.data();

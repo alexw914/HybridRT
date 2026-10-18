@@ -86,6 +86,50 @@
           ]
         }
       }
+    },
+    {
+      "name": "ppocrv6_tiny_det_coreml",
+      "config": {
+        "preprocess": {
+          "dst_image_format": "planar_bgr",
+          "resize_type": "keep_ratio",
+          "mean": [
+            123.675,
+            116.28,
+            103.53
+          ],
+          "std": [
+            58.395,
+            57.12,
+            57.375
+          ]
+        },
+        "engine": {
+          "backends": [
+            {
+              "engine_type": "ort",
+              "config": {
+                "execution_provider": "coreml",
+                "provider_options": {
+                  "ModelFormat": "MLProgram",
+                  "RequireStaticInputShapes": "1"
+                }
+              },
+              "data": "assets/test/onnx/PP-OCRv6_tiny_det.onnx"
+            }
+          ]
+        },
+        "postprocess": {
+          "type": "Ocr",
+          "stage": "detection",
+          "decoder": "db",
+          "threshold": 0.2,
+          "box_threshold": 0.4,
+          "unclip_ratio": 1.4,
+          "min_size": 3.0,
+          "max_candidates": 3000
+        }
+      }
     }
   ]
 }

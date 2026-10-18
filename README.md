@@ -14,6 +14,7 @@ with models and configuration stored in a single .hrtc package.
 | Pose and landmarks | YOLOv8-pose, YOLO26-pose, RTMO, RTMPose / SimCC, HRNet / heatmaps, coordinate outputs, end-to-end pose |
 | Classification | Classification scores, including YOLO classification exports |
 | Semantic segmentation | Per-pixel class scores or labels |
+| OCR | PP-OCR DB text detection and CTC recognition, including PP-OCRv6 tiny/small |
 
 Model support depends on the exported output format. See the
 [model and configuration reference](assets/template/README.md) for compatible exports,
@@ -104,6 +105,7 @@ Set the required backend SDK paths before configuring the parent project.
 | `hrt-compress` | Package, inspect, extract and validate model manifests |
 | `hrt-validate` | Run image-directory validation and save results and annotated images |
 | Image model example | Run a configured model on an image |
+| OCR model example | Run two selected algos with `OcrModel`, including ORT CoreML execution |
 
 Start with the [model template](assets/template/hrtc_template.json) and
 [backend configuration examples](assets/template/hrtc_device_config.json).

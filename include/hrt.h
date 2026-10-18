@@ -72,6 +72,34 @@ typedef enum HrtLogLevel {
 typedef struct HrtPackage HrtPackage;
 typedef struct HrtModel HrtModel;
 typedef struct HrtResult HrtResult;
+typedef struct HrtOcrModel HrtOcrModel;
+typedef struct HrtOcrResult HrtOcrResult;
+
+typedef struct HrtOcrText {
+  float x; // Axis-aligned text box in source pixels.
+  float y;
+  float width;
+  float height;
+  const char* text; // UTF-8, owned by the result; byte length is text_size.
+  size_t text_size;
+  float detection_score;
+  float recognition_score;
+} HrtOcrText;
+
+// One engine per stage. Calls using the same model or result must not overlap.
+HRT_API HrtStatus hrt_ocr_model_create(const HrtPackage* package, const char* detection, const char* recognition,
+                                       HrtOcrModel** model);
+
+HRT_API void hrt_ocr_model_destroy(HrtOcrModel* model);
+
+HRT_API HrtStatus hrt_ocr_result_create(HrtOcrResult** result);
+
+HRT_API void hrt_ocr_result_destroy(HrtOcrResult* result);
+
+HRT_API size_t hrt_ocr_result_count(const HrtOcrResult* result);
+
+// Valid until the next process call or result destruction; null for an invalid index.
+HRT_API const HrtOcrText* hrt_ocr_result_text(const HrtOcrResult* result, size_t index);
 
 // Calls each stage serves at once, 1 to 64.
 typedef struct HrtModelOptions {
@@ -95,6 +123,9 @@ typedef struct HrtImage {
   int32_t height;
   size_t row_pitch; // Bytes between rows of a plane; 0 means packed rows.
 } HrtImage;
+
+// On failure clears the previous result. Input is borrowed for this call only.
+HRT_API HrtStatus hrt_ocr_model_process(HrtOcrModel* model, const HrtImage* image, HrtOcrResult* result);
 
 typedef struct HrtBox {
   float x;

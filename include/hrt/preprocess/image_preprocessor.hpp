@@ -55,6 +55,7 @@ enum class ResizeType {
   // Grow the source rect to the input aspect ratio, scale by pad_scale and
   // clip to the image.
   PadOutside,
+  TextLine, // Fixed height, proportional width capped at input width, right padding.
 };
 
 NLOHMANN_JSON_SERIALIZE_ENUM(ResizeType, {
@@ -64,6 +65,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(ResizeType, {
                                              {ResizeType::LetterBox, "letter_box"},
                                              {ResizeType::LetterBox, "center_keep_ratio"},
                                              {ResizeType::PadOutside, "pad_outside"},
+                                             {ResizeType::TextLine, "text_line"},
                                          })
 
 enum class NormalizeType {
