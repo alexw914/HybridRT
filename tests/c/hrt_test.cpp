@@ -8,6 +8,7 @@
 #include <capi/hrt.h>
 #include <hrt/hrtc/hrtc.hpp>
 
+#include <kitzoo/core/macro.hpp>
 #include <kitzoo/json/reader.hpp>
 #include <kitzoo/os/filesys.hpp>
 
@@ -64,7 +65,7 @@ auto load_package(const hrt::Vector<hrt::hrtc::AlgoParam>& algos) -> HrtPackage*
   return package;
 }
 
-auto uniform_bgr(hrt::Vector<std::uint8_t>& pixels, int width, int height) -> HrtImage {
+KZ_MAYBE_UNUSED auto uniform_bgr(hrt::Vector<std::uint8_t>& pixels, int width, int height) -> HrtImage {
   pixels.resize(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 3);
   for (std::size_t i = 0; i < pixels.size(); i += 3) {
     pixels[i] = 10;

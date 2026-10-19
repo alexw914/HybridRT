@@ -44,7 +44,8 @@ inline auto value_info(std::string_view name, std::initializer_list<std::int64_t
   hrt::String shape;
   int position = 0;
   for (auto dim : dims) {
-    const auto symbol = "d" + std::to_string(position++);
+    hrt::String symbol = "d";
+    symbol += std::to_string(position++);
     shape += field(1, dim < 0 ? field(2, symbol) : field(1, static_cast<std::uint64_t>(dim)));
   }
   const auto tensor = field(1, 1) + field(2, shape);
