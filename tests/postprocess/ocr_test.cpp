@@ -60,7 +60,7 @@ TEST(OcrTest, ExpandsScoresAndMapsDbRegions) {
   EXPECT_GE(rect.y, 30);
   EXPECT_LE(rect.x + rect.width, 147);
   EXPECT_LE(rect.y + rect.height, 93);
-  std::fill(scores.begin(), scores.end(), 0);
+  std::fill(scores.begin(), scores.end(), 0.0F);
   ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of<float>(output, scores)}, transform));
   EXPECT_TRUE(result.empty());
 }
