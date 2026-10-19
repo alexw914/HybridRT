@@ -43,6 +43,7 @@ for object in results.boxes() {
 | Keypoint | `boxes()`, `keypoints(index)` |
 | Segment | `boxes()`, `mask(index)`: rect and row-major pixels, 1 marks the class |
 | Classify | `scores(output)`: one slice per engine output |
+| Embedding | `scores(0)`: the vector of the single engine output |
 
 `Image::with_row_pitch` takes padded rows; image bounds are checked before the
 call. Errors carry a `Status` and the library's message. Library logs go to the

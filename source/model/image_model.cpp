@@ -147,6 +147,8 @@ auto builtin_postprocessor(std::string_view type, const kitzoo::json::Json& conf
     return postprocess::create_rotated_postprocessor(type, config, engine);
   else if constexpr (std::is_same_v<Result, postprocess::ClassifyResult>)
     return postprocess::create_classify_postprocessor(type, config, engine);
+  else if constexpr (std::is_same_v<Result, postprocess::EmbeddingResult>)
+    return postprocess::create_embedding_postprocessor(type, config, engine);
   else if constexpr (std::is_same_v<Result, postprocess::SegmentResultMap>)
     return postprocess::create_segment_postprocessor(type, config, engine);
   else if constexpr (std::is_same_v<Result, postprocess::OcrResult>)
@@ -201,6 +203,8 @@ auto task_of(std::string_view postprocess_type) -> std::optional<Task> {
     return Task::Detect;
   if (postprocess::make_rotated(postprocess_type) != nullptr)
     return Task::Rotated;
+  if (postprocess::make_embedding(postprocess_type) != nullptr)
+    return Task::Embedding;
   if (postprocess::make_classify(postprocess_type) != nullptr)
     return Task::Classify;
   if (postprocess::make_keypoint(postprocess_type) != nullptr)
@@ -402,6 +406,7 @@ auto ImageModel<Result>::process_sync(const core::Image& src, const core::Rect& 
 template class ImageModel<postprocess::DetectResultMap>;
 template class ImageModel<postprocess::RotatedResultMap>;
 template class ImageModel<postprocess::ClassifyResult>;
+template class ImageModel<postprocess::EmbeddingResult>;
 template class ImageModel<postprocess::KeypointResultMap>;
 template class ImageModel<postprocess::SegmentResultMap>;
 template class ImageModel<postprocess::OcrResult>;

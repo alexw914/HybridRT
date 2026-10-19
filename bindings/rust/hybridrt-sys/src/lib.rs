@@ -25,6 +25,7 @@ pub const HRT_TASK_ROTATED: HrtTask = 1;
 pub const HRT_TASK_CLASSIFY: HrtTask = 2;
 pub const HRT_TASK_KEYPOINT: HrtTask = 3;
 pub const HRT_TASK_SEGMENT: HrtTask = 4;
+pub const HRT_TASK_EMBEDDING: HrtTask = 5;
 
 pub type HrtImageFormat = c_int;
 pub const HRT_IMAGE_FORMAT_UNKNOWN: HrtImageFormat = 0;

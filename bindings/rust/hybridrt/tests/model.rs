@@ -148,6 +148,33 @@ fn runs_identity_model_on_image_layouts() {
 }
 
 #[test]
+fn returns_embedding() {
+    if !engine_available("ort") {
+        return;
+    }
+    let config = CLASSIFY.replace(
+        r#"{"type": "GeneralClassify", "classify_postprocess_type": "none"}"#,
+        r#"{"type": "Embedding"}"#,
+    );
+    let path = manifest("embedding", &[("embedding", &config, "ort")]);
+    let package = Package::load(path).unwrap();
+    let model = Model::new(&package, None, ModelOptions::default()).unwrap();
+    assert_eq!(model.task(), Task::Embedding);
+    let bgr = uniform_bgr();
+    let mut results = Results::new().unwrap();
+    model
+        .process(
+            &Image::new(&bgr, ImageFormat::InterBgr, 8, 8).unwrap(),
+            None,
+            &mut results,
+        )
+        .unwrap();
+    assert_eq!(results.task(), Task::Embedding);
+    assert_eq!(results.len(), 1);
+    assert_scores(results.scores(0).unwrap(), &expected_scores());
+}
+
+#[test]
 fn runs_calls_from_threads() {
     if !engine_available("ort") {
         return;

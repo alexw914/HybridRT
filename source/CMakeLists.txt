@@ -56,6 +56,7 @@ add_library(hybridrt STATIC
     postprocess/rotated/general_rotated.cpp
     postprocess/rotated/e2e_rotated.cpp
     postprocess/classify/general_classify.cpp
+    postprocess/embedding/embedding.cpp
     postprocess/keypoint/general_keypoint.cpp
     postprocess/keypoint/e2e_keypoint.cpp
     postprocess/keypoint/rtmo_keypoint.cpp

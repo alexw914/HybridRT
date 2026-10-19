@@ -24,6 +24,7 @@
 #include <future>
 #include <numeric>
 #include <opencv2/imgcodecs.hpp>
+#include <type_traits>
 
 namespace {
 
@@ -50,7 +51,8 @@ auto make_result(const hrt::postprocess::ObjectBox& box) -> Json {
           {"angle", 0.0},
           {"keypoints", Json::array()},
           {"mask", nullptr},
-          {"cls", Json::array()}};
+          {"cls", Json::array()},
+          {"embedding", Json::array()}};
 }
 
 // Row-major run lengths alternating 0 and 1, starting with 0.
@@ -128,6 +130,21 @@ auto to_json(const hrt::postprocess::ClassifyResult& result, const hrt::core::Re
   return Json::array({std::move(item)});
 }
 
+// One result over `region` with class_id -1; "embedding" holds the vector at
+// 6 decimals, as embeddings are compared by small differences.
+auto to_json(const hrt::postprocess::EmbeddingResult& result, const hrt::core::Rect& region) -> Json {
+  auto item = make_result({{static_cast<float>(region.x), static_cast<float>(region.y),
+                            static_cast<float>(region.width), static_cast<float>(region.height)},
+                           0.0F,
+                           -1,
+                           -1});
+  Json values = Json::array();
+  for (const auto value : result)
+    values.push_back(std::round(static_cast<double>(value) * 1e6) / 1e6);
+  item["embedding"] = std::move(values);
+  return Json::array({std::move(item)});
+}
+
 auto to_json(const hrt::postprocess::KeypointResultMap& result, const hrt::core::Rect& /*region*/) -> Json {
   Json results = Json::array();
   for (const auto& [cls, objects] : result) {
@@ -158,7 +175,7 @@ auto to_json(const hrt::postprocess::SegmentResultMap& result, const hrt::core::
 // kThreads workers first, then the results are collected in name order while
 // progress is logged every second. Failures are recorded in "error" and make
 // the run fail. A non-empty `draw_dir` receives each image with its results
-// drawn.
+// drawn; embeddings have nothing to draw.
 template <typename Result>
 auto validate(const hrt::hrtc::AlgoParam& algo, const hrt::model::ImageModelOptions& options,
               const std::filesystem::path& dir, const std::filesystem::path& draw_dir, Json& images) -> bool {
@@ -202,9 +219,11 @@ auto validate(const hrt::hrtc::AlgoParam& algo, const hrt::model::ImageModelOpti
     entry["width"] = bgr.cols;
     entry["height"] = bgr.rows;
     entry["results"] = to_json(*result, {0, 0, bgr.cols, bgr.rows});
-    if (!draw_dir.empty()) {
-      hrt::core::draw(bgr, *result);
-      cv::imwrite((draw_dir / path.filename()).string(), bgr);
+    if constexpr (!std::is_same_v<Result, hrt::postprocess::EmbeddingResult>) {
+      if (!draw_dir.empty()) {
+        hrt::core::draw(bgr, *result);
+        cv::imwrite((draw_dir / path.filename()).string(), bgr);
+      }
     }
     return entry;
   };
@@ -318,7 +337,7 @@ auto main(int argc, char** argv) -> int {
   // task_of succeeded, so the config parses and has a postprocess type.
   const kitzoo::json::Reader config{algo.config};
   const auto& postprocess = config.raw()["postprocess"];
-  constexpr std::array<const char*, 5> kTasks = {"detect", "rotated", "classify", "keypoint", "segment"};
+  constexpr std::array<const char*, 6> kTasks = {"detect", "rotated", "classify", "keypoint", "segment", "embedding"};
   Json output = {{"model", name},
                  {"task", kTasks.at(static_cast<std::size_t>(*task))},
                  {"type", postprocess["type"].get<hrt::String>()},
@@ -341,6 +360,9 @@ auto main(int argc, char** argv) -> int {
     break;
   case hrt::model::Task::Segment:
     ok = validate<hrt::postprocess::SegmentResultMap>(algo, model_options, input, draw_dir, images);
+    break;
+  case hrt::model::Task::Embedding:
+    ok = validate<hrt::postprocess::EmbeddingResult>(algo, model_options, input, draw_dir, images);
     break;
   }
 

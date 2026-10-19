@@ -211,6 +211,29 @@ TEST(HrtTest, RunsModelAndReusesResult) {
   hrt_model_destroy(model);
 }
 
+TEST(HrtTest, ReturnsEmbeddings) {
+  auto config = classify_config();
+  config["postprocess"] = {{"type", "Embedding"}};
+  auto* package = load_package({identity_algo("embedding", config)});
+  ASSERT_NE(package, nullptr);
+  HrtModel* model = nullptr;
+  ASSERT_EQ(hrt_model_create(package, nullptr, nullptr, &model), HRT_STATUS_OK) << hrt_last_error();
+  hrt_package_destroy(package);
+  EXPECT_EQ(hrt_model_task(model), HRT_TASK_EMBEDDING);
+  HrtResult* result = nullptr;
+  ASSERT_EQ(hrt_result_create(&result), HRT_STATUS_OK);
+  hrt::Vector<std::uint8_t> pixels;
+  const auto image = uniform_bgr(pixels, 8, 8);
+  ASSERT_EQ(hrt_model_process(model, &image, nullptr, result), HRT_STATUS_OK) << hrt_last_error();
+  const auto* data = hrt_result_data(result);
+  EXPECT_EQ(data->task, HRT_TASK_EMBEDDING);
+  ASSERT_EQ(data->count, 1U);
+  ASSERT_EQ(data->score_offsets[1], 12U);
+  EXPECT_FLOAT_EQ(data->scores[0], 30.0F / 255.0F);
+  hrt_result_destroy(result);
+  hrt_model_destroy(model);
+}
+
 TEST(HrtTest, ReportsProcessErrorsAndForwardsLogs) {
   auto* package = load_package({identity_algo("classify", classify_config())});
   ASSERT_NE(package, nullptr);

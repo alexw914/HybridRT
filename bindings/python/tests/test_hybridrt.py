@@ -162,6 +162,15 @@ def test_runs_classify_on_image_layouts(manifest):
 
 
 @needs_ort
+def test_returns_embedding(manifest):
+    config = dict(CLASSIFY, postprocess={"type": "Embedding"})
+    model = hrt.Model(manifest({"embedding": (config, "ort")}))
+    assert model.task == hrt.Task.EMBEDDING
+    embedding = model(uniform_bgr())
+    np.testing.assert_allclose(embedding, np.repeat(np.array([30, 20, 10], np.float32) / 255, 4), rtol=1e-6)
+
+
+@needs_ort
 def test_runs_calls_from_threads(manifest):
     model = hrt.Model(manifest({"classify": (CLASSIFY, "ort")}), preprocess=2, engine=2, postprocess=2)
     images = [np.full((8, 8, 3), value, np.uint8) for value in range(16)]

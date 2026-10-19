@@ -10,6 +10,7 @@
 
 #include <hrt/postprocess/classify.hpp>
 #include <hrt/postprocess/detect.hpp>
+#include <hrt/postprocess/embedding.hpp>
 #include <hrt/postprocess/keypoint.hpp>
 #include <hrt/postprocess/ocr.hpp>
 #include <hrt/postprocess/rotated.hpp>
@@ -102,6 +103,8 @@ auto make_detect(std::string_view type) -> UniquePtr<DetectPostprocessor>;
 auto make_rotated(std::string_view type) -> UniquePtr<RotatedPostprocessor>;
 
 auto make_classify(std::string_view type) -> UniquePtr<ClassifyPostprocessor>;
+
+auto make_embedding(std::string_view type) -> UniquePtr<EmbeddingPostprocessor>;
 
 auto make_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor>;
 

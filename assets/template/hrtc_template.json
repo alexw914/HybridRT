@@ -140,6 +140,14 @@
       }
     },
     {
+      "name": "yolov8n_classify_embedding",
+      "config": {
+        "preprocess": {"std": [255, 255, 255]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralClassify.onnx"}]},
+        "postprocess": {"type": "Embedding"}
+      }
+    },
+    {
       "name": "yolov8n_pose",
       "config": {
         "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},

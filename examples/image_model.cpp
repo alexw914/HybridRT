@@ -12,6 +12,7 @@
 #include <kitzoo/log/logger.hpp>
 
 #include <opencv2/imgcodecs.hpp>
+#include <type_traits>
 
 auto main(int argc, char** argv) -> int {
   kitzoo::core::Options options("hybridrt_example_image_model", "Run an algorithm of an .hrtc package or a manifest");
@@ -90,7 +91,10 @@ auto main(int argc, char** argv) -> int {
     if (!result)
       return false;
     KZ_LOG_INFO("{} on {}x{} {}", name, bgr.cols, bgr.rows, path);
-    hrt::core::draw(bgr, *result);
+    if constexpr (std::is_same_v<Result, hrt::postprocess::EmbeddingResult>)
+      KZ_LOG_INFO("embedding of {} values; nothing to draw", result->size());
+    else
+      hrt::core::draw(bgr, *result);
     return true;
   };
   bool ok = false;
@@ -109,6 +113,9 @@ auto main(int argc, char** argv) -> int {
     break;
   case hrt::model::Task::Segment:
     ok = run.operator()<hrt::postprocess::SegmentResultMap>();
+    break;
+  case hrt::model::Task::Embedding:
+    ok = run.operator()<hrt::postprocess::EmbeddingResult>();
     break;
   }
   if (!ok)

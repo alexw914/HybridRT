@@ -13,6 +13,7 @@
 #include <hrt/hrtc/hrtc.hpp>
 #include <hrt/postprocess/classify.hpp>
 #include <hrt/postprocess/detect.hpp>
+#include <hrt/postprocess/embedding.hpp>
 #include <hrt/postprocess/keypoint.hpp>
 #include <hrt/postprocess/ocr.hpp>
 #include <hrt/postprocess/rotated.hpp>
@@ -34,6 +35,7 @@ enum class Task {
   Classify,
   Keypoint,
   Segment,
+  Embedding,
 };
 
 auto task_of(std::string_view postprocess_type) -> std::optional<Task>;
@@ -130,6 +132,7 @@ private:
 extern template class ImageModel<postprocess::DetectResultMap>;
 extern template class ImageModel<postprocess::RotatedResultMap>;
 extern template class ImageModel<postprocess::ClassifyResult>;
+extern template class ImageModel<postprocess::EmbeddingResult>;
 extern template class ImageModel<postprocess::KeypointResultMap>;
 extern template class ImageModel<postprocess::SegmentResultMap>;
 extern template class ImageModel<postprocess::OcrResult>;

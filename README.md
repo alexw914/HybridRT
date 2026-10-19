@@ -13,6 +13,7 @@ with models and configuration stored in a single .hrtc package.
 | Instance segmentation | YOLOv8-seg, YOLO26-seg, decoded YOLO segmentation, end-to-end segmentation |
 | Pose and landmarks | YOLOv8-pose, YOLO26-pose, RTMO, RTMPose / SimCC, HRNet / heatmaps, coordinate outputs, end-to-end pose |
 | Classification | Classification scores, including YOLO classification exports |
+| Embedding | Raw feature vectors, e.g. ReID or image retrieval |
 | Semantic segmentation | Per-pixel class scores or labels |
 | OCR | PP-OCR DB text detection and CTC recognition, including PP-OCRv6 tiny/small |
 

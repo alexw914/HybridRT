@@ -33,9 +33,13 @@ protected:
       "algos": [{"name": "classify", "config": {"preprocess": {"std": [255, 255, 255]},
                                                 "engine": {"backends": [{"engine_type": "ort"}]},
                                                 "postprocess": {"type": "GeneralClassify",
-                                                                "classify_postprocess_type": "softmax"}}}]
+                                                                "classify_postprocess_type": "softmax"}}},
+                {"name": "embedding", "config": {"preprocess": {"std": [255, 255, 255]},
+                                                 "engine": {"backends": [{"engine_type": "ort"}]},
+                                                 "postprocess": {"type": "Embedding"}}}]
     })");
-    manifest["algos"][0]["config"]["engine"]["backends"][0]["data"] = (dir_ / "identity.onnx").string();
+    for (auto& algo : manifest["algos"])
+      algo["config"]["engine"]["backends"][0]["data"] = (dir_ / "identity.onnx").string();
     manifest_ = (dir_ / "manifest.json").string();
     kitzoo::os::write_file(manifest_, manifest.dump());
     ASSERT_TRUE(cv::imwrite((dir_ / "images" / "a.png").string(), cv::Mat(8, 6, CV_8UC3, cv::Scalar(10, 20, 30))));
@@ -101,6 +105,24 @@ TEST_F(HrtValidateTest, WritesClassifyResults) {
   ASSERT_EQ(cls["topk"].size(), 5U);
   EXPECT_EQ(item["class_id"], cls["topk"][0][0]);
   EXPECT_EQ(item["score"], cls["topk"][0][1]);
+}
+
+TEST_F(HrtValidateTest, WritesEmbeddingResults) {
+  const auto result = run({"-m", manifest_, "-n", "embedding", "-i", (dir_ / "images").string(), "-o", output_, "-r",
+                           (dir_ / "drawn").string()});
+  ASSERT_EQ(result.exit_code, 0) << result.output;
+  EXPECT_FALSE(std::filesystem::exists(dir_ / "drawn" / "a.png"));
+  const auto json = read_output();
+  EXPECT_EQ(json["task"], "embedding");
+  EXPECT_EQ(json["type"], "Embedding");
+  const auto& item = json["images"][0]["results"].at(0);
+  EXPECT_EQ(item["class_id"], -1);
+  EXPECT_TRUE(item["cls"].empty());
+  // The identity model returns the normalized planar RGB input.
+  const auto& vector = item["embedding"];
+  ASSERT_EQ(vector.size(), 12U);
+  EXPECT_NEAR(vector[0].get<double>(), 30.0 / 255.0, 1e-6);
+  EXPECT_NEAR(vector[11].get<double>(), 10.0 / 255.0, 1e-6);
 }
 
 TEST_F(HrtValidateTest, RecordsUnreadableImages) {

@@ -114,6 +114,7 @@ each in [0, 1].
 | `E2ESegment` | `class_num`, `mask_threshold` (0.5), `confidence_threshold`; end-to-end `[1, N, 6 + masks]` plus prototypes |
 | `SemanticSegment` | none |
 | `GeneralClassify` | `classify_postprocess_type`: `none`, `sigmoid`, `softmax` |
+| `Embedding` | none; returns the single engine output as a float vector (int8 outputs dequantized), with no normalization; models with more outputs are rejected |
 | `Ocr` | DB detection or CTC recognition; parameters and cascade usage are in [OCR model](#ocr-model) |
 
 Raw YOLO postprocessors compute each stride during initialization from the input width/height
@@ -225,12 +226,13 @@ and `results`, whose items always carry every field, empty when the task has non
 
 | Field | Value |
 | --- | --- |
-| `class_id`, `score` | Detection class and score; classify: top 1 of output 0. Semantic segments and `GeneralKeypoint` use score 1. |
-| `x`, `y`, `width`, `height` | Box in source pixels, the top-left of the unrotated box; the full image for classify and semantic segments; the cropped source region for `GeneralKeypoint`. |
+| `class_id`, `score` | Detection class and score; classify: top 1 of output 0. Semantic segments and `GeneralKeypoint` use score 1; embeddings -1 and 0. |
+| `x`, `y`, `width`, `height` | Box in source pixels, the top-left of the unrotated box; the full image for classify, embeddings and semantic segments; the cropped source region for `GeneralKeypoint`. |
 | `angle` | Rotated boxes; 0 otherwise. |
 | `keypoints` | `[x, y, score, visible]` per keypoint, `visible` 0 unlabeled, 1 invisible, 2 visible. |
 | `mask` | `{"rect": [x, y, w, h], "rle": [...]}`: row-major run lengths over `rect`, alternating 0 and 1, starting with 0; `null` without a mask. |
 | `cls` | Classify, one item per engine output: `output` index, `topk` `[[class, score], ...]` (5), `scores` by class. |
+| `embedding` | Embedding vector at 6 decimals. `-r` draws no images for embeddings. |
 
 ## ocr_results.json
 
@@ -376,6 +378,7 @@ preprocessing allow pipeline checks only, as requested.
 | `yolov5_rotated` | `YoloV5Rotated.onnx` | `1 x 3 x 1280 x 1280` | `afffc7a2813e15e9137648bc7655155827b1cdace2a0999b1919d1196be57dfb` |
 | `yolov8n_obb` | `GeneralRotated.onnx` | `1 x 3 x 1024 x 1024` | `c207d49b65f8173265f2e2ff66f59bfef54b0b6d6da578a31c223b190e13dd60` |
 | `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 224 x 224` | `b3b8c37ac7d6bfe052fcc17e4d018bd79a68f354bee845e9073f080b3705ce95` |
+| `yolov8n_classify_embedding` | `GeneralClassify.onnx` | `1 x 3 x 224 x 224` | same file; `Embedding` returns its 1000 class scores as the vector, an example only |
 | `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 640 x 640` | `09ecef03a3b398c2d40a6435acb2fe94bfc5185306605b7e6ad65b0b2f2ef14d` |
 | `yolov8n_face` | `YoloV8Keypoint.onnx` | `1 x 3 x 640 x 640` | `af09683be4937ebe23e9da0346cbf46cd937b73ed5fac986e6205e6c7cdd2c25` |
 | `yolo26n_pose_raw` | `Yolo26Keypoint.onnx` | `1 x 3 x 640 x 640` | `513e12cd94482f799e2d1ad66fcb9603d7c3eb41ad38863e7ae566374e0eddc8` |

@@ -36,6 +36,7 @@ static_assert(static_cast<int>(model::Task::Rotated) == HRT_TASK_ROTATED);
 static_assert(static_cast<int>(model::Task::Classify) == HRT_TASK_CLASSIFY);
 static_assert(static_cast<int>(model::Task::Keypoint) == HRT_TASK_KEYPOINT);
 static_assert(static_cast<int>(model::Task::Segment) == HRT_TASK_SEGMENT);
+static_assert(static_cast<int>(model::Task::Embedding) == HRT_TASK_EMBEDDING);
 static_assert(static_cast<int>(core::ImageFormat::InterBgr) == HRT_IMAGE_FORMAT_INTER_BGR);
 static_assert(static_cast<int>(core::ImageFormat::Gray) == HRT_IMAGE_FORMAT_GRAY);
 static_assert(static_cast<int>(kitzoo::log::Level::Off) == HRT_LOG_LEVEL_OFF);
@@ -61,7 +62,8 @@ struct HrtModel {
                hrt::UniquePtr<model::ImageModel<postprocess::RotatedResultMap>>,
                hrt::UniquePtr<model::ImageModel<postprocess::ClassifyResult>>,
                hrt::UniquePtr<model::ImageModel<postprocess::KeypointResultMap>>,
-               hrt::UniquePtr<model::ImageModel<postprocess::SegmentResultMap>>>
+               hrt::UniquePtr<model::ImageModel<postprocess::SegmentResultMap>>,
+               hrt::UniquePtr<model::ImageModel<postprocess::EmbeddingResult>>>
       model;
 };
 
@@ -69,7 +71,7 @@ struct HrtModel {
 // their capacity across calls.
 struct HrtResult {
   std::variant<std::monostate, postprocess::DetectResultMap, postprocess::RotatedResultMap, postprocess::ClassifyResult,
-               postprocess::KeypointResultMap, postprocess::SegmentResultMap>
+               postprocess::KeypointResultMap, postprocess::SegmentResultMap, postprocess::EmbeddingResult>
       value;
   hrt::Vector<HrtBox> boxes;
   hrt::Vector<HrtRotatedBox> rotated_boxes;
@@ -226,6 +228,15 @@ auto fill(HrtResult& result, const postprocess::ClassifyResult& value) -> void {
     result.score_offsets.push_back(result.scores.size());
   }
   result.data.count = value.size();
+  result.data.score_offsets = result.score_offsets.data();
+  result.data.scores = result.scores.data();
+}
+
+// The embedding is one output in the classify score arrays.
+auto fill(HrtResult& result, const postprocess::EmbeddingResult& value) -> void {
+  result.scores.assign(value.begin(), value.end());
+  result.score_offsets.assign({0, result.scores.size()});
+  result.data.count = 1;
   result.data.score_offsets = result.score_offsets.data();
   result.data.scores = result.scores.data();
 }
@@ -482,6 +493,9 @@ auto hrt_model_create(const HrtPackage* package, const char* algo, const HrtMode
     break;
   case model::Task::Segment:
     make.operator()<postprocess::SegmentResultMap>();
+    break;
+  case model::Task::Embedding:
+    make.operator()<postprocess::EmbeddingResult>();
     break;
   }
   *model = created.release();

@@ -45,6 +45,7 @@ config: `inter_bgr`, `inter_rgb`, `inter_rgba` as (H, W, C); `planar_bgr`,
 | Keypoint | `KeypointResult` | detect fields, `keypoints` (N, K, 3) x, y, score, `visible` (N, K) |
 | Segment | `SegmentResult` | detect fields, `masks`: `Mask(rect, data)` per object |
 | Classify | `ClassifyResult` | `scores`: one array per engine output |
+| Embedding | `numpy.ndarray` | float32 vector of the single engine output |
 
 Errors raise `hrt.HybridRTError` with a `status`. Library logs go to the
 console; `hrt.use_python_logging()` forwards them to the `hybridrt` logger.

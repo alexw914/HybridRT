@@ -125,6 +125,7 @@ pub enum Task {
     Classify,
     Keypoint,
     Segment,
+    Embedding,
 }
 
 impl Task {
@@ -134,6 +135,7 @@ impl Task {
             sys::HRT_TASK_CLASSIFY => Self::Classify,
             sys::HRT_TASK_KEYPOINT => Self::Keypoint,
             sys::HRT_TASK_SEGMENT => Self::Segment,
+            sys::HRT_TASK_EMBEDDING => Self::Embedding,
             _ => Self::Detect,
         }
     }
@@ -446,7 +448,7 @@ impl Results {
         Task::from_raw(self.data().task)
     }
 
-    /// Objects; for classify, engine outputs.
+    /// Objects; for classify and embedding, engine outputs.
     pub fn len(&self) -> usize {
         self.data().count
     }
@@ -503,7 +505,8 @@ impl Results {
         }
     }
 
-    /// Classify scores of engine output `output`, indexed by class ID.
+    /// Classify scores of engine output `output` by class ID; for embedding,
+    /// output 0 is the embedding.
     pub fn scores(&self, output: usize) -> Option<&[f32]> {
         let data = self.data();
         if data.score_offsets.is_null() || output >= data.count {

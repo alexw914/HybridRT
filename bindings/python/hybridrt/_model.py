@@ -33,6 +33,7 @@ class Task(enum.IntEnum):
     CLASSIFY = 2
     KEYPOINT = 3
     SEGMENT = 4
+    EMBEDDING = 5
 
 
 class LogLevel(enum.IntEnum):
@@ -258,6 +259,8 @@ def _convert(data):
         return _rotated(data)
     if task == Task.CLASSIFY:
         return _classify(data)
+    if task == Task.EMBEDDING:
+        return _classify(data).scores[0]  # The float32 embedding.
     boxes = _boxes(data)
     if task == Task.KEYPOINT:
         keypoints, visible = _keypoints(data)

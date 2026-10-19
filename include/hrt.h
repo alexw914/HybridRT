@@ -40,6 +40,7 @@ typedef enum HrtTask {
   HRT_TASK_CLASSIFY = 2,
   HRT_TASK_KEYPOINT = 3,
   HRT_TASK_SEGMENT = 4,
+  HRT_TASK_EMBEDDING = 5,
 } HrtTask;
 
 // Same values as hrt::core::ImageFormat. Planes are laid out as: interleaved
@@ -167,14 +168,14 @@ typedef struct HrtMask {
 // are null. Fields are only appended.
 typedef struct HrtResultData {
   HrtTask task;
-  size_t count;                       // Objects; for classify, engine outputs.
+  size_t count;                       // Objects; for classify and embedding, engine outputs.
   const HrtBox* boxes;                // Detect, keypoint and segment.
   const HrtRotatedBox* rotated_boxes; // Rotated.
   const size_t* keypoint_offsets;     // Keypoint: count + 1 offsets into keypoints.
   const HrtKeypoint* keypoints;
   const HrtMask* masks;        // Segment; semantic results cover the whole input region.
-  const size_t* score_offsets; // Classify: count + 1 offsets into scores.
-  const float* scores;         // Classify scores of each output, indexed by class ID.
+  const size_t* score_offsets; // Classify, embedding: count + 1 offsets into scores.
+  const float* scores;         // Classify scores of each output by class ID; embedding: the vector, count 1.
 } HrtResultData;
 
 typedef void (*HrtLogCallback)(HrtLogLevel level, const char* message, size_t length, void* user_data);
