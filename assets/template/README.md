@@ -232,6 +232,25 @@ and `results`, whose items always carry every field, empty when the task has non
 | `mask` | `{"rect": [x, y, w, h], "rle": [...]}`: row-major run lengths over `rect`, alternating 0 and 1, starting with 0; `null` without a mask. |
 | `cls` | Classify, one item per engine output: `output` index, `topk` `[[class, score], ...]` (5), `scores` by class. |
 
+## ocr_results.json
+
+`ocr_results.json` is the output layout of `hrt-ocr`, which runs `OcrModel` on every image of a
+directory, one image at a time. The top level names the `detection` and `recognition` algos
+(`-d`, `-r`, default `ppocrv6_tiny_det` and `ppocrv6_tiny_rec`), `task` `"ocr"` and `engine` (the
+`-e` value applied to both algos, or `null`). Images have the same `file`, `width`, `height`, `error`
+and `results` as `results.json`, the output defaults to `<input>_ocr.json` beside the input
+directory, and a failed image makes the exit code 1. Each result is one text line:
+
+| Field | Value |
+| --- | --- |
+| `text` | Recognized UTF-8 text. |
+| `x`, `y`, `width`, `height` | Axis-aligned text box in source pixels. |
+| `detection_score`, `recognition_score` | Text region score of the detector and mean character score of the recognizer. |
+
+```sh
+hrt-ocr -m ocr.hrtc -r ppocrv6_small_rec -e ort -i assets/test/images -o ocr_results.json
+```
+
 ## OCR model
 
 `model::OcrModel` combines one detection algo and one recognition algo from a loaded

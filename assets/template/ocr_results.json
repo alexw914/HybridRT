@@ -1,0 +1,25 @@
+{
+  "detection": "ppocrv6_tiny_det",
+  "recognition": "ppocrv6_tiny_rec",
+  "task": "ocr",
+  "engine": "ort",
+  "images": [
+    {
+      "file": "ocr_document.jpg",
+      "width": 1280,
+      "height": 720,
+      "error": null,
+      "results": [
+        {
+          "text": "BOARDING PASS",
+          "x": 102.5,
+          "y": 48.0,
+          "width": 356.2,
+          "height": 42.7,
+          "detection_score": 0.91,
+          "recognition_score": 0.98
+        }
+      ]
+    }
+  ]
+}

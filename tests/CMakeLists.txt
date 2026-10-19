@@ -61,6 +61,9 @@ if(TARGET hrt_validate AND HRT_USE_ORT)
     hybridrt_add_program_test(hrt_validate PROGRAM hrt_validate DEFINE HRT_VALIDATE
         SOURCES tools/hrt_validate_test.cpp DEPENDS hrt::hrtc opencv_imgcodecs)
 endif()
+if(TARGET hrt_ocr AND HRT_USE_ORT)
+    hybridrt_add_program_test(hrt_ocr PROGRAM hrt_ocr DEFINE HRT_OCR SOURCES tools/hrt_ocr_test.cpp DEPENDS hrt::hrtc)
+endif()
 if(TARGET hybridrt_example_image_model AND HRT_USE_ORT)
     hybridrt_add_program_test(example_image_model PROGRAM hybridrt_example_image_model
         DEFINE HRT_EXAMPLE_IMAGE_MODEL SOURCES examples/image_model_test.cpp DEPENDS hrt::hrtc opencv_imgcodecs)

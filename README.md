@@ -104,6 +104,7 @@ Set the required backend SDK paths before configuring the parent project.
 | [Rust crates](bindings/rust/README.md) | `hybridrt-sys` FFI and the safe `hybridrt` crate over the C API |
 | `hrt-compress` | Package, inspect, extract and validate model manifests |
 | `hrt-validate` | Run image-directory validation and save results and annotated images |
+| `hrt-ocr` | Run OCR on an image directory and save the texts as JSON |
 | Image model example | Run a configured model on an image |
 | OCR model example | Run two selected algos with `OcrModel`, including ORT CoreML execution |
 
