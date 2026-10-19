@@ -40,7 +40,6 @@ add_library(hybridrt STATIC
     memory/memory_copier.cpp
     preprocess/image_preprocessor.cpp
     preprocess/cpu_image_preprocessor.cpp
-    preprocess/text_cropper.cpp
     postprocess/common.cpp
     postprocess/ocr/ocr.cpp
     postprocess/detect.cpp

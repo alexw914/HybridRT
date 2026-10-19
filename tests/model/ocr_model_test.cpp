@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: tests/model/ocr_model_test.cpp
-// Description: Tests OCR package round trips and sequential real-model calls.
+// Description: Tests OCR package round trips, sequential real-model calls and tall lines.
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/ocr_model.hpp>
@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #ifdef HRT_ORT_MODEL_TEST
+#include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #endif
 
@@ -64,6 +65,16 @@ TEST(OcrModelTest, RunsPackedModelsWithoutExternalDictionary) {
     ASSERT_EQ(repeated->size(), result->size());
     for (std::size_t i = 0; i < result->size(); ++i)
       EXPECT_EQ((*result)[i].text, (*repeated)[i].text);
+    // Turned clockwise, every line is a tall box that is rotated back on the host.
+    cv::Mat turned;
+    cv::rotate(bgr, turned, cv::ROTATE_90_CLOCKWISE);
+    auto tall = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, turned.data, hrt::core::ImageFormat::InterBgr,
+                                       {turned.cols, turned.rows}, hrt::core::DataType::Uint8, turned.step);
+    ASSERT_TRUE(tall);
+    const auto tall_result = model->process_sync(*tall);
+    ASSERT_TRUE(tall_result);
+    EXPECT_TRUE(std::any_of(tall_result->begin(), tall_result->end(),
+                            [](const auto& item) -> bool { return item.text.find("BOARDING") != hrt::String::npos; }));
   }
 #else
   GTEST_SKIP() << "Needs ONNX Runtime and OpenCV imgcodecs";

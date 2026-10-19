@@ -309,11 +309,12 @@ mean/std 127.5 and `normalize_type: "roi"`: padding is filled with zero and rema
 after normalization. Long lines exceeding the 320-pixel width are compressed to fit;
 there is no automatic splitting. Existing resize modes retain their previous behavior.
 
-`preprocess::TextCropper` crops a box from host uint8 interleaved BGR/RGB, truncating
-its origin and size to whole pixels like PP-OCR. Boxes must lie inside the image and be
-at least 2 x 2 pixels. Crops with height >= 1.5 times width are rotated counterclockwise
-into reused storage, valid until the next crop; other crops view the source directly. `OcrModel` converts other input formats to host BGR through the
-existing preprocessor before cropping. Crop storage is reused; no direction classifier,
+`OcrModel` truncates each detected box to whole pixels like PP-OCR; boxes must lie inside
+the image and be at least 2 x 2 pixels. Lines are recognized from that region of the source
+on the recognition preprocessor's device, without copying the image. Boxes with height >= 1.5
+times width are rotated counterclockwise like PP-OCR; preprocessors cannot rotate, so for those
+the source is used directly when it is host uint8 BGR/RGB, otherwise converted once per call to
+host BGR, and the region is rotated into reused host storage. No direction classifier,
 page deskew, curved-text rectification or automatic 180-degree orientation is included.
 
 Run from the repository root, with the local models, dictionaries and image available:

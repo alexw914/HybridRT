@@ -4,6 +4,39 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-19: OCR line regions on the source device
+
+**Bottleneck.** `OcrModel` cropped every detected line on the host (`TextCropper`) before
+recognition, so a source that was not host uint8 BGR/RGB, such as a CUDA image, was first converted
+and copied to host BGR in full, even though the recognition preprocessor already reads a region of
+its source and only lines at least 1.5 times taller than wide need a host rotation.
+
+**Change.** Lines are recognized from their truncated region of the source through
+`ImageModel::process_sync(src, region)`, on the recognition preprocessor's device. Only tall lines
+use the host: the source directly when it is host BGR/RGB, otherwise one conversion per call, then
+a counterclockwise rotation into reused storage. `TextCropper` is removed.
+
+**Measurement.** RTX 4090 (GPU 1, shared), CUDA 12.4, TensorRT 10.16.1.11 FP16 engines from
+`trtexec --fp16`, preprocessing on CUDA; a scratch driver times 300 `OcrModel::process_sync` calls
+after 6 warm-up calls, tiny det + tiny rec, with the image in host memory and in CUDA memory; mean
+of 4 interleaved rounds. Images: a local 896 x 528 document (8 lines, one tall) and the same page
+turned 90 degrees clockwise (12 lines, all tall).
+
+| Case | Before | After |
+| --- | --- | --- |
+| Document, host input | 6.544 ms | 6.544 ms |
+| Document, CUDA input | 6.646 ms | 6.573 ms |
+| Turned document, host input | 8.630 ms | 8.669 ms |
+| Turned document, CUDA input | 8.794 ms | 8.793 ms |
+
+Texts, boxes and scores are identical, except one noise box on the turned page whose score moves
+from 0.2729 to 0.2871, likely because region resizing reads source pixels next to the region where a crop
+replicated its border. On macOS ORT CPU the JSON results of `hrt-ocr` are byte-identical.
+
+**Remaining.** The CUDA input now costs only 0.03 ms more than host input on this image; the saved
+copy grows with resolution. Tall lines still need the host conversion, as preprocessors cannot
+rotate; recognition is still one batch-1 inference per line.
+
 ## 2026-10-18: OCR CTC decoding
 
 **Bottleneck.** `OcrModel` recognizes each detected line separately, so CTC decoding runs once per

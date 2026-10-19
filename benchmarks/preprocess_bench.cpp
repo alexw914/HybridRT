@@ -6,7 +6,6 @@
 // -----------------------------------------------------------------------------
 
 #include <hrt/core/context.hpp>
-#include <hrt/preprocess/text_cropper.hpp>
 
 #include <benchmark/benchmark.h>
 #include <cmath>
@@ -118,8 +117,8 @@ auto BM_Task(benchmark::State& state) -> void {
   }
 }
 
-// OCR preprocess configs on the document image: 0 detection into 640x640, 1 crop of a
-// 241x50 text line and recognition text_line into 48x320.
+// OCR preprocess configs on the document image: 0 detection into 640x640, 1 recognition
+// text_line of a 241x50 text line region into 48x320.
 auto BM_Ocr(benchmark::State& state) -> void {
   cv::setNumThreads(1);
   const auto stage = static_cast<std::size_t>(state.range(0));
@@ -135,10 +134,9 @@ auto BM_Ocr(benchmark::State& state) -> void {
   hrt::core::Image target(hrt::core::MemoryType::Cpu, param.dst_image_format, hrt::core::DataType::Float32,
                           stage == 0 ? hrt::core::Size{640, 640} : hrt::core::Size{320, 48});
   auto processor = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Cpu);
-  hrt::preprocess::TextCropper cropper;
   for (auto _ : state) {
-    auto crop = stage == 0 ? source : cropper.process(*source, {419, 16, 241, 50});
-    if (!crop || !processor->process(target, *crop, {}, param)) {
+    const auto region = stage == 0 ? hrt::core::Rect{} : hrt::core::Rect{419, 16, 241, 50};
+    if (!processor->process(target, *source, region, param)) {
       state.SkipWithError("Preprocessing failed");
       break;
     }
