@@ -51,6 +51,15 @@ console; `hrt.use_python_logging()` forwards them to the `hybridrt` logger.
 An engine whose outputs do not fit the postprocess config still aborts the
 process, as in C++.
 
+`examples/run_models.py` runs one algo per task (`yolov8n_detect`, `yolov8n_obb`, `yolov8n_pose`,
+`yolov8n_segment`, `yolov8n_classify`) and OCR (`ppocrv6_tiny_det` + `ppocrv6_small_rec`) on
+`bus.jpg`, `airport.jpg` and `ocr_document.jpg`, read with OpenCV, and prints the results; algos
+missing from the package are skipped. Pack those algos of the template, or pass a manifest of them:
+
+```sh
+python bindings/python/examples/run_models.py -m models.hrtc -d assets/test/images
+```
+
 With `HYBRIDRT_BUILD_TESTS=ON`, run `ctest --test-dir <build> -R hybridrt_test_python --output-on-failure`.
 Real-model tests use available entries from the reference template, so missing unrelated models do not
 prevent loading. Detection, segmentation, pose and classification use `assets/test/images/bus.jpg`;

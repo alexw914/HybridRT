@@ -50,6 +50,8 @@
   Python 绑定用 ctypes，按 Python 惯例抛出 `HybridRTError`，用 scikit-build-core 打包；
   Rust 绑定分 `hybridrt-sys`（手写 FFI，布局与 hrt.h 一致并有测试）和安全封装 `hybridrt`，
   返回 `Result`，unsafe 只在 FFI 调用处并写 SAFETY 注释，用 rustfmt、clippy 检查。
+  每种语言提供 `run_models` 示例（`bindings/python/examples/`、`bindings/rust/hybridrt/examples/`
+  的 cargo example），每种任务类型各一个 algo 并含 OCR，由绑定测试运行或编译。
 - `source/include/hrtc/hrtc_generated.h` 随仓库提交，不手改；修改 `fbs/hrtc.fbs` 后用
   `HYBRIDRT_BUILD_FLATC` 启用 flatc 并构建 `hrtc_schema` 重新生成。
   字段只在表末尾追加；不兼容改动更换 `file_identifier` 并重新打包。

@@ -49,6 +49,13 @@ call. Errors carry a `Status` and the library's message. Library logs go to the
 console; `set_log_callback` forwards them. An engine whose outputs do not fit
 the postprocess config still aborts the process, as in C++.
 
+`hybridrt/examples/run_models.rs` runs the same algos and images as the Python example (one per
+task plus OCR) and prints the results; algos missing from the package are skipped:
+
+```sh
+cargo run --manifest-path bindings/rust/Cargo.toml --example run_models -- models.hrtc assets/test/images
+```
+
 With `HYBRIDRT_BUILD_TESTS=ON`, run `ctest --test-dir <build> -R hybridrt_test_rust --output-on-failure`.
 Real-model tests load only available entries from the reference template: detection, segmentation,
 pose and classification on `bus.jpg`, and rotated boxes on `airport.jpg` in `assets/test/images/`.

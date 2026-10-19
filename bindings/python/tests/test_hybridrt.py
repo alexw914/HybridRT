@@ -2,11 +2,13 @@
 # HybridRT | C++20 Model Inference Framework
 # File: bindings/python/tests/test_hybridrt.py
 # Description: Tests the Python package: errors, image layouts, results,
-#              threads, logging and template models.
+#              threads, logging, template models and the example.
 # -----------------------------------------------------------------------------
 
 import json
 import logging
+import subprocess
+import sys
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -267,3 +269,17 @@ def test_runs_template_classify(template):
     assert classify.scores[0].shape == (1000,)
     assert np.all(np.isfinite(classify.scores[0]))
     np.testing.assert_allclose(classify.scores[0].sum(), 1, atol=1e-5)
+
+
+@needs_ort
+def test_example_prints_results(manifest, tmp_path):
+    cv2 = pytest.importorskip("cv2")
+    assert cv2.imwrite(str(tmp_path / "bus.jpg"), uniform_bgr())
+    example = ROOT / "bindings" / "python" / "examples" / "run_models.py"
+    path = manifest({"yolov8n_classify": (CLASSIFY, "ort")})
+    run = subprocess.run([sys.executable, str(example), "-m", str(path), "-d", str(tmp_path)],
+                         capture_output=True, text=True, check=False)
+    assert run.returncode == 0, run.stderr
+    assert "yolov8n_classify (CLASSIFY) on bus.jpg: 1 results" in run.stdout
+    assert "yolov8n_detect: skipped" in run.stdout
+    assert "ocr: skipped" in run.stdout
