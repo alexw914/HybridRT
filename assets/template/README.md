@@ -590,6 +590,34 @@ trimmed, as the CANN 9.0.0 image used here was, fails ATC during initialization
 (`FEOpsKernelInfoStore: Initialize custom and builtin sub-information library failed`);
 a full toolkit installation converts the same models.
 
+With AIPP the `.om` takes the uint8 image directly. This config converts and gives the same
+objects as the float32 model, with normalization on the NPU (2.76 ms per call against 4.11):
+
+```sh
+cat > aipp.cfg <<'CFG'
+aipp_op {
+  aipp_mode: static
+  input_format: RGB888_U8
+  src_image_size_w: 640
+  src_image_size_h: 640
+  csc_switch: false
+  mean_chn_0: 0
+  mean_chn_1: 0
+  mean_chn_2: 0
+  var_reci_chn_0: 0.0039215686274509803
+  var_reci_chn_1: 0.0039215686274509803
+  var_reci_chn_2: 0.0039215686274509803
+}
+CFG
+atc --model=assets/test/onnx/GeneralDetect.onnx --framework=5 \
+    --output=assets/test/cann/GeneralDetect_aipp --soc_version=Ascend910B2 \
+    --insert_op_conf=aipp.cfg
+```
+
+Its algo keeps the same `postprocess` and takes `dst_image_format: "inter_rgb"` with `mean`
+and `std` at their defaults, as AIPP applies them. AIPP outputs FP16, UINT8 or INT8, so
+`--precision_mode=must_keep_origin_dtype` cannot be combined with it.
+
 Against the ORT results of the same models on bus.jpg, airport.jpg, zidane.jpg and two
 document images (CANN 9.0.0 runtime, FP16 unless noted, host preprocessing):
 
@@ -603,6 +631,7 @@ document images (CANN 9.0.0 runtime, FP16 unless noted, host preprocessing):
 | `E2ESegment` | same 8 objects and mask counts; boxes at mean IoU 0.998, scores within 0.006 |
 | `Ocr` detection and recognition (`OcrModel`) | same text regions; 79 of 80 lines identical |
 | `GeneralClassify` after `GeneralDetect` (cascade) | same classes and scores as the reference cascade |
+| `GeneralDetect` with AIPP, fed uint8 | same 8 objects and classes; boxes at mean IoU 0.998, scores within 0.002 |
 
 Milliseconds per call on the 910B2 (50 runs for the engine, 5 images for `process_sync`,
 which includes CPU preprocessing and postprocessing):
@@ -618,6 +647,13 @@ which includes CPU preprocessing and postprocessing):
 | `ppocrv6_tiny_det` (640) | 0.93 | 27.63 for the whole OCR cascade |
 | `ppocrv6_tiny_rec` (48 x 320) | 0.31 | one call per text line |
 | `ppocrv6_small_rec` (48 x 320) | 0.65 | one call per text line |
+
+FP32 models track the reference more closely throughout: `GeneralRotated` reaches mean IoU
+0.9997 and `E2ESegment` 0.9998, against 0.9944 and 0.9984 in FP16.
+
+The `.om` files pack into a `.hrtc` and run from it, the Python binding loads both a package
+and a JSON manifest with `cann` backends, and pooling the stages raises throughput from 2.73
+to 2.05 ms per image over 36 images with identical results.
 
 DVPP was not exercised: this 910B2 is a virtualized slice whose driver exposes no media
 engines, so `hi_mpi_vpc_*` tasks return `HI_ERR_VPC_SYS_ERROR (0xA0078015)` and preprocessing
