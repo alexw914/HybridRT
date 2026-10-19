@@ -552,7 +552,7 @@ TEST(ImagePreprocessorTest, CreatesByDevice) {
   // Auto picks the device of the target memory when this build has it.
   const auto dvpp = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Dvpp);
   const auto for_dvpp = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Auto,
-                                                                   hrt::core::MemoryType::Dvpp);
+                                                                   hrt::core::MemoryType::Acl);
   ASSERT_NE(for_dvpp, nullptr);
   EXPECT_EQ(for_dvpp->type(), dvpp != nullptr ? hrt::preprocess::ImagePreprocessorType::Dvpp
                                               : hrt::preprocess::ImagePreprocessorType::Cpu);

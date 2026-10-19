@@ -5,6 +5,7 @@
 // -----------------------------------------------------------------------------
 
 #include <hrt/core/buffer.hpp>
+#include <hrt/core/context.hpp>
 #include <hrt/core/memory.hpp>
 
 #include <gtest/gtest.h>
@@ -127,6 +128,36 @@ TEST(MemoryTest, WrapsDmaBufferFdWithoutOwningIt) {
   // Dropping the view unmapped it but left the fd open.
   EXPECT_EQ(static_cast<const std::uint8_t*>(owner->cpu())[3], 5);
   EXPECT_EQ(hrt::core::Memory::wrap(hrt::core::MemoryType::DmaBuffer, nullptr, 0, 64), nullptr);
+}
+
+TEST(MemoryTest, CopiesThroughAclDeviceMemory) {
+  auto context = hrt::core::Context::create(hrt::core::DeviceType::Ascend);
+  if (context == nullptr)
+    GTEST_SKIP() << "Ascend device unavailable";
+  context->make_current();
+  auto device = hrt::core::Memory::create(hrt::core::MemoryType::Acl, hrt::core::Shape{4, 16});
+  ASSERT_NE(device, nullptr);
+  EXPECT_FALSE(device->have_cpu());
+  EXPECT_NE(device->device(), 0U);
+  auto host = hrt::core::Memory::create(hrt::core::MemoryType::Cpu, hrt::core::Shape{4, 16});
+  auto back = hrt::core::Memory::create(hrt::core::MemoryType::Cpu, hrt::core::Shape{4, 16});
+  ASSERT_NE(host, nullptr);
+  ASSERT_NE(back, nullptr);
+  auto* bytes = static_cast<std::uint8_t*>(host->mutable_cpu());
+  for (std::size_t i = 0; i < 64; ++i)
+    bytes[i] = static_cast<std::uint8_t>(i * 3 + 1);
+  const auto stream = context->create_stream();
+  ASSERT_TRUE(hrt::core::Memory::copy(*device, *host, hrt::core::CopyPolicy::DirectCopy, stream.get()));
+  ASSERT_TRUE(hrt::core::Memory::copy(*back, *device, hrt::core::CopyPolicy::DirectCopy, stream.get()));
+  if (stream != nullptr)
+    stream->synchronize();
+  const auto* result = static_cast<const std::uint8_t*>(back->cpu());
+  ASSERT_NE(result, nullptr);
+  for (std::size_t i = 0; i < 64; ++i)
+    ASSERT_EQ(result[i], bytes[i]) << "byte " << i;
+  // Growing reallocates on the device and keeps the memory usable.
+  ASSERT_TRUE(device->resize(hrt::core::Shape{8, 16}));
+  EXPECT_TRUE(hrt::core::Memory::copy(*device, *host, hrt::core::CopyPolicy::AutoDstStride, stream.get()));
 }
 
 } // namespace

@@ -30,8 +30,8 @@ enum class MemoryType {
   // Linux dma-buf from a dma-heap, mapped to the host; device() is the fd. Media devices (RGA, NPUs, decoders)
   // share it without copies, and host engines read it through the mapping.
   DmaBuffer,
+  // Ascend device memory; DVPP and the engines share one allocator.
   Acl,
-  Dvpp,
 };
 
 auto to_string(MemoryType type) -> std::string_view;

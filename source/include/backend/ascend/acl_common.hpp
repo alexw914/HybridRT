@@ -17,7 +17,8 @@
 namespace hrt::backend {
 
 inline auto acl_stream(core::Stream* stream) -> aclrtStream {
-  return stream == nullptr ? nullptr : static_cast<aclrtStream>(stream->handle());
+  // aclrtStream is void*, so the handle needs no cast.
+  return stream == nullptr ? nullptr : stream->handle();
 }
 
 // aclInit for the process, finalized at exit if this process initialized it.

@@ -28,9 +28,9 @@ public:
 
   KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Dvpp; }
 
-  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::Dvpp; }
+  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::Acl; }
 
-  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override { return type == core::MemoryType::Dvpp; }
+  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override { return type == core::MemoryType::Acl; }
 
   KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
 

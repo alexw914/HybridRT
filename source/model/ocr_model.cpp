@@ -57,7 +57,7 @@ auto is_native(core::DeviceType device, core::MemoryType type) -> bool {
   case core::DeviceType::Cuda:
     return type == core::MemoryType::Cuda;
   case core::DeviceType::Ascend:
-    return type == core::MemoryType::Dvpp;
+    return type == core::MemoryType::Acl;
   }
   return false;
 }

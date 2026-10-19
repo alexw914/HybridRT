@@ -39,7 +39,6 @@ auto device_of(core::MemoryType type) -> ImagePreprocessorType {
   case core::MemoryType::DmaBuffer:
     return ImagePreprocessorType::Rga;
   case core::MemoryType::Acl:
-  case core::MemoryType::Dvpp:
     return ImagePreprocessorType::Dvpp;
   default:
     return ImagePreprocessorType::Cpu;

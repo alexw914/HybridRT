@@ -36,8 +36,6 @@ auto to_string(MemoryType type) -> std::string_view {
     return "DmaBuffer";
   case MemoryType::Acl:
     return "Acl";
-  case MemoryType::Dvpp:
-    return "Dvpp";
   case MemoryType::Unknown:
     break;
   }
@@ -49,7 +47,6 @@ auto device_type_of(MemoryType type) -> DeviceType {
   case MemoryType::Cuda:
     return DeviceType::Cuda;
   case MemoryType::Acl:
-  case MemoryType::Dvpp:
     return DeviceType::Ascend;
   case MemoryType::Cpu:
   case MemoryType::DmaBuffer:
@@ -69,10 +66,6 @@ auto Memory::create(MemoryType type, const Shape& shape, const Stride& stride) -
 #ifdef HRT_USE_DMA_BUFFER
   if (type == MemoryType::DmaBuffer && stride.empty())
     requested = memory::DmaBufferMemory::aligned_stride(shape);
-#endif
-#ifdef HRT_USE_CANN
-  if (type == MemoryType::Dvpp && stride.empty())
-    requested = backend::AclMemory::dvpp_stride(shape);
 #endif
   auto resolved = memory::resolve_stride(shape, requested);
   if (!resolved)
@@ -94,7 +87,6 @@ auto Memory::create(MemoryType type, const Shape& shape, const Stride& stride) -
 #endif
 #ifdef HRT_USE_CANN
   case MemoryType::Acl:
-  case MemoryType::Dvpp:
     memory = std::make_unique<backend::AclMemory>(type, shape, *resolved);
     break;
 #endif
@@ -142,7 +134,6 @@ auto Memory::wrap(MemoryType type, void* host, KZ_MAYBE_UNUSED std::uintptr_t de
 #endif
 #ifdef HRT_USE_CANN
   case MemoryType::Acl:
-  case MemoryType::Dvpp:
     if (device == 0)
       break;
     return std::make_unique<backend::AclMemory>(type, device, size, view_shape, *resolved);
