@@ -84,7 +84,7 @@ Per platform:
 | --- | --- |
 | `rknn` (RK3588) | `image_input: true` (default) feeds uint8 NHWC images and the runtime applies the mean, std and channel swap built into the `.rknn` (`strings model.rknn \| grep "'mean'"` shows them): use `dst_image_format: "inter_rgb"` and keep `mean`/`std` at their defaults. `false` feeds int8 or float32 tensors normalized by `preprocess`. `device: "auto"` uses the RGA. |
 | `trt` | `device: "auto"` preprocesses with CUDA (NPP) into the device input. |
-| `cann` | `device: "auto"` preprocesses with DVPP. |
+| `cann` | `device: "auto"` preprocesses with DVPP (VPC) for uint8 images whose rows it can address in 16-byte steps, which excludes the float32 inputs most models take; everything else runs on the CPU operators, and only the steps VPC really runs get its even regions. Where VPC cannot run at all, such as a container without the media service, the CPU takes over. Engine inputs and outputs share one Ascend memory type (`Acl`). ATC defaults to FP16: add `--precision_mode=must_keep_origin_dtype` to match an FP32 reference. |
 | `mnn` | `forward_type: "metal"` needs an SDK built with Metal; on Linux with RGA and a dma-heap `device: "auto"` uses the RGA, as for `ncnn`. |
 | `ort` | `execution_provider: "coreml"` needs a CoreML build; models with a dynamic batch need no `input_shapes`, other dynamic dims do. |
 

@@ -4,6 +4,7 @@
 // Description: Tests preprocessing parameters and resize geometry.
 // -----------------------------------------------------------------------------
 
+#include <hrt/core/context.hpp>
 #include <hrt/preprocess/image_preprocessor.hpp>
 
 #include <algorithm>
@@ -446,6 +447,75 @@ TEST(ImagePreprocessorTest, ConvertsNv12Input) {
   ASSERT_TRUE(preprocessor->process(dst, *src, {}, param));
   EXPECT_NEAR(planar_at(dst, 0, 1, 1), 128.0F, 2.0F);
   EXPECT_NEAR(planar_at(dst, 2, 3, 3), 128.0F, 2.0F);
+}
+
+// DVPP only runs the fused crop, resize and border step, on uint8 images whose rows VPC can address.
+TEST(ImagePreprocessorTest, DvppMatchesCpuForCropsAndResizes) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto context = Context::create(DeviceType::Ascend);
+  if (context == nullptr)
+    GTEST_SKIP() << "Ascend device unavailable";
+  context->make_current();
+  auto dvpp = ImagePreprocessor::create(ImagePreprocessorType::Dvpp);
+  if (!dvpp)
+    GTEST_SKIP() << "DVPP unavailable";
+  auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  auto stream = context->create_stream();
+  constexpr int kWidth = 64;
+  constexpr int kHeight = 48;
+  auto src = uniform_bgr(kWidth, kHeight, {0, 0, 0});
+  for (std::size_t i = 0; i < src.pixels.size(); ++i)
+    src.pixels[i] = static_cast<std::uint8_t>((i * 37) % 251);
+  Image device(MemoryType::Acl, ImageFormat::InterBgr, DataType::Uint8, {kWidth, kHeight});
+  ASSERT_TRUE(device.valid());
+  ASSERT_TRUE(Buffer::copy(*device.buffer(), *src.image.buffer(), CopyPolicy::AutoDstStride, stream.get()));
+  stream->synchronize();
+  Image probe(MemoryType::Acl, ImageFormat::InterRgb, DataType::Uint8, {32, 24});
+  ASSERT_TRUE(probe.valid());
+  if (!dvpp->supports(ImageOperation::Fused, probe, device))
+    GTEST_SKIP() << "VPC cannot run on this device";
+
+  // 1:1 crops: VPC copies the pixels, so every byte must equal the CPU result. Scaled cases only
+  // check that the geometry and channel order agree, as VPC resamples differently from OpenCV.
+  for (const auto size : {Size{kWidth, kHeight}, Size{32, 24}}) {
+    for (const auto crop : {Rect{}, Rect{8, 6, 32, 24}, Rect{0, 0, 16, 48}}) {
+      SCOPED_TRACE(testing::Message() << "size " << size.width << 'x' << size.height << " crop " << crop.x << ','
+                                      << crop.y << ' ' << crop.width << 'x' << crop.height);
+      ImagePreprocessorParam param;
+      param.dst_image_format = ImageFormat::InterRgb;
+      param.normalize_type = NormalizeType::None;
+      param.default_color = {114, 114, 114};
+      Image expected(MemoryType::Cpu, ImageFormat::InterRgb, DataType::Uint8, size);
+      Image actual(MemoryType::Cpu, ImageFormat::InterRgb, DataType::Uint8, size);
+      const auto reference = cpu->process(expected, src.image, crop, param);
+      const auto result = dvpp->process(actual, device, crop, param, stream.get());
+      ASSERT_TRUE(reference);
+      ASSERT_TRUE(result);
+      stream->synchronize();
+      EXPECT_EQ(result->src_roi, reference->src_roi);
+      EXPECT_EQ(result->dst_roi, reference->dst_roi);
+      const auto* want = static_cast<const std::uint8_t*>(expected.memory()->cpu());
+      const auto* got = static_cast<const std::uint8_t*>(actual.memory()->cpu());
+      ASSERT_NE(want, nullptr);
+      ASSERT_NE(got, nullptr);
+      const auto scaled =
+          result->dst_roi.width != result->src_roi.width || result->dst_roi.height != result->src_roi.height;
+      double error = 0;
+      for (int y = 0; y < size.height; ++y) {
+        for (int x = 0; x < size.width * 3; ++x) {
+          const auto a = want[static_cast<std::size_t>(y) * expected.stride()[1] + static_cast<std::size_t>(x)];
+          const auto b = got[static_cast<std::size_t>(y) * actual.stride()[1] + static_cast<std::size_t>(x)];
+          if (!scaled) {
+            ASSERT_EQ(a, b);
+          }
+          error += std::abs(static_cast<double>(a) - static_cast<double>(b));
+        }
+      }
+      error /= static_cast<double>(size.width) * size.height * 3;
+      EXPECT_LT(error, 24.0);
+    }
+  }
 }
 
 #ifdef __APPLE__

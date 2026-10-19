@@ -28,7 +28,8 @@ public:
   KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
 
   // RGA rejects region offsets of exactly 1.
-  auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi) const -> void override;
+  auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst, const core::Image& src) const
+      -> void override;
 
   auto fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color, core::Stream* stream)
       -> bool override;

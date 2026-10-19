@@ -186,7 +186,8 @@ auto ImagePreprocessor::create(ImagePreprocessorType type, core::MemoryType targ
   }
 }
 
-auto ImagePreprocessor::adjust_roi(core::Rect& /*dst_roi*/, core::Rect& /*src_roi*/) const -> void {}
+auto ImagePreprocessor::adjust_roi(core::Rect& /*dst_roi*/, core::Rect& /*src_roi*/, const core::Image& /*dst*/,
+                                   const core::Image& /*src*/) const -> void {}
 
 auto ImagePreprocessor::fused(core::Image& /*dst*/, const ImageTransform& /*transform*/, const core::Image& /*src*/,
                               const ImagePreprocessorParam& /*param*/, core::Stream* /*stream*/) -> bool {
@@ -229,7 +230,7 @@ auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const 
                   "ImagePreprocessor: source region ({}, {}, {}x{}) leaves the {}x{} image; clip it with "
                   "core::pad_scale",
                   read.x, read.y, read.width, read.height, src.size().width, src.size().height);
-  adjust_roi(transform.dst_roi, transform.src_roi);
+  adjust_roi(transform.dst_roi, transform.src_roi, dst, src);
 
   const core::Image* input = &src;
   auto local = transform;
@@ -297,6 +298,32 @@ auto ImagePreprocessor::run(core::Image& dst, const core::Image& src, const Imag
     return fused(dst, transform, src, param, stream);
 
   auto* fallback = cpu();
+  // A device preprocessor that cannot fuse this step leaves it to the CPU operators, which
+  // only address host memory: run the whole step there and copy the result to the target.
+  if (fallback != nullptr && type() != ImagePreprocessorType::Cpu &&
+      !(dst.memory()->have_cpu() && src.memory()->have_cpu())) {
+    const core::Image* host_src = &src;
+    if (!src.memory()->have_cpu()) {
+      auto* staged = scratch(host_src_, core::MemoryType::Cpu, src.format(), src.data_type(), src.size());
+      if (staged == nullptr ||
+          !core::Buffer::copy(*staged->buffer(), *src.buffer(), core::CopyPolicy::AutoDstStride, stream))
+        return false;
+      if (stream != nullptr)
+        stream->synchronize();
+      host_src = staged;
+    }
+    core::Image* host_dst = &dst;
+    if (!dst.memory()->have_cpu()) {
+      host_dst = scratch(host_dst_, core::MemoryType::Cpu, dst.format(), dst.data_type(), dst.size());
+      if (host_dst == nullptr)
+        return false;
+    }
+    if (!fallback->run(*host_dst, *host_src, transform, param, stream))
+      return false;
+    return host_dst == &dst ||
+           core::Buffer::copy(*dst.buffer(), *host_dst->buffer(), core::CopyPolicy::DirectCopy, stream);
+  }
+
   auto pick = [&](ImageOperation op, const core::Image& to, const core::Image& from) -> ImagePreprocessor* {
     if (supports(op, to, from))
       return this;

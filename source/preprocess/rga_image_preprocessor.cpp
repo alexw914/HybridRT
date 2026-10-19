@@ -78,7 +78,8 @@ auto RgaImagePreprocessor::supports(ImageOperation op, const core::Image& dst, c
   }
 }
 
-auto RgaImagePreprocessor::adjust_roi(core::Rect& dst_roi, core::Rect& src_roi) const -> void {
+auto RgaImagePreprocessor::adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& /*dst*/,
+                                      const core::Image& /*src*/) const -> void {
   for (auto* value : {&dst_roi.x, &dst_roi.y, &src_roi.x, &src_roi.y}) {
     if (*value == 1)
       *value = 0;

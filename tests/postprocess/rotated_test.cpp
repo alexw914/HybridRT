@@ -125,6 +125,10 @@ TEST(RotatedTest, RejectsNonuniformSourceMapping) {
   const hrt::preprocess::ImageTransform rounded{{0, 50, 640, 379}, {0, 0, 1280, 759}, {640, 480}};
   EXPECT_TRUE(postprocessor->process(result, {buffer}, rounded));
   EXPECT_FALSE(result.empty());
+  // A device preprocessor rounds the letterbox again, as DVPP does to even values.
+  const hrt::preprocess::ImageTransform evened{{0, 0, 1024, 602}, {0, 0, 896, 528}, {1024, 1024}};
+  EXPECT_TRUE(postprocessor->process(result, {buffer}, evened));
+  EXPECT_FALSE(result.empty());
   const hrt::preprocess::ImageTransform uniform{{0, 0, 64, 64}, {10, 20, 128, 128}, {64, 64}};
   ASSERT_TRUE(postprocessor->process(result, {buffer}, uniform));
   ASSERT_EQ(result.at(0).size(), 1U);

@@ -79,11 +79,12 @@ auto create_rotated_postprocessor(std::string_view type, const kitzoo::json::Jso
 auto map_rotated(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool {
   const auto& src = transform.src_roi;
   const auto& dst = transform.dst_roi;
-  // Letterbox dimensions are rounded to integer pixels.
+  // Letterbox dimensions are rounded to integer pixels, and a device preprocessor may round
+  // them again, as DVPP does to even values: each side can miss the exact ratio by two pixels.
   const auto difference =
       std::abs(static_cast<std::int64_t>(src.width) * dst.height - static_cast<std::int64_t>(src.height) * dst.width);
-  const auto uniform =
-      !src.empty() && !dst.empty() && difference < static_cast<std::int64_t>(std::max(src.width, src.height));
+  const auto tolerance = 2 * (static_cast<std::int64_t>(src.width) + static_cast<std::int64_t>(src.height));
+  const auto uniform = !src.empty() && !dst.empty() && difference <= tolerance;
   if (!uniform)
     result.clear();
   KZ_CHECK_RETURN(uniform, false, "rotated: source mapping requires uniform scaling and nonempty regions");

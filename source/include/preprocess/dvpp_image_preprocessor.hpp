@@ -34,8 +34,10 @@ public:
 
   KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
 
-  // VPC needs even region offsets and sizes.
-  auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi) const -> void override;
+  // VPC needs even region offsets and sizes; other images keep theirs, as the CPU
+  // operators take any region and rounding costs accuracy on cascaded crops.
+  auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst, const core::Image& src) const
+      -> void override;
 
   auto fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color, core::Stream* stream)
       -> bool override;

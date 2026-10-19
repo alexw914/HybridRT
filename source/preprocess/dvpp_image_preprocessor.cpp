@@ -35,7 +35,12 @@ auto pixel_format(core::ImageFormat format) -> std::optional<hi_pixel_format> {
 }
 
 auto is_vpc_image(const core::Image& image) -> bool {
-  return image.data_type() == core::DataType::Uint8 && pixel_format(image.format()).has_value();
+  if (image.data_type() != core::DataType::Uint8 || !pixel_format(image.format()).has_value())
+    return false;
+  // VPC addresses rows in 16-byte steps; anything else falls back to the CPU.
+  const auto& stride = image.stride();
+  const auto row = image.format() == core::ImageFormat::Gray ? stride[2] : stride[1];
+  return row % 16 == 0;
 }
 
 auto picture(const core::Image& image, core::Stream* stream, bool write) -> hi_vpc_pic_info {
@@ -77,6 +82,16 @@ DvppImagePreprocessor::DvppImagePreprocessor() {
   KZ_CHECK_RETURN(status == ACL_SUCCESS, , "dvpp: hi_mpi_vpc_sys_create_chn failed: 0x{:X}",
                   static_cast<unsigned int>(status));
   channel_ = channel;
+  // A channel can open where the media service cannot run, so prove VPC works once; a
+  // failure here leaves supports() false and the CPU operators take over.
+  const core::Image src(core::MemoryType::Acl, core::ImageFormat::InterBgr, core::DataType::Uint8, {64, 64});
+  core::Image dst(core::MemoryType::Acl, core::ImageFormat::InterBgr, core::DataType::Uint8, {32, 32});
+  const ImageTransform transform{.dst_roi = {0, 0, 32, 32}, .src_roi = {0, 0, 64, 64}, .input_size = {32, 32}};
+  if (!src.valid() || !dst.valid() || !fused(dst, transform, src, ImagePreprocessorParam{}, nullptr)) {
+    KZ_LOG_WARN("dvpp: VPC is unusable on this device; preprocessing falls back to the CPU");
+    static_cast<void>(hi_mpi_vpc_destroy_chn(channel_));
+    channel_ = -1;
+  }
 }
 
 DvppImagePreprocessor::~DvppImagePreprocessor() {
@@ -88,7 +103,10 @@ auto DvppImagePreprocessor::supports(ImageOperation op, const core::Image& dst, 
   return op == ImageOperation::Fused && channel_ >= 0 && is_vpc_image(dst) && is_vpc_image(src);
 }
 
-auto DvppImagePreprocessor::adjust_roi(core::Rect& dst_roi, core::Rect& src_roi) const -> void {
+auto DvppImagePreprocessor::adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst,
+                                       const core::Image& src) const -> void {
+  if (!supports(ImageOperation::Fused, dst, src))
+    return;
   even(src_roi.x, src_roi.width);
   even(src_roi.y, src_roi.height);
   even(dst_roi.x, dst_roi.width);

@@ -149,7 +149,9 @@ public:
   KZ_NODISCARD virtual auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const
       -> bool = 0;
 
-  virtual auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi) const -> void;
+  // Narrows the regions to what this device can address, for the images it would run on.
+  virtual auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst,
+                          const core::Image& src) const -> void;
 
   virtual auto fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color, core::Stream* stream)
       -> bool = 0;
@@ -190,6 +192,8 @@ private:
   UniquePtr<ImagePreprocessor> cpu_;
   UniquePtr<core::Image> staged_src_;
   UniquePtr<core::Image> staged_dst_;
+  UniquePtr<core::Image> host_src_;
+  UniquePtr<core::Image> host_dst_;
   UniquePtr<core::Image> converted_;
   UniquePtr<core::Image> resized_;
 };
