@@ -84,7 +84,7 @@ Per platform:
 | --- | --- |
 | `rknn` (RK3588) | `image_input: true` (default) feeds uint8 NHWC images and the runtime applies the mean, std and channel swap built into the `.rknn` (`strings model.rknn \| grep "'mean'"` shows them): use `dst_image_format: "inter_rgb"` and keep `mean`/`std` at their defaults. `false` feeds int8 or float32 tensors normalized by `preprocess`. `device: "auto"` uses the RGA. |
 | `trt` | `device: "auto"` preprocesses with CUDA (NPP) into the device input. |
-| `cann` | `device: "auto"` preprocesses with DVPP (VPC) for uint8 images whose rows it can address in 16-byte steps, which excludes the float32 inputs most models take; everything else runs on the CPU operators, and only the steps VPC really runs get its even regions. Where VPC cannot run at all, such as a container without the media service, the CPU takes over. Engine inputs and outputs share one Ascend memory type (`Acl`). ATC defaults to FP16: add `--precision_mode=must_keep_origin_dtype` to match an FP32 reference. |
+| `cann` | `device: "auto"` preprocesses with DVPP (VPC), which only crops, resizes and pads uint8 images: it has no normalization and no layout conversion, so the `.om` it feeds must do those in AIPP (`atc --insert_op_conf=<aipp.cfg>`, with `mean_chn_*`/`var_reci_chn_*` and `csc_switch`), as for RKNN's `image_input: true`. Use `dst_image_format: "inter_bgr"` or a YUV format, keep `mean`/`std` at their defaults, and give the model a width that is a multiple of 16, as VPC needs a row stride that is a multiple of 16 and at least 32. Engine inputs come from the DVPP memory pool, which VPC requires of the images it reads and writes, while outputs and staging use `aclrtMalloc`. An `.om` without AIPP takes float32, which VPC cannot write, so the CPU operators run the whole step; where VPC cannot run at all, such as a container without the media service, `device: "auto"` picks the CPU preprocessor outright. Only the steps VPC really runs get its even regions. ATC defaults to FP16: add `--precision_mode=must_keep_origin_dtype` to match an FP32 reference. |
 | `mnn` | `forward_type: "metal"` needs an SDK built with Metal; on Linux with RGA and a dma-heap `device: "auto"` uses the RGA, as for `ncnn`. |
 | `ort` | `execution_provider: "coreml"` needs a CoreML build; models with a dynamic batch need no `input_shapes`, other dynamic dims do. |
 
@@ -572,3 +572,58 @@ preprocessing from a host image, 100 runs):
 
 A dma-buffer source saves 0.4 to 0.8 ms of preprocessing. int8 models, not measured here, cut the
 inference time. Optimization history and measurements are in `assets/PERF.md`.
+
+### CANN on Ascend 910B2
+
+ATC converts each ONNX test model to an `.om` beside it, with the model's own `preprocess`
+and `postprocess` unchanged and the backend `{"engine_type": "cann", "config": {}}`:
+
+```sh
+atc --model=assets/test/onnx/GeneralDetect.onnx --framework=5 \
+    --output=assets/test/cann/GeneralDetect --soc_version=Ascend910B2
+```
+
+ATC defaults to FP16. Add `--precision_mode=must_keep_origin_dtype` to keep FP32, which an
+FP16 model needs to reproduce an ONNX Runtime reference exactly. An `.om` built by the
+CANN 8.2 ATC loads and runs on the 9.0.0 runtime. A container whose `opp` package is
+trimmed, as the CANN 9.0.0 image used here was, fails ATC during initialization
+(`FEOpsKernelInfoStore: Initialize custom and builtin sub-information library failed`);
+a full toolkit installation converts the same models.
+
+Against the ORT results of the same models on bus.jpg, airport.jpg, zidane.jpg and two
+document images (CANN 9.0.0 runtime, FP16 unless noted, host preprocessing):
+
+| Types | CANN result |
+| --- | --- |
+| `GeneralDetect` | same 8 objects and classes; boxes at mean IoU 0.998, scores within 0.003 |
+| `GeneralRotated` | same 13 objects and classes; boxes at mean IoU 0.994, scores within 0.002 |
+| `GeneralClassify` | same top 1 on every image; scores within 0.003 |
+| `Embedding` | identical embeddings |
+| `GeneralYoloPose` | FP16 drops one borderline person; FP32 gives the same 7 people at mean IoU 0.9999, scores within 0.0003 |
+| `E2ESegment` | same 8 objects and mask counts; boxes at mean IoU 0.998, scores within 0.006 |
+| `Ocr` detection and recognition (`OcrModel`) | same text regions; 79 of 80 lines identical |
+| `GeneralClassify` after `GeneralDetect` (cascade) | same classes and scores as the reference cascade |
+
+Milliseconds per call on the 910B2 (50 runs for the engine, 5 images for `process_sync`,
+which includes CPU preprocessing and postprocessing):
+
+| Algo (input) | Inference | `process_sync` |
+| --- | --- | --- |
+| `yolov8n_detect` (640 x 480) | 0.80 | 4.11 |
+| `yolov8n_obb` (1024) | 1.18 | 5.25 |
+| `yolov8n_classify` (224) | 0.27 | 2.47 |
+| `yolov8n_classify_embedding` (224) | 0.27 | 2.79 |
+| `yolov8n_pose` (640 x 480) | 0.85 | 3.70 |
+| `yolo26n_e2e_segment` (640 x 480) | 1.76 | 4.08 |
+| `ppocrv6_tiny_det` (640) | 0.93 | 27.63 for the whole OCR cascade |
+| `ppocrv6_tiny_rec` (48 x 320) | 0.31 | one call per text line |
+| `ppocrv6_small_rec` (48 x 320) | 0.65 | one call per text line |
+
+DVPP was not exercised: this 910B2 is a virtualized slice whose driver exposes no media
+engines, so `hi_mpi_vpc_*` tasks return `HI_ERR_VPC_SYS_ERROR (0xA0078015)` and preprocessing
+falls back to the CPU. The DVPP operators remain validated on an Atlas 300V Pro with CANN 8.2,
+where the models carry AIPP. VPC input and output memory comes from `hi_mpi_dvpp_malloc`,
+which that product requires; only Atlas 350, A3, A2 and 200I/500 A2 products also accept
+`aclrtMalloc`, and memory from the wrong allocator fails with `HI_ERR_VPC_BADADDR
+(0xA0078011)`. The preprocessor proves VPC once at startup, so a device that opens a channel
+but cannot run tasks leaves the whole step to the CPU instead of failing every call.

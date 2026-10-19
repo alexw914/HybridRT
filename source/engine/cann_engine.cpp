@@ -53,7 +53,7 @@ auto destroy_dataset(aclmdlDataset*& dataset) -> void {
 }
 
 auto is_ascend(const core::Buffer& buffer) -> bool {
-  return buffer.memory_type() == core::MemoryType::Acl;
+  return buffer.memory_type() == core::MemoryType::Acl || buffer.memory_type() == core::MemoryType::Dvpp;
 }
 
 // Name-ordered positions of the model's IO, as (name, model index).
@@ -110,7 +110,8 @@ auto CannEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
                  aclGetRecentErrMsg());
     KZ_CHECK_RETURN(type.has_value(), false, "cann: input {} has an unsupported data type", index);
     input_names_.push_back(name);
-    input_protos_.push_back({core::MemoryType::Acl, *type, shape_of(dims), {}});
+    // VPC writes the inputs, so they come from the DVPP pool with its row padding.
+    input_protos_.push_back({core::MemoryType::Dvpp, *type, shape_of(dims), {}});
     input_indexes_.push_back(index);
   }
   for (const auto& [name, index] : sorted_by_name(

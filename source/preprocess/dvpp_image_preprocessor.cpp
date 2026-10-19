@@ -37,10 +37,11 @@ auto pixel_format(core::ImageFormat format) -> std::optional<hi_pixel_format> {
 auto is_vpc_image(const core::Image& image) -> bool {
   if (image.data_type() != core::DataType::Uint8 || !pixel_format(image.format()).has_value())
     return false;
-  // VPC addresses rows in 16-byte steps; anything else falls back to the CPU.
+  // VPC takes a row stride that is a multiple of 16 and at least 32; anything else
+  // falls back to the CPU.
   const auto& stride = image.stride();
   const auto row = image.format() == core::ImageFormat::Gray ? stride[2] : stride[1];
-  return row % 16 == 0;
+  return row % 16 == 0 && row >= 32;
 }
 
 auto picture(const core::Image& image, core::Stream* stream, bool write) -> hi_vpc_pic_info {
@@ -71,6 +72,11 @@ auto even(int& offset, int& length) -> void {
 }
 
 } // namespace
+
+auto DvppImagePreprocessor::create() -> UniquePtr<ImagePreprocessor> {
+  auto preprocessor = std::make_unique<DvppImagePreprocessor>();
+  return preprocessor->channel_ >= 0 ? std::move(preprocessor) : nullptr;
+}
 
 DvppImagePreprocessor::DvppImagePreprocessor() {
   if (!backend::DvppRuntime::instance().ready())

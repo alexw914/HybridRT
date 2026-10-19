@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/include/backend/ascend/acl_memory.hpp
-// Description: Declares Ascend device memory and its copies.
+// Description: Declares Ascend device and media memory and their copies.
 // -----------------------------------------------------------------------------
 
 #ifndef HRT_ASCEND_ACL_MEMORY_HPP
@@ -11,8 +11,8 @@
 
 namespace hrt::backend {
 
-// Device-only memory from aclrtMalloc, contiguous unless a caller passes a
-// stride. DVPP skips images whose rows it cannot address; see is_vpc_image.
+// Device-only memory. Acl uses aclrtMalloc; Dvpp uses the media allocator VPC
+// requires and, without an explicit stride, pads rows to 16 elements.
 class AclMemory final : public core::Memory {
 public:
   AclMemory(core::MemoryType type, const core::Shape& shape, const core::Stride& stride);
@@ -27,9 +27,13 @@ public:
   auto resize(const core::Shape& shape, const core::Stride& stride) -> bool override;
 
   auto shrink_to_fit() -> bool override;
+
+  // Rows padded to 16 elements, which VPC requires of the images it reads and writes.
+  static auto dvpp_stride(const core::Shape& shape) -> core::Stride;
 };
 
-// Copies between host and Acl memory on `stream`; one side must be Acl memory.
+// Copies between host, Acl and Dvpp memory on `stream`; one side must be
+// Ascend memory.
 auto copy_acl(core::Memory& dst, core::Memory& src, std::size_t axis, core::Stream* stream) -> bool;
 
 } // namespace hrt::backend

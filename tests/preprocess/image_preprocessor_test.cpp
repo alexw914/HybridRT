@@ -467,11 +467,11 @@ TEST(ImagePreprocessorTest, DvppMatchesCpuForCropsAndResizes) {
   auto src = uniform_bgr(kWidth, kHeight, {0, 0, 0});
   for (std::size_t i = 0; i < src.pixels.size(); ++i)
     src.pixels[i] = static_cast<std::uint8_t>((i * 37) % 251);
-  Image device(MemoryType::Acl, ImageFormat::InterBgr, DataType::Uint8, {kWidth, kHeight});
+  Image device(MemoryType::Dvpp, ImageFormat::InterBgr, DataType::Uint8, {kWidth, kHeight});
   ASSERT_TRUE(device.valid());
   ASSERT_TRUE(Buffer::copy(*device.buffer(), *src.image.buffer(), CopyPolicy::AutoDstStride, stream.get()));
   stream->synchronize();
-  Image probe(MemoryType::Acl, ImageFormat::InterRgb, DataType::Uint8, {32, 24});
+  Image probe(MemoryType::Dvpp, ImageFormat::InterRgb, DataType::Uint8, {32, 24});
   ASSERT_TRUE(probe.valid());
   if (!dvpp->supports(ImageOperation::Fused, probe, device))
     GTEST_SKIP() << "VPC cannot run on this device";
@@ -622,7 +622,7 @@ TEST(ImagePreprocessorTest, CreatesByDevice) {
   // Auto picks the device of the target memory when this build has it.
   const auto dvpp = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Dvpp);
   const auto for_dvpp = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Auto,
-                                                                   hrt::core::MemoryType::Acl);
+                                                                   hrt::core::MemoryType::Dvpp);
   ASSERT_NE(for_dvpp, nullptr);
   EXPECT_EQ(for_dvpp->type(), dvpp != nullptr ? hrt::preprocess::ImagePreprocessorType::Dvpp
                                               : hrt::preprocess::ImagePreprocessorType::Cpu);

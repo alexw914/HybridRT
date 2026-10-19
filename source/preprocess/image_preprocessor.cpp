@@ -39,6 +39,7 @@ auto device_of(core::MemoryType type) -> ImagePreprocessorType {
   case core::MemoryType::DmaBuffer:
     return ImagePreprocessorType::Rga;
   case core::MemoryType::Acl:
+  case core::MemoryType::Dvpp:
     return ImagePreprocessorType::Dvpp;
   default:
     return ImagePreprocessorType::Cpu;
@@ -179,7 +180,7 @@ auto ImagePreprocessor::create(ImagePreprocessorType type, core::MemoryType targ
 #endif
 #ifdef HRT_USE_CANN
   case ImagePreprocessorType::Dvpp:
-    return std::make_unique<DvppImagePreprocessor>();
+    return DvppImagePreprocessor::create();
 #endif
   default:
     return nullptr;

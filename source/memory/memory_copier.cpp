@@ -84,7 +84,7 @@ auto copy_memory(core::Memory& dst, core::Memory& src, std::size_t axis, core::S
 #endif
 #ifdef HRT_USE_CANN
   for (auto type : {dst.memory_type(), src.memory_type()}) {
-    if (type == core::MemoryType::Acl)
+    if (type == core::MemoryType::Acl || type == core::MemoryType::Dvpp)
       return backend::copy_acl(dst, src, axis, stream);
   }
 #endif

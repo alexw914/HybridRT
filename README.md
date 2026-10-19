@@ -33,6 +33,7 @@ Install the SDK for each inference backend you want to enable.
 | Windows x64 | MSVC 19.50 | CI with ONNX Runtime and real-model validation; additional MNN, ncnn and TensorRT tests |
 | macOS arm64 | Apple Clang 21.0.0 | CI with ONNX Runtime; additional CoreML and MNN CPU validation |
 | Linux aarch64 / RK3588 | Arm GNU Toolchain 12.2 | RKNN / RGA, MNN and ncnn board validation |
+| Linux aarch64 / Ascend | GCC 12.3 | CANN engine and host preprocessing validation on an Ascend 910B2; DVPP operators validated on an Atlas 300V Pro |
 
 Build with ONNX Runtime, using Ninja:
 
@@ -124,7 +125,7 @@ Enable one or more backends by providing their SDK paths at CMake configuration 
 | [MNN](https://github.com/alibaba/MNN) | mnn | MNN | `-DMNN_ROOT=<sdk>` | Not pinned | 3.0.0 |
 | [ncnn](https://github.com/Tencent/ncnn) | ncnn | ncnn param + bin | `-Dncnn_ROOT=<sdk>` | Not pinned | 1.0.20261007 |
 | [RKNN](https://github.com/airockchip/rknn-toolkit2) | rknn | RKNN | `-DRKNN_ROOT=<sdk>` `-DRGA_ROOT=<sdk>` | Not pinned | 2.3.2 |
-| [CANN](https://www.hiascend.com/en/software/cann) | cann | Ascend OM | `-DCANN_ROOT=<sdk>` | Not pinned | Not validated |
+| [CANN](https://www.hiascend.com/en/software/cann) | cann | Ascend OM | `-DCANN_ROOT=<sdk>` | 8.2 | 8.2 and 9.0.0 |
 
 ONNX Runtime supports CPU and optional CoreML execution. MNN acceleration depends on
 the selected SDK and platform; CPU is the validated macOS configuration.

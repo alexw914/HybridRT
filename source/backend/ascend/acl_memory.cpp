@@ -1,12 +1,14 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/backend/ascend/acl_memory.cpp
-// Description: Implements Ascend device memory and its copies.
+// Description: Implements Ascend device and media memory and their copies.
 // -----------------------------------------------------------------------------
 
 #include "include/backend/ascend/acl_memory.hpp"
 
 #include <kitzoo/log/logger.hpp>
+
+#include <acl/dvpp/hi_dvpp.h>
 
 #include "include/backend/ascend/acl_common.hpp"
 
@@ -15,7 +17,7 @@ namespace hrt::backend {
 namespace {
 
 auto is_ascend(core::MemoryType type) -> bool {
-  return type == core::MemoryType::Acl;
+  return type == core::MemoryType::Acl || type == core::MemoryType::Dvpp;
 }
 
 auto acl_release(memory::BasePointer& pointer) -> void {
@@ -25,12 +27,24 @@ auto acl_release(memory::BasePointer& pointer) -> void {
   pointer.capacity = 0;
 }
 
+auto dvpp_release(memory::BasePointer& pointer) -> void {
+  if (pointer.device != 0) {
+    const auto status = hi_mpi_dvpp_free(reinterpret_cast<void*>(pointer.device));
+    if (status != ACL_SUCCESS)
+      KZ_LOG_ERROR("dvpp: hi_mpi_dvpp_free failed: 0x{:X}", static_cast<unsigned int>(status));
+  }
+  pointer.device = 0;
+  pointer.capacity = 0;
+}
+
 auto ascend_allocate(memory::BasePointer& pointer, std::size_t size) -> bool {
   pointer.release(pointer);
   if (size == 0)
     return true;
   void* device = nullptr;
-  const auto status = aclrtMalloc(&device, size, ACL_MEM_MALLOC_HUGE_FIRST);
+  // Both return a plain int, so the branches share a type without a cast.
+  const int status = pointer.type == core::MemoryType::Dvpp ? hi_mpi_dvpp_malloc(0, &device, size)
+                                                            : aclrtMalloc(&device, size, ACL_MEM_MALLOC_HUGE_FIRST);
   KZ_CHECK_RETURN(status == ACL_SUCCESS, false, "acl: allocating {} bytes failed: 0x{:X} {}", size,
                   static_cast<unsigned int>(status), aclGetRecentErrMsg());
   pointer.device = reinterpret_cast<std::uintptr_t>(device);
@@ -46,11 +60,21 @@ auto address(core::Memory& memory, bool write, core::Stream* stream) -> void* {
 
 } // namespace
 
+auto AclMemory::dvpp_stride(const core::Shape& shape) -> core::Stride {
+  if (shape.size() < 2)
+    return core::contiguous_stride(shape);
+  // Width is the second axis, or the third when the first is a single plane.
+  auto aligned = shape;
+  const auto axis = shape[0] == 1 && shape.size() > 2 ? 2U : 1U;
+  aligned[axis] = (aligned[axis] + 15) / 16 * 16;
+  return core::contiguous_stride(aligned);
+}
+
 AclMemory::AclMemory(core::MemoryType type, const core::Shape& shape, const core::Stride& stride) : core::Memory(type) {
   shape_ = shape;
   stride_ = stride;
   pointer_->owned = true;
-  pointer_->release = acl_release;
+  pointer_->release = type == core::MemoryType::Dvpp ? dvpp_release : acl_release;
   ascend_allocate(*pointer_, stride_.empty() ? 0 : stride_[0]);
 }
 
@@ -74,7 +98,8 @@ auto AclMemory::ref() -> SharedPtr<core::Memory> {
 }
 
 auto AclMemory::resize(const core::Shape& shape, const core::Stride& stride) -> bool {
-  auto resolved = memory::resolve_stride(shape, stride);
+  const auto& requested = stride.empty() && memory_type() == core::MemoryType::Dvpp ? dvpp_stride(shape) : stride;
+  auto resolved = memory::resolve_stride(shape, requested);
   if (!resolved)
     return false;
   const auto size = resolved->front();
