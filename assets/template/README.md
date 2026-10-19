@@ -340,6 +340,11 @@ CoreML is ONNX Runtime's execution provider, configured in the engine's `config`
 `execution_provider: "coreml"`, `provider_options: {"ModelFormat": "MLProgram",
 "RequireStaticInputShapes": "1"}`. Unsupported operators may execute on the ORT CPU
 provider; selecting CoreML does not guarantee every operator uses the GPU/ANE.
+The faster `ModelFormat` depends on the model: the PP-OCR models above run several times
+slower with `NeuralNetwork`, while a 640x640 YOLOv8 detector on an Apple M4 took 11.5 ms with
+`NeuralNetwork` and 26.4 ms with `MLProgram` (GPU only; `MLComputeUnits` `ALL` and
+`CPUAndGPU` timed the same), with boxes matching at a mean IoU of 0.99. The YOLOv8 CoreML
+backend in `hrtc_device_config.json` therefore uses `NeuralNetwork`.
 
 ## Test models
 

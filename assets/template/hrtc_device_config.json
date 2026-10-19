@@ -34,6 +34,17 @@
               "data": "assets/test/onnx/YoloV8Detect.onnx"
             },
             {
+              "engine_type": "ort",
+              "config": {
+                "execution_provider": "coreml",
+                "provider_options": {
+                  "ModelFormat": "NeuralNetwork",
+                  "RequireStaticInputShapes": "1"
+                }
+              },
+              "data": "assets/test/onnx/YoloV8Detect.onnx"
+            },
+            {
               "engine_type": "trt",
               "config": {
                 "plugin_libraries": [],
