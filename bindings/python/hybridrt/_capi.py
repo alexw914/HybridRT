@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # HybridRT | C++20 Model Inference Framework
 # File: bindings/python/hybridrt/_capi.py
-# Description: Loads hybridrt_c and declares the include/hrt.h types and
+# Description: Loads hybridrt_c and declares the include/capi/hrt.h types and
 #              functions for ctypes.
 # -----------------------------------------------------------------------------
 

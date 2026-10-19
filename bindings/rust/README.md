@@ -1,6 +1,6 @@
 # HybridRT for Rust
 
-Rust bindings of [HybridRT](../../README.md) over its C API (`include/hrt.h`):
+Rust bindings of [HybridRT](../../README.md) over its C API (`include/capi/hrt.h`):
 `hybridrt-sys` declares the raw FFI and `hybridrt` wraps it safely. Images are
 borrowed 8-bit host pixels; results are views into a reusable `Results`, in
 source-image coordinates. `Model` is `Send + Sync` and calls may run from

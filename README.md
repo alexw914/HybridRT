@@ -100,7 +100,7 @@ Set the required backend SDK paths before configuring the parent project.
 | --- | --- |
 | `hrt::hybridrt` | Image model inference, preprocessing, postprocessing and result drawing |
 | `hrt::hrtc` | Model packaging and configuration without an inference runtime dependency |
-| `hrt::hybridrt_c` | C API in [include/hrt.h](include/hrt.h): image models on host images, flattened results |
+| `hrt::hybridrt_c` | C API in [include/capi/hrt.h](include/capi/hrt.h): image models on host images, flattened results |
 | [Python package](bindings/python/README.md) | numpy interface over the C API, built with `pip install ./bindings/python` |
 | [Rust crates](bindings/rust/README.md) | `hybridrt-sys` FFI and the safe `hybridrt` crate over the C API |
 | `hrt-compress` | Package, inspect, extract and validate model manifests |

@@ -1,6 +1,6 @@
 # HybridRT for Python
 
-Python bindings of [HybridRT](../../README.md) over its C API (`include/hrt.h`),
+Python bindings of [HybridRT](../../README.md) over its C API (`include/capi/hrt.h`),
 loaded with ctypes. Images are uint8 numpy arrays in host memory; results are
 numpy arrays in source-image coordinates. Calls release the GIL and are
 thread-safe.

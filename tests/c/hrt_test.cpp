@@ -5,7 +5,7 @@
 //              and flattened results.
 // -----------------------------------------------------------------------------
 
-#include <hrt.h>
+#include <capi/hrt.h>
 #include <hrt/hrtc/hrtc.hpp>
 
 #include <kitzoo/json/reader.hpp>

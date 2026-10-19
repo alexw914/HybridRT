@@ -40,7 +40,7 @@
   各阶段实例数只通过 create 的 `ImageModelOptions` 传入，不写入模型包。
   自定义算子库从引擎 config 加载（ORT/RKNN 的 `custom_op_libraries`、
   TensorRT 的 `plugin_libraries`），可选，加载失败只警告并跳过。
-- C API 声明在 `include/hrt.h`（C99 可编译），实现为 `source/hrt.cpp`，由 `HYBRIDRT_BUILD_C_API`
+- C API 声明在 `include/capi/hrt.h`（C99 可编译），实现为 `source/capi/hrt.cpp`，由 `HYBRIDRT_BUILD_C_API`
   构建为共享库 `hybridrt_c`，只导出 `hrt_` 函数。类型用 `Hrt` 前缀大驼峰，函数用 `hrt_` 前缀，
   枚举项为显式赋值的 `HRT_<类型>_<值>`；枚举值和库分配的结构体字段只在末尾追加，
   调用方分配的结构体不改布局。可预先检查的错误返回 `HrtStatus`，信息由 `hrt_last_error` 给出；
@@ -48,7 +48,7 @@
   并使用可 dlopen 的 TLS 模型。
 - 语言绑定放 `bindings/<语言>/`，只调用 C API，不链接 C++ 库，由 `HYBRIDRT_BUILD_<语言>` 启用；
   Python 绑定用 ctypes，按 Python 惯例抛出 `HybridRTError`，用 scikit-build-core 打包；
-  Rust 绑定分 `hybridrt-sys`（手写 FFI，布局与 hrt.h 一致并有测试）和安全封装 `hybridrt`，
+  Rust 绑定分 `hybridrt-sys`（手写 FFI，布局与 capi/hrt.h 一致并有测试）和安全封装 `hybridrt`，
   返回 `Result`，unsafe 只在 FFI 调用处并写 SAFETY 注释，用 rustfmt、clippy 检查。
   每种语言提供 `run_models` 示例（`bindings/python/examples/`、`bindings/rust/hybridrt/examples/`
   的 cargo example），每种任务类型各一个 algo 并含 OCR，由绑定测试运行或编译。

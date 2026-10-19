@@ -158,7 +158,7 @@ endif()
 
 # -- hybridrt_c: C API for language bindings ----------------------------------
 if(HYBRIDRT_BUILD_C_API)
-    add_library(hybridrt_c SHARED hrt.cpp)
+    add_library(hybridrt_c SHARED capi/hrt.cpp)
     hybridrt_configure_target(hybridrt_c)
     target_compile_definitions(hybridrt_c PRIVATE HRT_C_API_BUILD)
     target_link_libraries(hybridrt_c PRIVATE hrt::hybridrt kitzoo::log)

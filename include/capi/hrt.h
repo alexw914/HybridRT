@@ -1,11 +1,11 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: include/hrt.h
+// File: include/capi/hrt.h
 // Description: Declares the C API over image models for language bindings.
 // -----------------------------------------------------------------------------
 
-#ifndef HRT_HRT_H
-#define HRT_HRT_H
+#ifndef HRT_CAPI_HRT_H
+#define HRT_CAPI_HRT_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -239,4 +239,4 @@ HRT_API HrtStatus hrt_model_process(HrtModel* model, const HrtImage* image, cons
 } // extern "C"
 #endif
 
-#endif // HRT_HRT_H
+#endif // HRT_CAPI_HRT_H

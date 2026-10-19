@@ -1,11 +1,11 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: source/hrt.cpp
+// File: source/capi/hrt.cpp
 // Description: Implements the C API over packages, image models and flattened
 //              results.
 // -----------------------------------------------------------------------------
 
-#include <hrt.h>
+#include <capi/hrt.h>
 #include <hrt/core/context.hpp>
 #include <hrt/core/version.hpp>
 #include <hrt/engine/engine.hpp>

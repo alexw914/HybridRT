@@ -57,7 +57,7 @@ def _check(status):
         raise HybridRTError(status, lib.hrt_last_error().decode("utf-8", "replace"))
 
 
-# Format names as in the preprocess config, with each layout's planes as in hrt.h.
+# Format names as in the preprocess config, with each layout's planes as in capi/hrt.h.
 _FORMATS = {
     "inter_bgr": 1,
     "inter_rgb": 2,

@@ -1,6 +1,6 @@
 [package]
 name = "hybridrt-sys"
-description = "Raw FFI declarations of the HybridRT C API (include/hrt.h)"
+description = "Raw FFI declarations of the HybridRT C API (include/capi/hrt.h)"
 links = "hybridrt_c"
 build = "build.rs"
 version.workspace = true

@@ -5,7 +5,7 @@
 //              C API safely.
 // -----------------------------------------------------------------------------
 
-//! Safe bindings of the HybridRT C API (`include/hrt.h`).
+//! Safe bindings of the HybridRT C API (`include/capi/hrt.h`).
 //!
 //! ```no_run
 //! use hybridrt::{Image, ImageFormat, Model, ModelOptions, Package};

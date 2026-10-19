@@ -1,10 +1,10 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: bindings/rust/hybridrt-sys/src/lib.rs
-// Description: Declares the include/hrt.h types and functions for Rust.
+// Description: Declares the include/capi/hrt.h types and functions for Rust.
 // -----------------------------------------------------------------------------
 
-//! Raw declarations of the HybridRT C API; see `include/hrt.h` for the
+//! Raw declarations of the HybridRT C API; see `include/capi/hrt.h` for the
 //! contracts. The `hybridrt` crate wraps them safely.
 
 #![allow(non_camel_case_types)]
@@ -228,7 +228,7 @@ mod tests {
     use super::*;
     use std::mem::{align_of, size_of};
 
-    // Layouts of include/hrt.h on 64-bit targets.
+    // Layouts of include/capi/hrt.h on 64-bit targets.
     #[test]
     #[cfg(target_pointer_width = "64")]
     fn matches_c_layouts() {

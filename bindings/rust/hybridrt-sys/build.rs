@@ -28,7 +28,7 @@ fn main() {
 /// whitespace-separated CMake arguments such as -DORT_ROOT=<sdk>.
 fn build_from_source() -> PathBuf {
     let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../..");
-    println!("cargo:rerun-if-changed={}", root.join("include/hrt.h").display());
+    println!("cargo:rerun-if-changed={}", root.join("include/capi/hrt.h").display());
     let mut config = cmake::Config::new(&root);
     config
         .define("HYBRIDRT_BUILD_C_API", "ON")
