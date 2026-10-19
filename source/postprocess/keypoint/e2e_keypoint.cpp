@@ -19,7 +19,8 @@ struct E2EKeypointParam {
   unsigned int class_num = 0;
   unsigned int keypoint_num = 0;
   Vector<float> confidence_threshold;
-  float keypoint_threshold = 0.5F; // Visibility score above which a keypoint counts as visible.
+  // Visibility score above which a keypoint counts as visible.
+  float keypoint_threshold = 0.5F;
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2EKeypointParam, class_num, keypoint_num, confidence_threshold,

@@ -31,12 +31,16 @@ struct BasePointer {
   const core::MemoryType type;
   void* cpu = nullptr;
   std::uintptr_t device = 0;
-  std::size_t capacity = 0; // Usable bytes; only owned storage can grow.
+  // Usable bytes; only owned storage can grow.
+  std::size_t capacity = 0;
   bool owned = false;
-  bool below_4gb = false; // DmaBuffer: every page lies below 4 GB, reachable by 32-bit DMA.
+  // DmaBuffer: every page lies below 4 GB, where devices with 32-bit DMA reach it.
+  bool below_4gb = false;
   core::SyncedHead head = core::SyncedHead::Synced;
   kitzoo::memory::ByteBuffer host_storage;
-  void (*release)(BasePointer&) = nullptr; // Frees owned device/pinned storage; null for host_storage or wrapped.
+  // Frees owned storage outside host_storage (device or pinned host); null
+  // for host_storage and wrapped storage.
+  void (*release)(BasePointer&) = nullptr;
 };
 
 // Validates `stride` against `shape`; an empty stride selects a packed one.

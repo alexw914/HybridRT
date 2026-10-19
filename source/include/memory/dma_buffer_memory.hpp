@@ -14,8 +14,11 @@ namespace hrt::memory {
 
 // Which heaps a dma-buf may come from.
 enum class DmaHeapUse {
-  Device32, // Prefer system-dma32/cma for 32-bit DMA (RGA2); fall back to system with below_4gb() false.
-  Any,      // Any pages, system heap first; for IOMMU devices such as the RK3588 NPU.
+  // Pages below 4 GB first (system-dma32, cma), for devices with 32-bit DMA such as RGA2; when those are exhausted
+  // the system heap is used and below_4gb() turns false.
+  Device32,
+  // Any pages (system heap first), for devices behind an IOMMU such as the RK3588 NPU.
+  Any,
 };
 
 // DmaBuffer memory: a dma-heap buffer mapped to the host; device() is the dma-buf fd. Without an explicit stride, rows

@@ -17,7 +17,7 @@
 
 namespace hrt::postprocess {
 
-auto MaskDecoder::make(const Prototypes& prototypes, std::span<const float> coefficients, const core::Rect2f& net_box,
+auto MaskDecoder::make(const Prototypes& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
                        const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit)
     -> Mask {
   Mask mask;

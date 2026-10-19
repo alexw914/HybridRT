@@ -92,9 +92,10 @@ protected:
         if (box.empty())
           continue;
         const auto* first = coefficients_[cls].data() + k * masks;
+        mask_coefficients_.assign(first, first + masks);
         auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
         object.box = {box, scores_[cls][k], static_cast<std::int64_t>(cls), -1};
-        object.mask = masks_.make(prototypes, {first, masks}, rects_[cls][k], box, transform, mask_logit_);
+        object.mask = masks_.make(prototypes, mask_coefficients_, rects_[cls][k], box, transform, mask_logit_);
       }
     }
     return true;
@@ -135,6 +136,7 @@ private:
   Vector<Vector<core::Rect2f>> rects_;
   Vector<Vector<float>> scores_;
   Vector<Vector<float>> coefficients_;
+  Vector<float> mask_coefficients_;
   core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
   MaskDecoder masks_;
 };

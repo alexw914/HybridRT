@@ -20,7 +20,8 @@ struct GeneralYoloPoseParam {
   unsigned int keypoint_num = 0;
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
-  float keypoint_threshold = 0.5F; // Visibility score above which a keypoint counts as visible.
+  // Visibility score above which a keypoint counts as visible.
+  float keypoint_threshold = 0.5F;
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralYoloPoseParam, class_num, keypoint_num, confidence_threshold,

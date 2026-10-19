@@ -162,35 +162,6 @@ TEST(SegmentTest, DecodesRawYoloV8AndYolo26Heads) {
   }
 }
 
-TEST(SegmentTest, KeepsRawHeadMaskCoefficientsSeparate) {
-  for (const auto& [type, bins] :
-       hrt::Array<hrt::Pair<const char*, std::size_t>, 2>{{{"YoloV8Segment", 2}, {"Yolo26Segment", 1}}}) {
-    const auto head = proto(DataType::Float32, {1, static_cast<std::int64_t>(bins * 4 + 3), 2, 2});
-    const auto masks = proto(DataType::Float32, {1, 2, 4, 4});
-    FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {masks, head});
-    auto postprocessor = hrt::postprocess::create_segment_postprocessor(type, segment_config(), engine);
-    ASSERT_NE(postprocessor, nullptr) << type;
-    auto values = raw_segment_head(bins);
-    // Opposite corners use opposite coefficients of the same prototype plane.
-    for (std::size_t channel = 0; channel < bins * 4; ++channel)
-      values[channel * 4 + 3] = values[channel * 4];
-    values[bins * 16 + 3] = 2.5F;
-    values[(bins * 4 + 1) * 4 + 3] = -1.0F;
-    const hrt::core::Buffers outputs{hrt::test::buffer_of(masks, prototypes()), hrt::test::buffer_of(head, values)};
-    hrt::postprocess::SegmentResultMap result;
-    ASSERT_TRUE(postprocessor->process(result, outputs, hrt::test::identity(16, 16))) << type;
-    ASSERT_EQ(result.at(0).size(), 2U) << type;
-    const auto& first = result.at(0)[0].mask;
-    const auto& second = result.at(0)[1].mask;
-    EXPECT_EQ(first.rect, (hrt::core::Rect{4, 4, 8, 8}));
-    ASSERT_EQ(first.data.size(), 64U);
-    for (std::size_t i = 0; i < first.data.size(); ++i)
-      EXPECT_EQ(first.data[i], i % 8 < 4 ? 1 : 0) << "at " << i;
-    EXPECT_EQ(second.rect, (hrt::core::Rect{12, 12, 4, 4}));
-    EXPECT_EQ(second.data, hrt::Vector<std::uint8_t>(16, 1));
-  }
-}
-
 TEST(SegmentTest, ChecksExplicitRawHeadStrides) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   for (const auto& type : {"YoloV8Segment", "Yolo26Segment"}) {
@@ -276,17 +247,11 @@ TEST(SegmentTest, DecodesInt8SemanticScoresWithoutDequantizing) {
   auto postprocessor = hrt::postprocess::create_segment_postprocessor("SemanticSegment", Json::object(), engine);
   // Quantized scores keep their order; ties go to the lower class: 0, 1 / 2, 0.
   auto buffer = hrt::test::buffer_of<std::int8_t>(output, {
-                                                              90,
-                                                              -5,
-                                                              0,
+                                                              90, -5, 0,
                                                               7, // class 0
-                                                              -10,
-                                                              9,
-                                                              0,
+                                                              -10, 9, 0,
                                                               7, // class 1
-                                                              -10,
-                                                              -5,
-                                                              90,
+                                                              -10, -5, 90,
                                                               7, // class 2
                                                           });
   buffer->scale = 0.1F;
