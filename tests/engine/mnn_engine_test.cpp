@@ -10,10 +10,10 @@
 
 #include <MNN/Interpreter.hpp>
 #include <MNN/expr/ExprCreator.hpp>
-#include <algorithm>
 #include <filesystem>
 #include <gtest/gtest.h>
 
+#include "relu.hpp"
 #include "template_config.hpp"
 
 namespace {
@@ -47,22 +47,10 @@ auto run_relu_model(const hrt::String& config) -> void {
   ASSERT_TRUE(engine->set_outputs({output}));
 
   const hrt::Array<float, 4> values{-2.0F, -0.5F, 0.0F, 3.0F};
-  std::copy(values.begin(), values.end(), static_cast<float*>(input->memory()->mutable_cpu()));
-  ASSERT_TRUE(engine->inference());
-  const auto* result = static_cast<const float*>(output->memory()->cpu());
-  EXPECT_FLOAT_EQ(result[0], 0.0F);
-  EXPECT_FLOAT_EQ(result[1], 0.0F);
-  EXPECT_FLOAT_EQ(result[2], 0.0F);
-  EXPECT_FLOAT_EQ(result[3], 3.0F);
-  EXPECT_TRUE(std::equal(values.begin(), values.end(), static_cast<const float*>(input->memory()->cpu())));
+  ASSERT_NO_FATAL_FAILURE(hrt::test::expect_relu(*engine, *input, *output, values));
 
   const hrt::Array<float, 4> updated{4.0F, -1.0F, 2.0F, -3.0F};
-  std::copy(updated.begin(), updated.end(), static_cast<float*>(input->memory()->mutable_cpu()));
-  ASSERT_TRUE(engine->inference());
-  EXPECT_FLOAT_EQ(result[0], 4.0F);
-  EXPECT_FLOAT_EQ(result[1], 0.0F);
-  EXPECT_FLOAT_EQ(result[2], 2.0F);
-  EXPECT_FLOAT_EQ(result[3], 0.0F);
+  ASSERT_NO_FATAL_FAILURE(hrt::test::expect_relu(*engine, *input, *output, updated));
 
   ASSERT_TRUE(engine->initialize(param));
   ASSERT_EQ(engine->input_protos().size(), 1U);
@@ -70,6 +58,7 @@ auto run_relu_model(const hrt::String& config) -> void {
   ASSERT_TRUE(engine->set_inputs({input}));
   ASSERT_TRUE(engine->set_outputs({output}));
   ASSERT_TRUE(engine->inference());
+  const auto* result = static_cast<const float*>(output->memory()->cpu());
   EXPECT_FLOAT_EQ(result[0], 4.0F);
   EXPECT_FLOAT_EQ(result[3], 0.0F);
 }

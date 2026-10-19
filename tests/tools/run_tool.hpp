@@ -26,8 +26,7 @@ namespace hrt::test {
 
 struct ToolResult {
   int exit_code = -1;
-  // stdout and stderr together.
-  String output;
+  String output; // stdout and stderr together.
 };
 
 // Runs `program` with `args`, each passed as one quoted argument, writing its

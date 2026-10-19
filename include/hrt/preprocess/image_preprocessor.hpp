@@ -52,10 +52,8 @@ enum class ResizeType {
   KeepRatio,
   CenterCrop,
   LetterBox,
-  // Grow the source rect to the input aspect ratio, scale by pad_scale and
-  // clip to the image.
-  PadOutside,
-  TextLine, // Fixed height, proportional width capped at input width, right padding.
+  PadOutside, // Grow source rect to input aspect ratio, scale by pad_scale, then clip to the image.
+  TextLine,   // Fixed height, proportional width capped at input width, right padding.
 };
 
 NLOHMANN_JSON_SERIALIZE_ENUM(ResizeType, {

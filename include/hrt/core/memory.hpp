@@ -27,15 +27,9 @@ enum class MemoryType {
   Unknown,
   Cpu,
   Cuda,
-  // Linux dma-buf from a dma-heap, mapped to the host; device() is the fd. Media devices (RGA, NPUs, decoders)
-  // share it without copies, and host engines read it through the mapping.
-  DmaBuffer,
-  // Ascend device memory from aclrtMalloc, for engine IO.
-  Acl,
-  // Ascend media memory from the DVPP pool, which VPC requires of the images it reads and
-  // writes on products before A2. Its address space is small, so only those images use it,
-  // and without an explicit stride its rows are padded to what VPC can address.
-  Dvpp,
+  DmaBuffer, // Linux dma-heap, host-mapped; device() is the fd shared by media devices without copies.
+  Acl,       // Ascend device memory from aclrtMalloc, for engine IO.
+  Dvpp,      // Small Ascend DVPP pool; VPC needs it before A2; implicit rows are padded to VPC alignment.
 };
 
 auto to_string(MemoryType type) -> std::string_view;
@@ -47,12 +41,9 @@ enum class SyncedHead {
 };
 
 enum class CopyPolicy {
-  // dst takes src's shape and stride.
-  KeepSrcStride,
-  // dst takes src's shape with a packed stride.
-  AutoDstStride,
-  // dst already has src's shape; only data is copied.
-  DirectCopy,
+  KeepSrcStride, // dst takes src's shape and stride.
+  AutoDstStride, // dst takes src's shape with a packed stride.
+  DirectCopy,    // dst already has src's shape; only data is copied.
 };
 
 // Shape and stride describe bytes: the last dimension is in bytes and

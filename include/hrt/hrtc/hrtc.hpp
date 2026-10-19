@@ -28,8 +28,7 @@ using Bytes = Vector<std::uint8_t>;
 // weights in data).
 struct EngineParam {
   String engine_type;
-  // JSON settings of this engine; empty means none.
-  String config;
+  String config; // JSON settings of this engine; empty means none.
   SharedPtr<const Bytes> proto;
   SharedPtr<const Bytes> data;
 };
@@ -37,8 +36,7 @@ struct EngineParam {
 struct AlgoParam {
   String name;
   Vector<EngineParam> engines;
-  // JSON text with "preprocess", "engine" and "postprocess" sections.
-  String config;
+  String config; // JSON text with "preprocess", "engine" and "postprocess" sections.
 };
 
 struct Package {

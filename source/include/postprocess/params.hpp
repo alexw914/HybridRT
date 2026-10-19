@@ -23,8 +23,7 @@ namespace hrt::postprocess {
 struct YoloV5Param {
   unsigned int class_num = 0;
   Vector<float> strides;
-  // Per head: w0, h0, w1, h1, ...
-  Vector<Vector<float>> anchors;
+  Vector<Vector<float>> anchors; // Per head: w0, h0, w1, h1, ...
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
 };
@@ -36,8 +35,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV5Param, class_num, strides,
 struct YoloV8Param {
   unsigned int class_num = 0;
   Vector<float> strides;
-  // Zero requests inference from output channels during initialization.
-  std::size_t reg_max = 0;
+  std::size_t reg_max = 0; // Zero requests inference from output channels during initialization.
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
 };

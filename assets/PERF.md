@@ -4,6 +4,35 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-19: Borrow raw segmentation mask coefficients
+
+**Bottleneck.** YOLOv8 and YOLO26 raw segmentation copied each retained object's contiguous
+mask coefficients into `mask_coefficients_` before calling `MaskDecoder::make`. The decoder only
+reads the coefficients synchronously, so this staging buffer and copy are unnecessary.
+
+**Change.** The private decoder takes `std::span<const float>`. Raw heads pass the existing
+coefficient slice directly and drop their staging vectors; other segmentation callers keep
+passing their vectors. Public interfaces and result ownership are unchanged.
+
+**Measurement.** Local macOS arm64, Apple Clang, CMake Release (`-O3`), one calling thread and
+one OpenCV thread. A temporary C++ driver uses the test `FakeEngine` and `steady_clock`, with
+no inference: a 16 x 16 input, one 2 x 2 float32 raw head at stride 8, one class, 32 prototype
+channels of 4 x 4, and one retained 8 x 8 mask. YOLOv8 uses two distance bins; YOLO26 uses direct
+distances. Each of five fresh-process samples warms up 1,000 calls and times 200,000 calls.
+The table gives median microseconds per complete postprocessing call (min–max).
+
+| Raw head | Before | After |
+| --- | --- | --- |
+| YOLOv8 | 1.189 (1.183–1.303) us | 1.239 (1.231–1.303) us |
+| YOLO26 | 1.178 (1.138–1.186) us | 1.230 (1.222–1.270) us |
+
+**Remaining.** This removes one 128-byte coefficient copy per retained object in this fixture,
+plus the staging vector per postprocessor. The separate before/after batches measured about
+4% higher median latency after the change, so they establish no speedup; a larger workload
+and interleaved measurements are needed to distinguish code effects from run-to-run variation.
+No real-model throughput improvement is claimed. A regression test checks two retained masks
+with opposite coefficients to cover slice offsets and independent result ownership.
+
 ## 2026-10-19: OCR line regions on the source device
 
 **Bottleneck.** `OcrModel` cropped every detected line on the host (`TextCropper`) before

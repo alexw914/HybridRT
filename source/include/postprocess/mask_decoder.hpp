@@ -13,6 +13,7 @@
 
 #include <opencv2/core.hpp>
 #include <optional>
+#include <span>
 
 namespace hrt::postprocess {
 
@@ -28,7 +29,7 @@ public:
 
   // Mask = coefficients . prototypes inside the box, sampled bilinearly into
   // the box's source pixels and thresholded as a logit.
-  auto make(const Prototypes& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
+  auto make(const Prototypes& prototypes, std::span<const float> coefficients, const core::Rect2f& net_box,
             const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit) -> Mask;
 
 private:

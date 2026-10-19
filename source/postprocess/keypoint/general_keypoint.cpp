@@ -22,19 +22,12 @@ namespace hrt::postprocess {
 namespace {
 
 enum class KeypointOutput {
-  // One heatmap per keypoint: [.., K, H, W] (HRNet, SimpleBaseline, ViTPose).
-  Heatmap,
-  // Heatmaps of UDP-trained models (HRNet-UDP), whose corner cells align
-  // with the input corners.
-  HeatmapUdp,
-  // SimCC x and y distributions: [1, K, W * r] and [1, K, H * r] (RTMPose).
-  Simcc,
-  // SimCC-style x, y and visibility distributions: three [1, K, bins].
-  PointWithVisible,
-  // Normalized coordinates as x row then y row: [.., 2, K].
-  PointChannelFirst,
-  // Normalized (x, y) pairs: [.., K, 2].
-  PointChannelLast,
+  Heatmap,           // One heatmap per keypoint: [.., K, H, W] (HRNet, SimpleBaseline, ViTPose).
+  HeatmapUdp,        // UDP heatmaps (HRNet-UDP): corner cells align with input corners.
+  Simcc,             // SimCC x/y distributions: [1, K, W * r] and [1, K, H * r] (RTMPose).
+  PointWithVisible,  // SimCC-style x, y and visibility distributions: three [1, K, bins].
+  PointChannelFirst, // Normalized coordinates as x row then y row: [.., 2, K].
+  PointChannelLast,  // Normalized (x, y) pairs: [.., K, 2].
 };
 
 NLOHMANN_JSON_SERIALIZE_ENUM(KeypointOutput, {

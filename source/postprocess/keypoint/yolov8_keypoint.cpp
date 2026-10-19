@@ -24,8 +24,7 @@ struct YoloV8KeypointParam {
   std::size_t reg_max = 0;
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
-  // Visibility score above which a keypoint counts as visible.
-  float keypoint_threshold = 0.5F;
+  float keypoint_threshold = 0.5F; // Visibility score above which a keypoint counts as visible.
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8KeypointParam, class_num, keypoint_num, strides, reg_max,
