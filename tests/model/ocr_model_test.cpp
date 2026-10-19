@@ -81,4 +81,23 @@ TEST(OcrModelTest, RunsPackedModelsWithoutExternalDictionary) {
 #endif
 }
 
+TEST(OcrModelTest, RejectsStagesOnDifferentDevices) {
+#ifdef HRT_ORT_MODEL_TEST
+  const auto det = hrt::test::template_algo("ppocrv6_tiny_det");
+  auto rec = hrt::test::template_algo("ppocrv6_tiny_rec");
+  if (det.is_null() || rec.is_null() || !std::filesystem::exists(hrt::test::template_model(det)) ||
+      !std::filesystem::exists(hrt::test::template_model(rec)) ||
+      !std::filesystem::exists(rec["config"]["postprocess"]["dictionary"].get<hrt::String>()))
+    GTEST_SKIP() << "OCR models unavailable";
+  rec["config"]["engine"]["backends"][0]["engine_type"] = "trt";
+  const auto det_algo = hrt::hrtc::load_algo(det);
+  const auto rec_algo = hrt::hrtc::load_algo(rec);
+  ASSERT_TRUE(det_algo && rec_algo);
+  // ONNX Runtime detection runs on the CPU; a TensorRT-only recognizer is another device.
+  EXPECT_DEATH(hrt::model::OcrModel::create(*det_algo, *rec_algo), "");
+#else
+  GTEST_SKIP() << "Needs ONNX Runtime and OpenCV imgcodecs";
+#endif
+}
+
 } // namespace

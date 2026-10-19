@@ -42,6 +42,26 @@ auto text_region(const core::Rect2f& rect, core::Size size) -> std::optional<cor
   return region;
 }
 
+auto is_host_bgr(const core::Image& image) -> bool {
+  return image.memory()->have_cpu() && image.data_type() == core::DataType::Uint8 &&
+         (image.format() == core::ImageFormat::InterBgr || image.format() == core::ImageFormat::InterRgb);
+}
+
+// Memory the preprocessors of a `device` context read without staging it.
+// ponytail: RGA also counts as Cpu here but stages host memory, so host NV12 into RKNN is copied per line;
+// tell RGA apart if that input matters.
+auto is_native(core::DeviceType device, core::MemoryType type) -> bool {
+  switch (device) {
+  case core::DeviceType::Cpu:
+    return type == core::MemoryType::Cpu || type == core::MemoryType::DmaBuffer;
+  case core::DeviceType::Cuda:
+    return type == core::MemoryType::Cuda;
+  case core::DeviceType::Ascend:
+    return type == core::MemoryType::Dvpp;
+  }
+  return false;
+}
+
 } // namespace
 
 struct OcrModel::Impl {
@@ -61,8 +81,7 @@ struct OcrModel::Impl {
 };
 
 auto OcrModel::Impl::host_image(const core::Image& src) -> const core::Image* {
-  if (src.memory()->have_cpu() && src.data_type() == core::DataType::Uint8 &&
-      (src.format() == core::ImageFormat::InterBgr || src.format() == core::ImageFormat::InterRgb))
+  if (is_host_bgr(src))
     return &src;
   detection->context()->make_current();
   KZ_CHECK_RETURN(host.reshape(src.size()), nullptr, "OcrModel: cannot allocate host image");
@@ -97,7 +116,16 @@ auto OcrModel::create(const hrtc::AlgoParam& detection, const hrtc::AlgoParam& r
   KZ_CHECK_MSG(problems.empty(), "OcrModel: invalid config: {}", core::join(problems));
   UniquePtr<OcrModel> model(new OcrModel);
   model->impl_->detection = ImageModel<postprocess::OcrResult>::create(detection);
-  model->impl_->recognition = ImageModel<postprocess::OcrResult>::create(recognition);
+  // Recognition shares the detection context, so both stages read the same source without staging it per line.
+  // CPU engines run under any context, so engines of other devices are dropped first.
+  const auto& context = model->impl_->detection->context();
+  auto same_device = recognition;
+  std::erase_if(same_device.engines, [&](const auto& param) {
+    return engine::device_type_of(engine::engine_type_from(param.engine_type)) != context->device_type();
+  });
+  KZ_CHECK_MSG(!same_device.engines.empty(), "OcrModel: algo {} has no engine on the device of algo {}",
+               recognition.name, detection.name);
+  model->impl_->recognition = ImageModel<postprocess::OcrResult>::create(same_device, context);
   return model;
 }
 
@@ -113,15 +141,23 @@ auto OcrModel::process_sync(const core::Image& src) -> std::optional<postprocess
   auto result = impl_->detection->process_sync(src);
   if (!result || result->empty())
     return result;
-  // Lines are recognized from their region of src on its own device; only tall ones need the host.
+  // Lines read their region of src when the stages' device takes src as is or stages only that region (host
+  // BGR/RGB); other sources are converted to host BGR once. Tall lines are rotated on the host.
   const core::Image* host = nullptr;
+  const core::Image* source = &src;
+  if (!is_host_bgr(src) && !is_native(impl_->detection->context()->device_type(), src.memory()->memory_type())) {
+    host = impl_->host_image(src);
+    if (host == nullptr)
+      return std::nullopt;
+    source = host;
+  }
   for (auto& text : *result) {
     const auto region = text_region(text.rect, src.size());
     if (!region)
       return std::nullopt;
     std::optional<postprocess::OcrResult> recognition;
     if (region->height < region->width * 1.5) {
-      recognition = impl_->recognition->process_sync(src, *region);
+      recognition = impl_->recognition->process_sync(*source, *region);
     } else {
       host = host != nullptr ? host : impl_->host_image(src);
       const auto rotated = host != nullptr ? impl_->rotate(*host, *region) : std::nullopt;

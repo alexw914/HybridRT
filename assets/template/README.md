@@ -257,8 +257,11 @@ hrt-ocr -m ocr.hrtc -r ppocrv6_small_rec -e ort -i assets/test/images -o ocr_res
 `hrtc::Package`. Load `.json` with `hrtc::load_json` or `.hrtc` with `hrtc::load`, then call
 `OcrModel::create(package, "ppocrv6_tiny_det", "ppocrv6_tiny_rec")`. Select
 `ppocrv6_small_rec` instead for the alternative recognizer. The two recognition models
-are alternatives, not successive stages. Each algo keeps its own backend alternatives;
-no package schema or existing image-model result type changes.
+are alternatives, not successive stages. Each algo keeps its own backend alternatives, but
+both stages must run on one device: CPU engines (ONNX Runtime CPU, MNN, ncnn, RKNN), CUDA
+(TensorRT) or Ascend. Recognition is created on the detection context and only its engines
+of that device are tried; without one, `create` aborts. No package schema or existing
+image-model result type changes.
 
 Each stage is an `ImageModel<postprocess::OcrResult>` with default options (one engine).
 `process_sync(image)` returns an optional vector of `OcrText`: an axis-aligned `rect`
@@ -311,7 +314,9 @@ there is no automatic splitting. Existing resize modes retain their previous beh
 
 `OcrModel` truncates each detected box to whole pixels like PP-OCR; boxes must lie inside
 the image and be at least 2 x 2 pixels. Lines are recognized from that region of the source
-on the recognition preprocessor's device, without copying the image. Boxes with height >= 1.5
+on the stages' device, without copying the image, when the source is in that device's memory
+(host or dma-buf for CPU engines, CUDA, DVPP) or is host uint8 BGR/RGB, of which only the line
+region is staged; other sources are converted to host BGR once per call. Boxes with height >= 1.5
 times width are rotated counterclockwise like PP-OCR; preprocessors cannot rotate, so for those
 the source is used directly when it is host uint8 BGR/RGB, otherwise converted once per call to
 host BGR, and the region is rotated into reused host storage. No direction classifier,
