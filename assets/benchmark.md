@@ -116,6 +116,9 @@ substituted for the requested square sizes.
 
 ### Apple M4: current measurements of all 25 types
 
+Measured with the model collection recorded before 2026-10-21, whose files and hashes
+differ from the current one.
+
 There are 27 cases: one per type, with `Ocr` additionally covering tiny detection,
 tiny recognition and small recognition. Input size describes the model, not the
 source image. All cases measure CPU postprocessing.
@@ -150,29 +153,53 @@ source image. All cases measure CPU postprocessing.
 | `Ocr` | `ppocrv6_tiny_rec` | 320 x 48 | 0.134 |
 | `Ocr` | `ppocrv6_small_rec` | 320 x 48 | 0.363 |
 
-### Apple M5 Pro: partial current measurements
+### Apple M5 Pro: current measurements of all 25 types
 
-Same M5 Pro environment and measurement protocol as the preprocessing table above,
-using source `9fece83`. Model hashes were checked against the template reference
-before measurement. Currently only `OcrDetection.onnx` matches the recorded collection;
-the other 26 benchmark cases have missing files or different local model hashes.
-They are not replaced with older fixtures in this table.
+2026-10-21, same M5 Pro environment and measurement protocol as the preprocessing table
+above, source `676052a`, with the model collection regenerated that day; its files and
+SHA256 are listed under Test models in [the template README](template/README.md). The
+27 cases match the M4 list, but several decoded exports have other input sizes than the
+older collection behind the M4 table, so the two tables do not compare chips.
 
 | Type | Template algo | Model input (W x H) | Time |
 | --- | --- | --- | ---: |
-| `Ocr` | `ppocrv6_tiny_det` | 640 x 640 | 0.324 |
+| `YoloV8Detect` | `yolov8_detect` | 640 x 480 | 0.039 |
+| `Yolo26Detect` | `yolo26n_detect_raw` | 640 x 640 | 0.046 |
+| `YoloV5Detect` | `yolov5_detect` | 640 x 640 | 0.016 |
+| `DetrDetect` | `rtdetr_l_detect` | 640 x 640 | 0.016 |
+| `E2EDetect` | `yolo26n_e2e_detect` | 640 x 640 | 0.000301 |
+| `GeneralDetect` | `yolov8n_detect` | 640 x 640 | 0.154 |
+| `E2ERotated` | `yolo26n_e2e_obb` | 640 x 640 | 0.000327 |
+| `YoloV8Rotated` | `yolov8n_obb_raw` | 640 x 480 | 0.080 |
+| `Yolo26Rotated` | `yolo26n_obb_raw` | 640 x 640 | 0.066 |
+| `YoloV5Rotated` | `yolov5_rotated` | 1280 x 1280 | 0.029 |
+| `GeneralRotated` | `yolov8n_obb` | 1024 x 1024 | 0.137 |
+| `GeneralClassify` | `yolov8n_classify` | 224 x 224 | 0.000056 |
+| `Embedding` | `yolov8n_classify_embedding` | 224 x 224 | 0.000041 |
+| `GeneralYoloPose` | `yolov8n_pose` | 640 x 640 | 0.0024 |
+| `YoloV8Keypoint` | `yolov8n_face` | 640 x 640 | 0.0047 |
+| `Yolo26Keypoint` | `yolo26n_pose_raw` | 640 x 640 | 0.0042 |
+| `E2EKeypoint` | `yolo26n_e2e_pose` | 640 x 640 | 0.000436 |
+| `RtmoKeypoint` | `rtmo_s_pose` | 640 x 640 | 0.000962 |
+| `GeneralKeypoint` | `rtmpose_m_pose` | 192 x 256 | 0.0066 |
+| `GeneralYoloSegment` | `yolov8n_segment` | 640 x 480 | 0.215 |
+| `YoloV8Segment` | `yolov8n_segment_raw` | 640 x 480 | 0.139 |
+| `Yolo26Segment` | `yolo26n_segment_raw` | 640 x 640 | 0.180 |
+| `E2ESegment` | `yolo26n_e2e_segment` | 640 x 640 | 0.124 |
+| `SemanticSegment` | `lraspp_voc_segment` | 512 x 512 | 2.827 |
+| `Ocr` | `ppocrv6_tiny_det` | 640 x 640 | 0.345 |
+| `Ocr` | `ppocrv6_tiny_rec` | 320 x 48 | 0.123 |
+| `Ocr` | `ppocrv6_small_rec` | 320 x 48 | 0.333 |
 
-The remaining 26 cases have not been measured on M5 Pro with the current fixture
-collection. Raw output: `assets/test/benchmark_results/record_m5pro_postprocess.json`
-(untracked). This measures detection postprocessing on the document image; it excludes
-preprocessing and model inference, as in the M4 record.
+Raw output: `assets/test/benchmark_results/record_m5pro_postprocess_676052a.json`
+(untracked). Postprocessing only; preprocessing and model inference are excluded.
+The OCR recognition cases depend on code layout: their scalar CTC argmax loop took about
+twice as long in builds where it crossed a 64-byte fetch block.
 
-**Correctness validation.** After rebuilding the latest source, all 188 non-benchmark
-Release CTest entries completed with no failures (25 skipped for missing fixtures
-or unavailable hardware). Both Metal geometry/stride tests and NV12 CPU fallback
-passed with GPU access enabled. Missing real-model tests are skips, not validation
-of the unavailable model paths. No preprocessing or postprocessing implementation
-was changed for this measurement.
+**Correctness validation.** With every template model present, Debug, Release and
+AddressSanitizer CTest passed (189, 194 and 185 entries; only DMA-buf, CUDA, RGA, DVPP and
+Ascend tests skipped), and macOS `leaks` reported no leaks on the test binaries (death tests
+excluded), the 24 image algos and both OCR cascades.
 
 ### RK3588: historical measurements
 

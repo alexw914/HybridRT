@@ -18,7 +18,7 @@ dequantized. `YoloV8Segment`, `Yolo26Segment`, `GeneralYoloSegment` and `E2ESegm
 prototype scratch buffers. NHWC prototypes are now read in their layout; before, they were read as
 NCHW and gave wrong masks.
 
-**Measurement.** Apple M4, macOS, Release, ONNX Runtime 1.31.0 CPU, one OpenCV thread,
+**Measurement.** Apple M5 Pro, macOS, Release, ONNX Runtime 1.31.0 CPU, one OpenCV thread,
 `hybridrt_bench_postprocess` `BM_Type`, 3 repetitions of at least 0.3 s, median; the previous
 commit and this change were run interleaved over 3 rounds and the median of rounds is shown.
 
@@ -49,7 +49,7 @@ scratch buffers are gone. `float_data()` dequantizes or packs strided rows strai
 the scratch buffer, without the temporary packed buffer. Classify, embedding, OCR, semantic
 segmentation, `GeneralKeypoint` and mask prototypes still read whole outputs through it.
 
-**Measurement.** Apple M4, macOS, Release, ONNX Runtime 1.31.0 CPU, one OpenCV thread,
+**Measurement.** Apple M5 Pro, macOS, Release, ONNX Runtime 1.31.0 CPU, one OpenCV thread,
 `hybridrt_bench_postprocess` `BM_Type`, 3 repetitions of at least 0.3 s, median; the previous
 commit and this change were run interleaved over 3 rounds and the median of rounds is shown.
 Only these template models were available locally, all float32:
