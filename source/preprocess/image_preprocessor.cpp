@@ -288,6 +288,24 @@ auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const 
   return transform;
 }
 
+auto ImageTransform::to_source(const core::Rect2f& rect) const -> core::Rect2f {
+  const auto scale_x = static_cast<float>(src_roi.width) / static_cast<float>(dst_roi.width);
+  const auto scale_y = static_cast<float>(src_roi.height) / static_cast<float>(dst_roi.height);
+  return {(rect.x - static_cast<float>(dst_roi.x)) * scale_x + static_cast<float>(src_roi.x),
+          (rect.y - static_cast<float>(dst_roi.y)) * scale_y + static_cast<float>(src_roi.y), rect.width * scale_x,
+          rect.height * scale_y};
+}
+
+auto ImageTransform::to_source(const core::Point2f& point) const -> core::Point2f {
+  const auto mapped = to_source(core::Rect2f{point.x, point.y, 0.0F, 0.0F});
+  return {mapped.x, mapped.y};
+}
+
+auto ImageTransform::clip_to_source(const core::Rect2f& rect) const -> core::Rect2f {
+  return core::intersect(to_source(rect), {static_cast<float>(src_roi.x), static_cast<float>(src_roi.y),
+                                           static_cast<float>(src_roi.width), static_cast<float>(src_roi.height)});
+}
+
 auto ImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
                                        const ImagePreprocessorParam& /*param*/) const -> bool {
   return supports(ImageOperation::Fused, dst, src);

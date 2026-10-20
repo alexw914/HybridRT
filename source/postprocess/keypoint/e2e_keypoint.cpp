@@ -73,7 +73,7 @@ protected:
       const auto cls = static_cast<std::size_t>(label);
       if (!(row[4] > param_.confidence_threshold[cls]) || !(row[2] - row[0] > 0.0F && row[3] - row[1] > 0.0F))
         continue;
-      const auto box = clip_to_source(core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]}), transform);
+      const auto box = transform.clip_to_source(core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]}));
       if (box.empty())
         continue;
       auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
@@ -82,7 +82,7 @@ protected:
       for (const auto* point = row + 6; point < row + columns; point += dims_) {
         const auto score = dims_ == 3 ? point[2] : 1.0F;
         object.keypoints.push_back(
-            {to_source(core::Point2f{point[0], point[1]}, transform),
+            {transform.to_source(core::Point2f{point[0], point[1]}),
              score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
       }
     }

@@ -77,15 +77,15 @@ protected:
       coefficients_[cls].clear();
     }
     for (std::size_t k = 0; k < outputs_.heads.size(); ++k) {
-      const auto ok = HeadGrid<>::visit(*outputs[outputs_.heads[k]], layout_,
-                                        [&](const auto& grid) -> void { decode_head(grid, param_.strides[k]); });
-      if (!ok)
+      const HeadGrid grid(*outputs[outputs_.heads[k]], layout_);
+      if (!grid.valid())
         return false;
+      decode_head(grid, param_.strides[k]);
     }
     const auto masks = outputs_.masks;
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
       for (auto k : nms_keep(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
-        const auto box = clip_to_source(rects_[cls][k], transform);
+        const auto box = transform.clip_to_source(rects_[cls][k]);
         if (box.empty())
           continue;
         const auto* first = coefficients_[cls].data() + k * masks;
@@ -99,8 +99,7 @@ protected:
   }
 
 private:
-  template <typename Grid>
-  auto decode_head(const Grid& grid, float stride) -> void {
+  auto decode_head(const HeadGrid& grid, float stride) -> void {
     const auto first_mask = 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
     for (const auto cell : scan_.scan(grid, 4, param_.class_num, min_score)) {

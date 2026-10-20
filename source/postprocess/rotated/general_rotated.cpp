@@ -45,14 +45,15 @@ public:
 protected:
   auto decode(RotatedResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    if (!HeadGrid<>::visit(*outputs[0], std::nullopt, [&](const auto& rows) -> void { decode_rows(result, rows); }))
+    const HeadGrid rows(*outputs[0], std::nullopt);
+    if (!rows.valid())
       return false;
+    decode_rows(result, rows);
     return finish_rotated(result, param_.iou_threshold, transform);
   }
 
 private:
-  template <typename Grid>
-  auto decode_rows(RotatedResultMap& result, const Grid& rows) -> void {
+  auto decode_rows(RotatedResultMap& result, const HeadGrid& rows) -> void {
     const auto at = [&](std::size_t row, std::uint32_t i) -> float { return rows.at(0, i, row); };
     const auto angle_row = param_.class_num + 4;
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {

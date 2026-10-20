@@ -57,7 +57,7 @@ auto finish_detect(DetectResultMap& result, const Vector<float>& iou_threshold,
   for (auto& [cls, boxes] : result) {
     nms(boxes, iou_threshold[cls]);
     for (auto& box : boxes)
-      box.rect = clip_to_source(box.rect, transform);
+      box.rect = transform.clip_to_source(box.rect);
     std::erase_if(boxes, [](const ObjectBox& box) -> bool { return box.rect.empty(); });
   }
 }

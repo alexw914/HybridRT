@@ -112,7 +112,7 @@ protected:
       const auto [l, t, r, b] =
           center_box(box[0] * static_cast<float>(input_size_.width), box[1] * static_cast<float>(input_size_.height),
                      box[2] * static_cast<float>(input_size_.width), box[3] * static_cast<float>(input_size_.height));
-      const auto rect = clip_to_source(core::Rect2f::from_points({l, t}, {r, b}), transform);
+      const auto rect = transform.clip_to_source(core::Rect2f::from_points({l, t}, {r, b}));
       if (!rect.empty())
         result[cls].push_back({rect, score, static_cast<std::int64_t>(cls)});
     }

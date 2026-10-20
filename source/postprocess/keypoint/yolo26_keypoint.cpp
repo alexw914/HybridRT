@@ -76,10 +76,10 @@ protected:
       per_class.clear();
     candidates_.resize(param_.class_num);
     for (std::size_t head = 0; head < outputs.size(); ++head) {
-      const auto ok = HeadGrid<>::visit(*outputs[head], layout_,
-                                        [&](const auto& grid) -> void { decode_head(grid, param_.strides[head]); });
-      if (!ok)
+      const HeadGrid grid(*outputs[head], layout_);
+      if (!grid.valid())
         return false;
+      decode_head(grid, param_.strides[head]);
     }
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
       auto& objects = candidates_[cls];
@@ -91,11 +91,11 @@ protected:
       }
       for (auto k : nms_keep(rects_, scores_, param_.iou_threshold[cls])) {
         auto& object = objects[k];
-        object.box.rect = clip_to_source(object.box.rect, transform);
+        object.box.rect = transform.clip_to_source(object.box.rect);
         if (object.box.rect.empty())
           continue;
         for (auto& keypoint : object.keypoints)
-          keypoint.point = to_source(keypoint.point, transform);
+          keypoint.point = transform.to_source(keypoint.point);
         result[static_cast<std::int64_t>(cls)].push_back(std::move(object));
       }
     }
@@ -103,8 +103,7 @@ protected:
   }
 
 private:
-  template <typename Grid>
-  auto decode_head(const Grid& grid, float stride) -> void {
+  auto decode_head(const HeadGrid& grid, float stride) -> void {
     const auto first_keypoint = 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
     for (const auto cell : scan_.scan(grid, 4, param_.class_num, min_score)) {

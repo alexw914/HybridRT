@@ -44,8 +44,10 @@ public:
 protected:
   auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    if (!HeadGrid<>::visit(*outputs[0], std::nullopt, [&](const auto& rows) -> void { decode_rows(result, rows); }))
+    const HeadGrid rows(*outputs[0], std::nullopt);
+    if (!rows.valid())
       return false;
+    decode_rows(result, rows);
     finish_detect(result, param_.iou_threshold, transform);
     return true;
   }
@@ -53,8 +55,7 @@ protected:
 private:
   // One class row at a time, in memory order; boxes only for scores above
   // the threshold. Anchors stay in order within a class.
-  template <typename Grid>
-  auto decode_rows(DetectResultMap& result, const Grid& rows) -> void {
+  auto decode_rows(DetectResultMap& result, const HeadGrid& rows) -> void {
     const auto at = [&](std::size_t row, std::uint32_t i) -> float { return rows.at(0, i, row); };
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
       for (const auto i : scan_.above(rows, 4 + cls, param_.confidence_threshold[cls])) {

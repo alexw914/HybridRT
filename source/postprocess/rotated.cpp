@@ -90,8 +90,8 @@ auto map_rotated(RotatedResultMap& result, const preprocess::ImageTransform& tra
   KZ_CHECK_RETURN(uniform, false, "rotated: source mapping requires uniform scaling and nonempty regions");
   for (auto& [cls, boxes] : result) {
     for (auto& box : boxes) {
-      const auto mapped = to_source(
-          core::Rect2f{box.rect.center.x, box.rect.center.y, box.rect.size.width, box.rect.size.height}, transform);
+      const auto mapped = transform.to_source(
+          core::Rect2f{box.rect.center.x, box.rect.center.y, box.rect.size.width, box.rect.size.height});
       box.rect.center = {mapped.x, mapped.y};
       box.rect.size = {mapped.width, mapped.height};
     }

@@ -76,7 +76,7 @@ protected:
     }
 
     for (auto k : nms_keep(rects_, scores_, param_.iou_threshold[0])) {
-      const auto box = clip_to_source(rects_[k], transform);
+      const auto box = transform.clip_to_source(rects_[k]);
       if (box.empty())
         continue;
       auto& object = result[0].emplace_back();
@@ -85,7 +85,7 @@ protected:
       const auto* point = points + candidates_[k] * keypoint_num * 3;
       for (std::size_t j = 0; j < keypoint_num; ++j, point += 3) {
         object.keypoints.push_back(
-            {to_source(core::Point2f{point[0], point[1]}, transform),
+            {transform.to_source(core::Point2f{point[0], point[1]}),
              point[2] > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, point[2]});
       }
     }

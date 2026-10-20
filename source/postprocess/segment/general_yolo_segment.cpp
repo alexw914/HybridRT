@@ -67,13 +67,15 @@ protected:
     const auto& proto_shape = outputs[prototypes_]->shape();
     const MaskDecoder::Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
                                              static_cast<int>(proto_shape[3])};
-    return HeadGrid<>::visit(*outputs[detections_], std::nullopt,
-                             [&](const auto& det) -> void { decode_rows(result, det, transform, prototypes); });
+    const HeadGrid det(*outputs[detections_], std::nullopt);
+    if (!det.valid())
+      return false;
+    decode_rows(result, det, transform, prototypes);
+    return true;
   }
 
 private:
-  template <typename Grid>
-  auto decode_rows(SegmentResultMap& result, const Grid& det, const preprocess::ImageTransform& transform,
+  auto decode_rows(SegmentResultMap& result, const HeadGrid& det, const preprocess::ImageTransform& transform,
                    const MaskDecoder::Prototypes& prototypes) -> void {
     const auto at = [&](std::size_t row, std::uint32_t i) -> float { return det.at(0, i, row); };
     const auto classes = param_.class_num;
@@ -99,7 +101,7 @@ private:
     Vector<float> coefficients(static_cast<std::size_t>(prototypes.channels));
     for (std::size_t cls = 0; cls < classes; ++cls) {
       for (auto k : nms_keep(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
-        const auto box = clip_to_source(rects_[cls][k], transform);
+        const auto box = transform.clip_to_source(rects_[cls][k]);
         if (box.empty())
           continue;
         for (std::size_t j = 0; j < coefficients.size(); ++j)

@@ -60,13 +60,16 @@ public:
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    return HeadGrid<>::visit(*outputs[0], std::nullopt,
-                             [&](const auto& rows) -> void { decode_rows(result, rows, transform); });
+    const HeadGrid rows(*outputs[0], std::nullopt);
+    if (!rows.valid())
+      return false;
+    decode_rows(result, rows, transform);
+    return true;
   }
 
 private:
-  template <typename Grid>
-  auto decode_rows(KeypointResultMap& result, const Grid& rows, const preprocess::ImageTransform& transform) -> void {
+  auto decode_rows(KeypointResultMap& result, const HeadGrid& rows, const preprocess::ImageTransform& transform)
+      -> void {
     const auto at = [&](std::size_t row, std::uint32_t i) -> float { return rows.at(0, i, row); };
     const auto classes = param_.class_num;
 
@@ -93,7 +96,7 @@ private:
     const auto first_row = 4 + classes;
     for (std::size_t cls = 0; cls < classes; ++cls) {
       for (auto k : nms_keep(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
-        const auto box = clip_to_source(rects_[cls][k], transform);
+        const auto box = transform.clip_to_source(rects_[cls][k]);
         if (box.empty())
           continue;
         auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
@@ -105,7 +108,7 @@ private:
           const core::Point2f point{at(row, anchor), at(row + 1, anchor)};
           const auto score = dims_ == 3 ? at(row + 2, anchor) : 1.0F;
           object.keypoints.push_back(
-              {to_source(point, transform),
+              {transform.to_source(point),
                score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
         }
       }

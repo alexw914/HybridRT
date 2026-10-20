@@ -75,6 +75,131 @@ auto HeadShape::stride(core::Size input) const -> std::optional<float> {
   return static_cast<float>(x);
 }
 
+HeadGrid::HeadGrid(const core::Buffer& buffer, std::optional<engine::DataLayout> layout)
+    : int8_(buffer.data_type() == core::DataType::Int8), scale_(buffer.scale), zero_point_(buffer.zero_point) {
+  const auto& shape = buffer.shape();
+  const auto& stride = buffer.stride();
+  const auto dims = shape.size();
+  if ((!int8_ && buffer.data_type() != core::DataType::Float32) || dims < (layout ? 3U : 2U))
+    return;
+  const auto item = int8_ ? sizeof(std::int8_t) : sizeof(float);
+  if (!layout) {
+    rows_ = 1;
+    cols_ = shape[dims - 1];
+    col_step_ = 1;
+    channel_step_ = stride[dims - 1] / item;
+  } else if (*layout == engine::DataLayout::Nchw) {
+    rows_ = shape[dims - 2];
+    cols_ = shape[dims - 1];
+    row_step_ = stride[dims - 1] / item;
+    col_step_ = 1;
+    channel_step_ = stride[dims - 2] / item;
+  } else {
+    rows_ = shape[dims - 3];
+    cols_ = shape[dims - 2];
+    row_step_ = stride[dims - 2] / item;
+    col_step_ = stride[dims - 1] / item;
+    channel_step_ = 1;
+  }
+  data_ = buffer.memory()->cpu();
+}
+
+auto HeadGrid::raw_bound(float threshold) const -> float {
+  if (!int8_)
+    return threshold;
+  if (!(scale_ > 0.0F))
+    return std::numeric_limits<float>::lowest();
+  const auto bound = std::floor(static_cast<double>(threshold) / static_cast<double>(scale_) + zero_point_);
+  return static_cast<float>(std::clamp(bound, -129.0, 128.0));
+}
+
+namespace {
+
+// raw_bound() in the element type: every int8 reaches -129 and none reaches 128.
+template <typename T>
+auto typed_bound(float bound) {
+  if constexpr (std::is_same_v<T, float>)
+    return bound;
+  else
+    return static_cast<std::int32_t>(std::clamp(bound, -129.0F, 128.0F));
+}
+
+template <typename T>
+auto scan_cells(const HeadGrid& grid, std::size_t first, std::size_t count, float raw_bound, Vector<T>& best,
+                Vector<std::uint32_t>& cells) -> void {
+  const auto rows = grid.rows();
+  const auto cols = grid.cols();
+  const auto bound = typed_bound<T>(raw_bound);
+  cells.clear();
+  if (count == 1) {
+    const auto step = grid.col_step();
+    for (std::int64_t y = 0; y < rows; ++y) {
+      const auto* in = grid.row<T>(y, first);
+      for (std::int64_t x = 0; x < cols; ++x) {
+        if (in[static_cast<std::size_t>(x) * step] >= bound)
+          cells.push_back(static_cast<std::uint32_t>(y * cols + x));
+      }
+    }
+    return;
+  }
+  best.assign(static_cast<std::size_t>(rows * cols), std::numeric_limits<T>::lowest());
+  if (grid.col_step() == 1) {
+    for (std::size_t c = first; c < first + count; ++c) {
+      for (std::int64_t y = 0; y < rows; ++y) {
+        const auto* in = grid.row<T>(y, c);
+        auto* out = best.data() + y * cols;
+        for (std::int64_t x = 0; x < cols; ++x)
+          out[x] = std::max(out[x], in[x]);
+      }
+    }
+  } else {
+    const auto step = grid.col_step();
+    for (std::int64_t y = 0; y < rows; ++y) {
+      for (std::int64_t x = 0; x < cols; ++x) {
+        auto value = std::numeric_limits<T>::lowest();
+        for (std::size_t c = first; c < first + count; ++c)
+          value = std::max(value, grid.row<T>(y, c)[static_cast<std::size_t>(x) * step]);
+        best[static_cast<std::size_t>(y * cols + x)] = value;
+      }
+    }
+  }
+  for (std::size_t i = 0; i < best.size(); ++i) {
+    if (best[i] >= bound)
+      cells.push_back(static_cast<std::uint32_t>(i));
+  }
+}
+
+template <typename T>
+auto cells_above(const HeadGrid& grid, std::size_t channel, float threshold, Vector<std::uint32_t>& cells) -> void {
+  const auto* values = grid.row<T>(0, channel);
+  const auto step = grid.col_step();
+  const auto bound = typed_bound<T>(grid.raw_bound(threshold));
+  cells.clear();
+  for (std::int64_t x = 0; x < grid.cols(); ++x) {
+    if (values[static_cast<std::size_t>(x) * step] >= bound && grid.at(0, x, channel) > threshold)
+      cells.push_back(static_cast<std::uint32_t>(x));
+  }
+}
+
+} // namespace
+
+auto CellScanner::scan(const HeadGrid& grid, std::size_t first, std::size_t count, float bound)
+    -> const Vector<std::uint32_t>& {
+  if (grid.int8())
+    scan_cells(grid, first, count, bound, int8_best_, cells_);
+  else
+    scan_cells(grid, first, count, bound, float_best_, cells_);
+  return cells_;
+}
+
+auto CellScanner::above(const HeadGrid& grid, std::size_t channel, float threshold) -> const Vector<std::uint32_t>& {
+  if (grid.int8())
+    cells_above<std::int8_t>(grid, channel, threshold, cells_);
+  else
+    cells_above<float>(grid, channel, threshold, cells_);
+  return cells_;
+}
+
 auto resolve_strides(Vector<float>& strides, const Vector<float>& inferred) -> bool {
   KZ_CHECK_RETURN(strides.empty() || strides == inferred, false,
                   "postprocess: configured strides do not match the input/output shapes");
@@ -159,27 +284,6 @@ auto nms_keep(const Vector<core::Rect2f>& rects, const Vector<float>& scores, fl
       kept.push_back(index);
   }
   return kept;
-}
-
-auto to_source(const core::Rect2f& rect, const preprocess::ImageTransform& transform) -> core::Rect2f {
-  const auto& dst = transform.dst_roi;
-  const auto& src = transform.src_roi;
-  const auto scale_x = static_cast<float>(src.width) / static_cast<float>(dst.width);
-  const auto scale_y = static_cast<float>(src.height) / static_cast<float>(dst.height);
-  return {(rect.x - static_cast<float>(dst.x)) * scale_x + static_cast<float>(src.x),
-          (rect.y - static_cast<float>(dst.y)) * scale_y + static_cast<float>(src.y), rect.width * scale_x,
-          rect.height * scale_y};
-}
-
-auto to_source(const core::Point2f& point, const preprocess::ImageTransform& transform) -> core::Point2f {
-  const auto mapped = to_source(core::Rect2f{point.x, point.y, 0.0F, 0.0F}, transform);
-  return {mapped.x, mapped.y};
-}
-
-auto clip_to_source(const core::Rect2f& rect, const preprocess::ImageTransform& transform) -> core::Rect2f {
-  const auto& src = transform.src_roi;
-  return core::intersect(to_source(rect, transform), {static_cast<float>(src.x), static_cast<float>(src.y),
-                                                      static_cast<float>(src.width), static_cast<float>(src.height)});
 }
 
 auto check_config(std::string_view type, const kitzoo::json::Json& config) -> Vector<String> {

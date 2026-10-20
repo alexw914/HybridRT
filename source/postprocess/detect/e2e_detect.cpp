@@ -62,7 +62,7 @@ protected:
       const auto cls = static_cast<std::size_t>(label);
       if (!(score > param_.confidence_threshold[cls]) || !(row[2] - row[0] > 0.0F && row[3] - row[1] > 0.0F))
         continue;
-      const auto rect = clip_to_source(core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]}), transform);
+      const auto rect = transform.clip_to_source(core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]}));
       if (!rect.empty())
         result[cls].push_back({rect, score, static_cast<std::int64_t>(cls)});
     }

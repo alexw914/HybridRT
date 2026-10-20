@@ -190,7 +190,7 @@ protected:
                     0,
                     -1};
       for (auto& keypoint : object.keypoints) {
-        keypoint.point = to_source(core::Point2f{keypoint.point.x * width, keypoint.point.y * height}, transform);
+        keypoint.point = transform.to_source(core::Point2f{keypoint.point.x * width, keypoint.point.y * height});
         if (!scored)
           continue;
         if (param_.score_activation == KeypointScoreActivation::Sigmoid)

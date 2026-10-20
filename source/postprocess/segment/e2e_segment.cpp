@@ -77,7 +77,7 @@ protected:
       if (!(row[4] > param_.confidence_threshold[cls]) || !(row[2] - row[0] > 0.0F && row[3] - row[1] > 0.0F))
         continue;
       const auto net_box = core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]});
-      const auto box = clip_to_source(net_box, transform);
+      const auto box = transform.clip_to_source(net_box);
       if (box.empty())
         continue;
       coefficients_.assign(row + 6, row + columns);

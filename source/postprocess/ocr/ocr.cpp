@@ -199,7 +199,7 @@ private:
         const core::Point2f input{point.x * static_cast<float>(transform.input_size.width) / static_cast<float>(width),
                                   point.y * static_cast<float>(transform.input_size.height) /
                                       static_cast<float>(height)};
-        const auto source = to_source(input, transform);
+        const auto source = transform.to_source(input);
         point.x = std::clamp(source.x, static_cast<float>(transform.src_roi.x),
                              static_cast<float>(transform.src_roi.x + transform.src_roi.width - 1));
         point.y = std::clamp(source.y, static_cast<float>(transform.src_roi.y),

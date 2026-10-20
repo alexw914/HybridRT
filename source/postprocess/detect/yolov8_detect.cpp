@@ -40,18 +40,17 @@ protected:
     if (outputs.size() != param_.strides.size())
       return false;
     for (std::size_t head = 0; head < outputs.size(); ++head) {
-      const auto ok = HeadGrid<>::visit(
-          *outputs[head], layout_, [&](const auto& grid) -> void { decode_head(result, grid, param_.strides[head]); });
-      if (!ok)
+      const HeadGrid grid(*outputs[head], layout_);
+      if (!grid.valid())
         return false;
+      decode_head(result, grid, param_.strides[head]);
     }
     finish_detect(result, param_.iou_threshold, transform);
     return true;
   }
 
 private:
-  template <typename Grid>
-  auto decode_head(DetectResultMap& result, const Grid& grid, float stride) -> void {
+  auto decode_head(DetectResultMap& result, const HeadGrid& grid, float stride) -> void {
     const auto bins = param_.reg_max;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
     for (const auto cell : scan_.scan(grid, bins * 4, param_.class_num, min_score)) {

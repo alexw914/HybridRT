@@ -4,6 +4,37 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-20: single-channel cell scans for YOLOv5 objectness and one-class heads
+
+**Bottleneck.** `HeadGrid` became a plain class whose element type (float32 or int8) is checked
+at run time. `YoloV5Detect` and `YoloV5Rotated` read the objectness of every cell and anchor
+through `HeadGrid::raw()`, so that check ran in their innermost loop: with the class template
+they took 0.024 and 0.064 ms, with the plain class 0.031 and 0.088 ms.
+
+**Change.** `CellScanner::scan()` with one channel compares the typed row directly against the
+raw bound and returns the passing cells, without the running-maximum buffer. The YOLOv5
+decoders scan each anchor's objectness plane this way and decode only the passing cells.
+Raw YOLOv8/YOLO26 heads with one class (face, pose) take the same path. Decoding is otherwise
+unchanged; candidates are pushed anchor by anchor instead of cell by cell before NMS.
+
+**Measurement.** Apple M4, macOS, Release, ONNX Runtime 1.31.0 CPU, one OpenCV thread,
+`hybridrt_bench_postprocess` `BM_Type`, 3 repetitions of at least 0.3 s, median; the previous
+commit and this change were run interleaved over 3 rounds and the median of rounds is shown.
+
+| Type (algo) | Before (template `HeadGrid`) | After |
+| --- | ---: | ---: |
+| `YoloV5Detect` (`yolov5_detect`) | 0.0241 ms | 0.0166 ms |
+| `YoloV5Rotated` (`yolov5_rotated`) | 0.0647 ms | 0.0335 ms |
+| `YoloV8Keypoint` (`yolov8n_face`) | 0.0058 ms | 0.0050 ms |
+| `Yolo26Keypoint` (`yolo26n_pose_raw`) | 0.0052 ms | 0.0045 ms |
+
+All other types stayed within +/-2.5% (within run-to-run noise). `hrt-validate` and `hrt-ocr`
+outputs of all 24 template algos and both OCR recognizers on the test images are identical
+before and after.
+
+**Remaining.** Only float32 template models were compared end to end; int8 decoding is covered
+by the unit tests. RK3588 int8 timings were not remeasured.
+
 ## 2026-10-20: restore non-fused device preprocessing stages
 
 **Bottleneck.** The shared flow treated a missing fused implementation as requiring
