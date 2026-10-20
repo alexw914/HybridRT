@@ -135,19 +135,20 @@ public:
     }
     KZ_CHECK_RETURN(type != KeypointOutput::PointWithVisible || outputs[2].shape[2] == 3, false,
                     "general_keypoint: visibility needs 3 states (unlabeled, invisible, visible)");
+    scratch_.assign(outputs.size(), nullptr);
+    data_.resize(outputs.size());
     return true;
   }
 
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    while (scratch_.size() < outputs.size())
-      scratch_.emplace_back(core::MemoryType::Cpu, core::DataType::Float32);
-    Vector<const float*> data(outputs.size());
+    KZ_CHECK_RETURN(outputs.size() == scratch_.size(), false, "general_keypoint: output count changed");
     for (std::size_t i = 0; i < outputs.size(); ++i) {
-      data[i] = float_data(*outputs[i], scratch_[i]);
-      if (data[i] == nullptr)
+      const auto floats = float_view(outputs[i], scratch_[i]);
+      if (floats == nullptr)
         return false;
+      data_[i] = static_cast<const float*>(floats->memory()->cpu());
     }
     auto& objects = result[0];
     const auto type = param_.general_keypoint_type;
@@ -155,13 +156,13 @@ protected:
     case KeypointOutput::Heatmap:
     case KeypointOutput::HeatmapUdp:
       for (std::size_t i = 0; i < outputs.size(); ++i)
-        decode_heatmaps(objects.emplace_back().keypoints, data[i], outputs[i]->shape());
+        decode_heatmaps(objects.emplace_back().keypoints, data_[i], outputs[i]->shape());
       break;
     case KeypointOutput::Simcc:
-      decode_simcc(objects.emplace_back().keypoints, data, outputs);
+      decode_simcc(objects.emplace_back().keypoints, data_, outputs);
       break;
     case KeypointOutput::PointWithVisible:
-      decode_point_with_visible(objects.emplace_back().keypoints, data, outputs);
+      decode_point_with_visible(objects.emplace_back().keypoints, data_, outputs);
       break;
     case KeypointOutput::PointChannelFirst:
     case KeypointOutput::PointChannelLast:
@@ -171,8 +172,8 @@ protected:
         const auto first = type == KeypointOutput::PointChannelFirst;
         const auto count = first ? shape.back() : shape[shape.size() - 2];
         for (std::int64_t k = 0; k < count; ++k) {
-          const auto x = first ? data[i][k] : data[i][k * 2];
-          const auto y = first ? data[i][count + k] : data[i][k * 2 + 1];
+          const auto x = first ? data_[i][k] : data_[i][k * 2];
+          const auto y = first ? data_[i][count + k] : data_[i][k * 2 + 1];
           points.push_back({{x, y}, KeypointVisible::Visible, 1.0F});
         }
       }
@@ -333,7 +334,8 @@ private:
   }
 
   GeneralKeypointParam param_;
-  Vector<core::Buffer> scratch_;
+  core::Buffers scratch_;
+  Vector<const float*> data_;
   cv::Mat blurred_;
 };
 

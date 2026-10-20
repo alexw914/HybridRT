@@ -174,10 +174,12 @@ inline auto dfl(const HeadGrid& grid, std::int64_t y, std::int64_t x, std::size_
   return weighted / sum;
 }
 
-// Contiguous float32 view of an output: the output itself, or `scratch`
-// holding a dequantized or packed copy. Null for other data types. Decoders
-// reading only part of an output use HeadGrid instead.
-auto float_data(const core::Buffer& output, core::Buffer& scratch) -> const float*;
+// Contiguous float32 view of an output for decoders that read all of it:
+// the output itself when it is contiguous float32, otherwise `scratch`
+// holding a dequantized or packed copy, created on first use and resized only
+// when the output shape changes. Null for types other than float32 and int8.
+// Decoders reading part of an output use HeadGrid instead.
+auto float_view(const SharedPtr<core::Buffer>& output, SharedPtr<core::Buffer>& scratch) -> SharedPtr<core::Buffer>;
 
 auto nms_keep(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
     -> Vector<std::size_t>;

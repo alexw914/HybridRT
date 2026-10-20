@@ -46,7 +46,7 @@ protected:
     const auto channels = shape.size() == 4 ? static_cast<int>(shape[1]) : 1;
     const auto height = static_cast<int>(shape[shape.size() - 2]);
     const auto width = static_cast<int>(shape.back());
-    if (!labels_at_output(output, channels, height, width))
+    if (!labels_at_output(outputs[0], channels, height, width))
       return false;
 
     // Source pixel center -> network coordinate -> output pixel.
@@ -83,7 +83,8 @@ protected:
   }
 
 private:
-  auto labels_at_output(const core::Buffer& output, int channels, int height, int width) -> bool {
+  auto labels_at_output(const SharedPtr<core::Buffer>& buffer, int channels, int height, int width) -> bool {
+    const auto& output = *buffer;
     labels_.create(height, width, CV_16U);
     const auto plane = static_cast<std::size_t>(height) * static_cast<std::size_t>(width);
     if (channels == 1 && (output.data_type() == core::DataType::Int32 || output.data_type() == core::DataType::Int64)) {
@@ -104,9 +105,10 @@ private:
       argmax_channels(static_cast<const std::int8_t*>(output.memory()->cpu()), channels, plane, out);
       return true;
     }
-    const auto* data = float_data(output, scratch_);
-    if (data == nullptr)
+    const auto floats = float_view(buffer, scratch_);
+    if (floats == nullptr)
       return false;
+    const auto* data = static_cast<const float*>(floats->memory()->cpu());
     if (channels == 1) {
       for (std::size_t i = 0; i < plane; ++i)
         out[i] = static_cast<std::uint16_t>(std::lround(data[i]));
@@ -135,7 +137,7 @@ private:
     }
   }
 
-  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
+  SharedPtr<core::Buffer> scratch_;
   Vector<float> best_;
   cv::Mat labels_;
   cv::Mat source_labels_;

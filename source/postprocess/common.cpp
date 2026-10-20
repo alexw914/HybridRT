@@ -284,13 +284,16 @@ auto read_floats(const core::Buffer& output, float* out) -> bool {
 
 } // namespace
 
-auto float_data(const core::Buffer& output, core::Buffer& scratch) -> const float* {
-  if (output.data_type() == core::DataType::Float32 && output.is_contiguous())
-    return static_cast<const float*>(output.memory()->cpu());
-  if (!scratch.reshape(core::DataType::Float32, output.shape()))
+auto float_view(const SharedPtr<core::Buffer>& output, SharedPtr<core::Buffer>& scratch) -> SharedPtr<core::Buffer> {
+  if (output->data_type() == core::DataType::Float32 && output->is_contiguous())
+    return output;
+  if (scratch == nullptr)
+    scratch = std::make_shared<core::Buffer>(core::MemoryType::Cpu, core::DataType::Float32);
+  if (scratch->shape() != output->shape() && !scratch->reshape(core::DataType::Float32, output->shape()))
     return nullptr;
-  auto* out = static_cast<float*>(scratch.memory()->mutable_cpu());
-  return read_floats(output, out) ? out : nullptr;
+  if (!read_floats(*output, static_cast<float*>(scratch->memory()->mutable_cpu())))
+    return nullptr;
+  return scratch;
 }
 
 auto nms_keep(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)

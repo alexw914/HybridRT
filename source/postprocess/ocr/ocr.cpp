@@ -124,9 +124,10 @@ protected:
   auto decode(OcrResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
     KZ_CHECK_RETURN(outputs.size() == 1 && outputs[0]->shape() == shape_, false, "Ocr: output shape changed");
-    const auto* data = float_data(*outputs[0], scratch_);
-    if (data == nullptr)
+    const auto floats = float_view(outputs[0], scratch_);
+    if (floats == nullptr)
       return false;
+    const auto* data = static_cast<const float*>(floats->memory()->cpu());
     if (detection_)
       return detect(result, data, transform);
     auto& text = result.emplace_back();
@@ -235,7 +236,7 @@ private:
   DetectionParam det_;
   core::Shape shape_;
   Vector<String> characters_;
-  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
+  SharedPtr<core::Buffer> scratch_;
   cv::Mat bitmap_;
   cv::Mat mask_;
   Vector<Vector<cv::Point>> contours_;

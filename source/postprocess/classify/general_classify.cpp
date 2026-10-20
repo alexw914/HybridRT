@@ -42,19 +42,22 @@ public:
     return check_section<GeneralClassifyParam>(config);
   }
 
-  auto init(const kitzoo::json::Json& config, const engine::Engine& /*engine*/) -> bool override {
+  auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     activation_ = config.get<GeneralClassifyParam>().classify_postprocess_type;
+    scratch_.assign(engine.output_protos().size(), nullptr);
     return true;
   }
 
 protected:
   auto decode(ClassifyResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& /*transform*/)
       -> bool override {
-    for (const auto& output : outputs) {
-      const auto* data = float_data(*output, scratch_);
-      if (data == nullptr)
+    KZ_CHECK_RETURN(outputs.size() == scratch_.size(), false, "general_classify: output count changed");
+    for (std::size_t i = 0; i < outputs.size(); ++i) {
+      const auto floats = float_view(outputs[i], scratch_[i]);
+      if (floats == nullptr)
         return false;
-      auto& scores = result.emplace_back(data, data + output->volume());
+      const auto* data = static_cast<const float*>(floats->memory()->cpu());
+      auto& scores = result.emplace_back(data, data + floats->volume());
       if (activation_ == ClassifyActivation::Sigmoid) {
         std::transform(scores.begin(), scores.end(), scores.begin(), sigmoid);
       } else if (activation_ == ClassifyActivation::Softmax && !scores.empty()) {
@@ -73,7 +76,7 @@ protected:
 
 private:
   ClassifyActivation activation_ = ClassifyActivation::None;
-  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
+  core::Buffers scratch_;
 };
 
 } // namespace

@@ -32,15 +32,16 @@ public:
 protected:
   auto decode(EmbeddingResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& /*transform*/)
       -> bool override {
-    const auto* data = float_data(*outputs.front(), scratch_);
-    if (data == nullptr)
+    const auto floats = float_view(outputs.front(), scratch_);
+    if (floats == nullptr)
       return false;
-    result.assign(data, data + outputs.front()->volume());
+    const auto* data = static_cast<const float*>(floats->memory()->cpu());
+    result.assign(data, data + floats->volume());
     return true;
   }
 
 private:
-  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
+  SharedPtr<core::Buffer> scratch_;
 };
 
 } // namespace
