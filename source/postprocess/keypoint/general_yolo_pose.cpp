@@ -17,7 +17,7 @@ namespace {
 
 struct GeneralYoloPoseParam {
   unsigned int class_num = 0;
-  unsigned int keypoint_num = 0;
+  unsigned int keypoint_num = 17;
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
   // Visibility score above which a keypoint counts as visible.
@@ -27,8 +27,8 @@ struct GeneralYoloPoseParam {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralYoloPoseParam, class_num, keypoint_num, confidence_threshold,
                                                 iou_threshold, keypoint_threshold)
 
-// One output [1, 4 + classes + keypoints * (2 | 3), N]: rows center x, center
-// y, width, height, one score per class, then x, y (and visibility) per
+// One output [1, 4 + classes + keypoints * 3, N]: rows center x, center
+// y, width, height, one score per class, then x, y and visibility per
 // keypoint, all in network-input pixels.
 class GeneralYoloPose final : public KeypointPostprocessor {
 public:
@@ -40,8 +40,7 @@ public:
     if (!is_float_outputs(engine, "general_yolo_pose"))
       return false;
     param_ = config.get<GeneralYoloPoseParam>();
-    KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
-                    "general_yolo_pose: keypoint_num must be positive");
+    KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "general_yolo_pose: keypoint_num must be positive");
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
@@ -50,12 +49,9 @@ public:
     KZ_CHECK_RETURN(engine.proto().output_layout == engine::DataLayout::Nchw && engine.input_protos().size() == 1 &&
                         outputs.size() == 1 && outputs[0].shape.size() == 3 && outputs[0].shape[0] == 1,
                     false, "general_yolo_pose: needs one input and one [1, rows, N] output");
-    const auto rows = outputs[0].shape[1] - 4 - static_cast<std::int64_t>(param_.class_num);
-    const auto shape = keypoint_shape(rows, param_.keypoint_num);
-    if (!shape)
-      return false;
-    param_.keypoint_num = shape->count;
-    dims_ = shape->dims;
+    KZ_CHECK_RETURN(outputs[0].shape[1] ==
+                        static_cast<std::int64_t>(4 + param_.class_num + param_.keypoint_num * kKeypointValues),
+                    false, "general_yolo_pose: output rows do not match class_num and keypoint_num");
     return true;
   }
 
@@ -103,9 +99,9 @@ private:
         const auto anchor = anchors_[cls][k];
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
-          const auto row = first_row + j * dims_;
+          const auto row = first_row + j * kKeypointValues;
           const core::Point2f point{at(row, anchor), at(row + 1, anchor)};
-          const auto score = dims_ == 3 ? at(row + 2, anchor) : 1.0F;
+          const auto score = at(row + 2, anchor);
           object.keypoints.push_back(
               {transform.to_source(point),
                score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
@@ -115,7 +111,6 @@ private:
   }
 
   GeneralYoloPoseParam param_;
-  std::size_t dims_ = 3;
   CellScanner scan_;
   Vector<Vector<core::Rect2f>> rects_;
   Vector<Vector<float>> scores_;

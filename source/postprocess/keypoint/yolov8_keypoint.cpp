@@ -19,9 +19,9 @@ namespace {
 
 struct YoloV8KeypointParam {
   unsigned int class_num = 0;
-  unsigned int keypoint_num = 0;
+  unsigned int keypoint_num = 17;
   Vector<core::Point2f> strides; // Inferred in init from the input and head sizes; not a config key.
-  std::size_t reg_max = 0;
+  std::size_t reg_max = 16;
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
   // Visibility score above which a keypoint counts as visible.
@@ -31,64 +31,25 @@ struct YoloV8KeypointParam {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8KeypointParam, class_num, keypoint_num, reg_max,
                                                 confidence_threshold, iou_threshold, keypoint_threshold)
 
-auto has_two_shape_keys(const kitzoo::json::Json& config) -> bool {
-  return config.contains("class_num") + config.contains("reg_max") + config.contains("keypoint_num") >= 2;
-}
-
 // One output per stride with channels 4 * reg_max distance bins, class
-// logits, then x, y (and visibility logit) per keypoint, as Ultralytics pose
+// logits, then x, y and visibility logit per keypoint, as Ultralytics pose
 // heads emit them before decoding (e.g. YOLOv8 face models with 5 landmarks).
 // A keypoint at cell (x, y) lies at ((raw * 2 + x) * stride.x, (raw * 2 + y) * stride.y).
 class YoloV8Keypoint final : public KeypointPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    auto problems = check_section<YoloV8KeypointParam>(config);
-    if (!has_two_shape_keys(config))
-      problems.emplace_back("postprocess: YoloV8Keypoint needs at least two of class_num, reg_max and keypoint_num");
-    return problems;
+    return check_section<YoloV8KeypointParam>(config);
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "yolov8_keypoint"))
       return false;
-    KZ_CHECK_RETURN(has_two_shape_keys(config), false,
-                    "yolov8_keypoint: supply at least two of class_num, reg_max and keypoint_num");
     param_ = config.get<YoloV8KeypointParam>();
-    KZ_CHECK_RETURN(!config.contains("class_num") || param_.class_num > 0, false,
-                    "yolov8_keypoint: class_num must be positive when supplied");
-    KZ_CHECK_RETURN(!config.contains("reg_max") || param_.reg_max > 0, false, "reg_max must be positive when supplied");
-    KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
-                    "yolov8_keypoint: keypoint_num must be positive");
-    const auto& outputs = engine.output_protos();
-    if (!is_4d_outputs(engine, "yolov8_keypoint"))
-      return false;
-    const auto head = HeadGridShape::from_proto(outputs[0], engine.proto().output_layout);
-    if (!config.contains("class_num")) {
-      KZ_CHECK_RETURN(head.channels > 0 && param_.reg_max <= static_cast<std::size_t>((head.channels - 1) / 4), false,
-                      "yolov8_keypoint: reg_max exceeds output channels");
-      for (const std::int64_t dims : {2, 3}) {
-        const auto classes = head.channels - static_cast<std::int64_t>(param_.reg_max) * 4 -
-                             static_cast<std::int64_t>(param_.keypoint_num) * dims;
-        if (classes <= 0 || classes > std::numeric_limits<unsigned int>::max())
-          continue;
-        KZ_CHECK_RETURN(param_.class_num == 0, false,
-                        "yolov8_keypoint: ambiguous class count and keypoint dimensions; supply class_num");
-        param_.class_num = static_cast<unsigned int>(classes);
-      }
-      KZ_CHECK_RETURN(param_.class_num > 0, false, "yolov8_keypoint: no positive class count fits the outputs");
-    }
-    const auto shape = keypoint_shape(head.channels - static_cast<std::int64_t>(param_.class_num), param_.keypoint_num,
-                                      param_.reg_max);
-    if (!shape)
-      return false;
-    param_.keypoint_num = shape->count;
-    dims_ = shape->dims;
-    param_.reg_max = shape->reg_max;
+    KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "yolov8_keypoint: keypoint_num must be positive");
     YoloV8Param heads{param_.class_num, param_.strides, param_.reg_max, param_.confidence_threshold,
                       param_.iou_threshold};
-    if (!resolve_yolov8_heads(heads, engine, param_.keypoint_num * dims_))
+    if (!resolve_yolov8_heads(heads, engine, param_.keypoint_num * kKeypointValues))
       return false;
-    param_.reg_max = heads.reg_max;
     param_.strides = std::move(heads.strides);
     param_.confidence_threshold = heads.confidence_threshold;
     param_.iou_threshold = heads.iou_threshold;
@@ -155,10 +116,10 @@ private:
             core::sigmoid(score), static_cast<std::int64_t>(cls), -1};
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
-          const auto channel = first_keypoint + j * dims_;
+          const auto channel = first_keypoint + j * kKeypointValues;
           const core::Point2f point{(grid.at(y, x, channel) * 2.0F + static_cast<float>(x)) * stride.x,
                                     (grid.at(y, x, channel + 1) * 2.0F + static_cast<float>(y)) * stride.y};
-          const auto visibility = dims_ == 3 ? core::sigmoid(grid.at(y, x, channel + 2)) : 1.0F;
+          const auto visibility = core::sigmoid(grid.at(y, x, channel + 2));
           object.keypoints.push_back(
               {point, visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
                visibility});
@@ -169,7 +130,6 @@ private:
 
   YoloV8KeypointParam param_;
   CellScanner scan_;
-  std::size_t dims_ = 0;
   Vector<float> logit_threshold_;
   engine::DataLayout layout_ = engine::DataLayout::Nchw;
   Vector<KeypointResult> candidates_;

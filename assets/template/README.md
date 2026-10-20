@@ -110,10 +110,10 @@ each in [0, 1].
 | `E2EDetect` | `class_num`, `confidence_threshold`; Ultralytics end-to-end `[1, N, 6]` output, no NMS |
 | `E2ERotated` | `class_num`, `confidence_threshold`; end-to-end OBB `[1, N, 7]` |
 | `DetrDetect` | `class_num`, `confidence_threshold` (0.25), `output_format` (`combined`/`separate`), `score_activation` (`none`/`sigmoid`/`softmax`), `background_class` (-1: none) |
-| `GeneralYoloPose` | `class_num`, `keypoint_num` (optional; inferred when unambiguous), `keypoint_threshold` (0.5), thresholds |
-| `YoloV8Keypoint` | at least two of `class_num`, `reg_max`, `keypoint_num`; `keypoint_threshold` (0.5), thresholds |
-| `Yolo26Keypoint` | `class_num`, `keypoint_num` (optional; inferred when unambiguous), `keypoint_threshold` (0.5), thresholds |
-| `E2EKeypoint` | `class_num`, `keypoint_num` (optional; inferred when unambiguous), `keypoint_threshold` (0.5), `confidence_threshold`; end-to-end pose `[1, N, 6 + K x (2 \| 3)]` |
+| `GeneralYoloPose` | `class_num`, `keypoint_num` (17), `keypoint_threshold` (0.5), thresholds |
+| `YoloV8Keypoint` | `class_num`, `reg_max` (16), `keypoint_num` (17), `keypoint_threshold` (0.5), thresholds |
+| `Yolo26Keypoint` | `class_num`, `keypoint_num` (17), `keypoint_threshold` (0.5), thresholds |
+| `E2EKeypoint` | `class_num`, `keypoint_num` (17), `keypoint_threshold` (0.5), `confidence_threshold`; end-to-end pose `[1, N, 6 + K x 3]` |
 | `RtmoKeypoint` | `confidence_threshold` ([0.15]), `iou_threshold` ([0.65]), `keypoint_threshold` (0.3); one class |
 | `GeneralKeypoint` | `general_keypoint_type` (`heatmap`/`heatmap_udp`/`simcc`/`point_with_visible`/`point_channel_first`/`point_channel_last`), `heatmap_refine` (`dark`/`none`), `score_activation` (`none`/`sigmoid`), `keypoint_threshold` (0) |
 | `GeneralYoloSegment` | `class_num`, `mask_threshold` (0.5), thresholds |
@@ -131,26 +131,21 @@ Segmentation identifies the prototype output first and rejects ambiguous output 
 YOLOv8 also infers `reg_max` from the box channels divided by four, after subtracting
 classes and task-specific channels (one angle, keypoint coordinates, or mask coefficients).
 An explicit `reg_max` must be positive and match every head.
-`GeneralYoloPose`, `E2EKeypoint`, `Yolo26Keypoint` and `YoloV8Keypoint` also infer
-`keypoint_num` during initialization. An explicit value must be positive and match the
-output shape. Keypoints may contain two coordinates or two coordinates plus visibility;
-if both interpretations fit, supply `keypoint_num` to disambiguate. Raw YOLOv8 requires at
-least two explicitly supplied positive values among
-`class_num`, `reg_max` and `keypoint_num`; the omitted parameter is inferred. If all three
-are supplied, all are checked. Two supplied values do not resolve every two-versus-three
-component ambiguity: initialization still rejects multiple valid partitions, including
-ambiguous inferred class counts. The face template explicitly lists all three:
-`class_num: 1`, `reg_max: 16`, and `keypoint_num: 5`. Initialization fails if the partition is invalid or ambiguous;
-it does not assume three components or a particular bin count. Segmentation likewise
-requires an unambiguous prototype/head structure; explicit `reg_max` can constrain that match.
+`GeneralYoloPose`, `E2EKeypoint`, `Yolo26Keypoint` and `YoloV8Keypoint` do not infer the
+keypoint layout: each of the `keypoint_num` (17) keypoints has x, y and visibility, the
+Ultralytics `kpt_shape` `[17, 3]`, and `YoloV8Keypoint` uses `reg_max` 16. Initialization
+fails unless the output channels equal classes, box channels and `keypoint_num x 3`; models
+such as the 5-landmark face template set `keypoint_num: 5`.
+Segmentation requires an unambiguous prototype/head structure; explicit `reg_max` can
+constrain that match.
 Engines report outputs sorted by name on every backend; `anchors`, output indices and the
 inferred strides follow that order, excluding the prototype output for segmentation.
 For a 640 x 640 input with outputs `output0` (80 x 80), `393` (40 x 40) and `401` (20 x 20),
 the inferred strides are `[16, 32, 8]`.
 
-`GeneralYoloPose` reads the decoded single output `[1, 4 + classes + K x (2 | 3), N]` of the default
+`GeneralYoloPose` reads the decoded single output `[1, 4 + classes + K x 3, N]` of the default
 Ultralytics export (boxes, sigmoid scores and keypoints already in input pixels). `YoloV8Keypoint`
-reads the raw heads, one `[1, 4 x reg_max + classes + K x (2 | 3), h, w]` output per stride, as NPU
+reads the raw heads, one `[1, 4 x reg_max + classes + K x 3, h, w]` output per stride, as NPU
 exports keep them for quantization: boxes from the distance bins, scores from logits, keypoints at
 `((raw * 2 + cell) * stride)` with sigmoid visibility. Both take any `keypoint_num`, e.g. 5 face
 landmarks; drawing joins a skeleton only for 17 COCO keypoints.
@@ -194,7 +189,7 @@ YOLOv8. Columns, in network-input pixels:
 | Type | Row |
 | --- | --- |
 | `E2EDetect` | x1, y1, x2, y2, score, class id |
-| `E2EKeypoint` | x1, y1, x2, y2, score, class id, then x, y (and visibility) per keypoint |
+| `E2EKeypoint` | x1, y1, x2, y2, score, class id, then x, y and visibility per keypoint |
 | `E2ESegment` | x1, y1, x2, y2, score, class id, mask coefficients; a second `[1, masks, mh, mw]` prototype output, in either order |
 | `E2ERotated` | center x, center y, width, height, score, class id, angle in radians |
 

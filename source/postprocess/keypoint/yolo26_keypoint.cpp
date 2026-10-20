@@ -19,7 +19,7 @@ namespace {
 
 struct Yolo26KeypointParam {
   unsigned int class_num = 0;
-  unsigned int keypoint_num = 0;
+  unsigned int keypoint_num = 17;
   Vector<core::Point2f> strides; // Inferred in init from the input and head sizes; not a config key.
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
@@ -31,7 +31,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Yolo26KeypointParam, class_num, 
                                                 iou_threshold, keypoint_threshold)
 
 // One output per stride with channels left, top, right and bottom distances
-// in cells (no distance bins), class logits, then x, y (and visibility logit)
+// in cells (no distance bins), class logits, then x, y and visibility logit
 // per keypoint, as the one-to-many head of a YOLO26 pose model emits them. A
 // keypoint at cell (x, y) lies at ((raw + x + 0.5) * stride.x, (raw + y + 0.5) * stride.y).
 class Yolo26Keypoint final : public KeypointPostprocessor {
@@ -44,20 +44,9 @@ public:
     if (!is_float_outputs(engine, "yolo26_keypoint"))
       return false;
     param_ = config.get<Yolo26KeypointParam>();
-    KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
-                    "yolo26_keypoint: keypoint_num must be positive");
-    const auto& outputs = engine.output_protos();
-    if (!is_4d_outputs(engine, "yolo26_keypoint"))
-      return false;
-    const auto head = HeadGridShape::from_proto(outputs[0], engine.proto().output_layout);
-    const auto extra = head.channels - static_cast<std::int64_t>(4 + param_.class_num);
-    const auto shape = keypoint_shape(extra, param_.keypoint_num);
-    if (!shape)
-      return false;
-    param_.keypoint_num = shape->count;
-    dims_ = shape->dims;
+    KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "yolo26_keypoint: keypoint_num must be positive");
     Yolo26Param heads{param_.class_num, param_.strides, param_.confidence_threshold, param_.iou_threshold};
-    if (!resolve_yolo26_heads(heads, engine, param_.keypoint_num * dims_))
+    if (!resolve_yolo26_heads(heads, engine, param_.keypoint_num * kKeypointValues))
       return false;
     param_.strides = std::move(heads.strides);
     param_.confidence_threshold = heads.confidence_threshold;
@@ -122,10 +111,10 @@ private:
                       core::sigmoid(score), static_cast<std::int64_t>(cls), -1};
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
-          const auto channel = first_keypoint + j * dims_;
+          const auto channel = first_keypoint + j * kKeypointValues;
           const core::Point2f point{(grid.at(y, x, channel) + cx) * stride.x,
                                     (grid.at(y, x, channel + 1) + cy) * stride.y};
-          const auto visibility = dims_ == 3 ? core::sigmoid(grid.at(y, x, channel + 2)) : 1.0F;
+          const auto visibility = core::sigmoid(grid.at(y, x, channel + 2));
           object.keypoints.push_back(
               {point, visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
                visibility});
@@ -136,7 +125,6 @@ private:
 
   Yolo26KeypointParam param_;
   CellScanner scan_;
-  std::size_t dims_ = 3;
   Vector<float> logit_threshold_;
   engine::DataLayout layout_ = engine::DataLayout::Nchw;
   Vector<KeypointResult> candidates_;

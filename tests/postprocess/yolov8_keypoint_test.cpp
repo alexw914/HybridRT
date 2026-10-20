@@ -2,7 +2,7 @@
 // HybridRT | C++20 Model Inference Framework
 // File: tests/postprocess/yolov8_keypoint_test.cpp
 // Description: Tests raw YOLOv8 pose heads: distance bins, keypoint offsets,
-//              visibility and any keypoint count.
+//              visibility and the keypoint channel contract of pose decoders.
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
@@ -55,103 +55,41 @@ auto head_values() -> hrt::Vector<float> {
 }
 
 auto config() -> Json {
-  return Json::parse(R"({"class_num": 1, "keypoint_num": 2,
+  return Json::parse(R"({"class_num": 1, "reg_max": 2, "keypoint_num": 2,
                          "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
 }
 
-TEST(YoloV8KeypointTest, InfersAndValidatesKeypointCountsAcrossPoseFormats) {
+TEST(YoloV8KeypointTest, ChecksKeypointChannelsAcrossPoseFormats) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   for (const auto* type : {"GeneralYoloPose", "E2EKeypoint", "Yolo26Keypoint", "YoloV8Keypoint"}) {
     const hrt::String name(type);
-    auto options = Json::parse(R"({"class_num":1,"confidence_threshold":[0.5]})");
+    auto options = Json::parse(R"({"class_num":1,"keypoint_num":2,"confidence_threshold":[0.5]})");
     if (name != "E2EKeypoint")
       options["iou_threshold"] = {0.45};
     if (name == "YoloV8Keypoint")
       options["reg_max"] = 2;
-    for (const auto channels : {4, 9, 6}) {
-      hrt::core::Shape shape{1, 5 + channels, 1};
-      if (name == "E2EKeypoint")
-        shape = {1, 1, 6 + channels};
-      else if (name == "Yolo26Keypoint" || name == "YoloV8Keypoint")
-        shape = {1, (name == "YoloV8Keypoint" ? 9 : 5) + channels, 2, 2};
-      FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, shape)});
-      auto automatic = options;
-      if (channels == 6)
-        EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor(type, automatic, engine), "");
-      else
-        EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor(type, automatic, engine), nullptr);
-      automatic["keypoint_num"] = channels == 9 ? 3 : 2;
-      EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor(type, automatic, engine), nullptr);
-      for (const auto count : {0, 7}) {
-        automatic["keypoint_num"] = count;
-        EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor(type, automatic, engine), "");
-      }
+    // Two keypoints of x, y and visibility.
+    hrt::core::Shape shape{1, 5 + 6, 1};
+    if (name == "E2EKeypoint")
+      shape = {1, 1, 6 + 6};
+    else if (name == "Yolo26Keypoint" || name == "YoloV8Keypoint")
+      shape = {1, (name == "YoloV8Keypoint" ? 9 : 5) + 6, 2, 2};
+    FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, shape)});
+    EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor(type, options, engine), nullptr) << type;
+    for (const auto count : {0, 3}) {
+      auto broken = options;
+      broken["keypoint_num"] = count;
+      EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor(type, broken, engine), "") << type << count;
     }
   }
 }
 
-TEST(YoloV8KeypointTest, RequiresTwoExplicitShapeParameters) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
-  FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 24, 2, 2})});
-  auto options = Json::parse(R"({"class_num":1,"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
-  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, engine), "");
-  EXPECT_FALSE(hrt::postprocess::check_config("YoloV8Keypoint", options).empty());
-  options["reg_max"] = 2;
-  EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, engine), nullptr);
-  options["keypoint_num"] = 5;
-  EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, engine), nullptr);
-  options["keypoint_num"] = 4;
-  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, engine), "");
-}
-
-TEST(YoloV8KeypointTest, InfersMissingClassCountAndChecksExplicitValues) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
-  FakeEngine unique({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 13, 2, 2})});
-  auto options = Json::parse(R"({"reg_max":2,"keypoint_num":2,"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
+TEST(YoloV8KeypointTest, DefaultsToSeventeenVisibleKeypointsAndSixteenBins) {
+  // 4 x 16 bins + 1 class + 17 x 3 keypoint values.
+  FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 116, 2, 2})});
+  const auto options = Json::parse(R"({"class_num":1,"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
   EXPECT_TRUE(hrt::postprocess::check_config("YoloV8Keypoint", options).empty());
-  auto decoder = hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, unique);
-  hrt::Vector<float> values(13 * 4, -20.0F);
-  values[8 * 4] = 3.0F;
-  values[9 * 4] = 0.25F;
-  values[10 * 4] = 0.5F;
-  hrt::postprocess::KeypointResultMap result;
-  const auto output = proto(DataType::Float32, {1, 13, 2, 2});
-  ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(16, 16)));
-  ASSERT_EQ(result.at(0).size(), 1U);
-  ASSERT_EQ(result.at(0)[0].keypoints.size(), 2U);
-  EXPECT_FLOAT_EQ(result.at(0)[0].keypoints[0].point.x, 4.0F);
-  EXPECT_FLOAT_EQ(result.at(0)[0].keypoints[0].score, 1.0F);
-  FakeEngine ambiguous({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 15, 2, 2})});
-  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, ambiguous), "");
-  options["class_num"] = 1;
-  EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, ambiguous), nullptr);
-  for (const auto classes : {0, 2, 7}) {
-    options["class_num"] = classes;
-    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, ambiguous), "");
-  }
-  for (const auto* key : {"class_num", "reg_max", "keypoint_num"}) {
-    auto one = Json::parse(R"({"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
-    one[key] = 1;
-    EXPECT_FALSE(hrt::postprocess::check_config("YoloV8Keypoint", one).empty());
-    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", one, unique), "");
-  }
-  auto empty = Json::parse(R"({"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
-  EXPECT_FALSE(hrt::postprocess::check_config("YoloV8Keypoint", empty).empty());
-  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", empty, unique), "");
-}
-
-TEST(YoloV8KeypointTest, RequiresRegMaxForAmbiguousKeypointDimensions) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
-  FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 21, 2, 2})});
-  auto config = Json::parse(R"({"class_num": 1, "keypoint_num": 4,
-                               "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
-  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", config, engine), "");
-  for (const auto bins : {2, 3}) {
-    config["reg_max"] = bins;
-    EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", config, engine), nullptr);
-  }
-  config["reg_max"] = 1;
-  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", config, engine), "");
+  EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, engine), nullptr);
 }
 
 TEST(YoloV8KeypointTest, DecodesBinsAndKeypointOffsets) {

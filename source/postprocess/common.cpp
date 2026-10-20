@@ -210,36 +210,6 @@ auto CellScanner::scan_channel(const HeadGridView& grid, std::size_t channel, fl
   return cells_;
 }
 
-auto keypoint_shape(std::int64_t channels, unsigned int count, std::optional<std::size_t> reg_max)
-    -> std::optional<KeypointShape> {
-  KZ_CHECK_RETURN(channels > 0, std::nullopt, "postprocess: keypoint channels must be positive");
-  std::optional<KeypointShape> found;
-  for (const std::size_t dims : {2U, 3U}) {
-    auto minimum = reg_max ? (*reg_max == 0 ? 1 : *reg_max) : 0;
-    auto maximum = reg_max ? (*reg_max == 0 ? static_cast<std::size_t>(channels / 4) : *reg_max) : 0;
-    if (reg_max && *reg_max == 0 && count != 0) {
-      const auto box_channels = channels - static_cast<std::int64_t>(count) * static_cast<std::int64_t>(dims);
-      if (box_channels <= 0 || box_channels % 4 != 0)
-        continue;
-      minimum = maximum = static_cast<std::size_t>(box_channels / 4);
-    }
-    for (auto bins = minimum; bins <= maximum; ++bins) {
-      if (bins > static_cast<std::size_t>(channels / 4))
-        break;
-      const auto extra = channels - static_cast<std::int64_t>(bins * 4);
-      if (extra <= 0 || extra % static_cast<std::int64_t>(dims) != 0)
-        continue;
-      const auto inferred = static_cast<std::uint64_t>(extra / static_cast<std::int64_t>(dims));
-      if (inferred > std::numeric_limits<unsigned int>::max() || (count != 0 && count != inferred))
-        continue;
-      KZ_CHECK_RETURN(!found, std::nullopt, "postprocess: ambiguous keypoint channels; supply keypoint_num or reg_max");
-      found = KeypointShape{static_cast<unsigned int>(inferred), dims, bins};
-    }
-  }
-  KZ_CHECK_RETURN(found, std::nullopt, "postprocess: channels do not match keypoint_num or reg_max");
-  return found;
-}
-
 auto make_scratch(const engine::Engine& engine) -> Vector<core::Buffer> {
   Vector<core::Buffer> scratch;
   for (const auto& output : engine.output_protos()) {

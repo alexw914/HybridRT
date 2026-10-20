@@ -2,7 +2,7 @@
 // HybridRT | C++20 Model Inference Framework
 // File: source/postprocess/keypoint/e2e_keypoint.cpp
 // Description: Implements decoding of Ultralytics end-to-end pose exports,
-//              [1, N, 6 + keypoints * (2 | 3)] without NMS.
+//              [1, N, 6 + keypoints * 3] without NMS.
 // -----------------------------------------------------------------------------
 
 #include <kitzoo/core/macro.hpp>
@@ -17,7 +17,7 @@ namespace {
 
 struct E2EKeypointParam {
   unsigned int class_num = 0;
-  unsigned int keypoint_num = 0;
+  unsigned int keypoint_num = 17;
   Vector<float> confidence_threshold;
   // Visibility score above which a keypoint counts as visible.
   float keypoint_threshold = 0.5F;
@@ -26,8 +26,8 @@ struct E2EKeypointParam {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2EKeypointParam, class_num, keypoint_num, confidence_threshold,
                                                 keypoint_threshold)
 
-// One output [1, N, 6 + keypoints * (2 | 3)]: per row x1, y1, x2, y2, score
-// and class id, then x, y (and visibility) per keypoint, all in network-input
+// One output [1, N, 6 + keypoints * 3]: per row x1, y1, x2, y2, score
+// and class id, then x, y and visibility per keypoint, all in network-input
 // pixels, as YOLO26 (nms=False) and YOLOv8 (nms=True) pose exports write
 // them. Rows are already deduplicated; unused rows score 0.
 class E2EKeypoint final : public KeypointPostprocessor {
@@ -40,8 +40,7 @@ public:
     if (!is_float_outputs(engine, "e2e_keypoint"))
       return false;
     param_ = config.get<E2EKeypointParam>();
-    KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
-                    "e2e_keypoint: keypoint_num must be positive");
+    KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "e2e_keypoint: keypoint_num must be positive");
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
       return false;
@@ -49,12 +48,8 @@ public:
     KZ_CHECK_RETURN(engine.input_protos().size() == 1 && outputs.size() == 1 && outputs[0].shape.size() == 3 &&
                         outputs[0].shape[0] == 1 && outputs[0].shape[1] > 0,
                     false, "e2e_keypoint: needs one input and one [1, N, columns] output");
-    const auto extra = outputs[0].shape[2] - 6;
-    const auto shape = keypoint_shape(extra, param_.keypoint_num);
-    if (!shape)
-      return false;
-    param_.keypoint_num = shape->count;
-    dims_ = shape->dims;
+    KZ_CHECK_RETURN(outputs[0].shape[2] == 6 + static_cast<std::int64_t>(param_.keypoint_num * kKeypointValues), false,
+                    "e2e_keypoint: output columns do not match keypoint_num");
     return true;
   }
 
@@ -64,7 +59,6 @@ protected:
     const HeadGridView output(*outputs[0], std::nullopt);
     const auto count = static_cast<std::size_t>(outputs[0]->shape()[1]);
     const auto columns = outputs[0]->shape()[2];
-    const auto dims = static_cast<std::int64_t>(dims_);
     for (std::size_t i = 0; i < count; ++i) {
       const auto label = output.at(i, 5);
       // Also skips NaN class ids, scores and boxes.
@@ -84,8 +78,8 @@ protected:
       auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
       object.box = {box, score, static_cast<std::int64_t>(cls), -1};
       object.keypoints.reserve(param_.keypoint_num);
-      for (std::int64_t c = 6; c < columns; c += dims) {
-        const auto visibility = dims == 3 ? output.at(i, c + 2) : 1.0F;
+      for (std::int64_t c = 6; c < columns; c += static_cast<std::int64_t>(kKeypointValues)) {
+        const auto visibility = output.at(i, c + 2);
         object.keypoints.push_back(
             {transform.to_source(core::Point2f{output.at(i, c), output.at(i, c + 1)}),
              visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
@@ -97,7 +91,6 @@ protected:
 
 private:
   E2EKeypointParam param_;
-  std::size_t dims_ = 3;
 };
 
 } // namespace

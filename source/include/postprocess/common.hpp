@@ -25,6 +25,9 @@
 
 namespace hrt::postprocess {
 
+// Values per pose keypoint: x, y and visibility.
+inline constexpr std::size_t kKeypointValues = 3;
+
 auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* name) -> bool;
 
 // Whether every engine output is float32 or int8, the types HeadGridView and
@@ -33,17 +36,6 @@ auto is_float_outputs(const engine::Engine& engine, std::string_view name) -> bo
 
 // Whether the engine has outputs and every one is 4-D, as HeadGridShape expects.
 auto is_4d_outputs(const engine::Engine& engine, std::string_view name) -> bool;
-
-struct KeypointShape {
-  unsigned int count = 0;
-  std::size_t dims = 0;
-  std::size_t reg_max = 0;
-};
-
-// Resolves a unique channel partition into keypoints and optional DFL bins.
-// A zero count or bin count requests inference; nullopt means no DFL channels.
-auto keypoint_shape(std::int64_t channels, unsigned int count, std::optional<std::size_t> reg_max = std::nullopt)
-    -> std::optional<KeypointShape>;
 
 // Batch, channels, rows and cols of one 4-D output under the engine layout.
 struct HeadGridShape {

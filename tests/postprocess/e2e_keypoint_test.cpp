@@ -92,21 +92,6 @@ TEST(E2EKeypointTest, MapsRowsAndKeypointsWithoutNms) {
   EXPECT_EQ(hrt::model::task_of("E2EKeypoint"), hrt::model::Task::Keypoint);
 }
 
-TEST(E2EKeypointTest, ReadsKeypointsWithoutVisibility) {
-  const auto output = proto(DataType::Float32, {1, 1, 8});
-  FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
-  const auto config = Json::parse(R"({"class_num": 2, "confidence_threshold": [0.25]})");
-  auto decoder = hrt::postprocess::create_keypoint_postprocessor("E2EKeypoint", config, engine);
-  hrt::postprocess::KeypointResultMap result;
-  ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of<float>(output, {10, 10, 30, 20, 0.9F, 1, 20, 15})},
-                               hrt::test::identity(40, 40)));
-  ASSERT_TRUE(result.contains(1));
-  const auto& point = result.at(1)[0].keypoints[0];
-  EXPECT_FLOAT_EQ(point.point.x, 20.0F);
-  EXPECT_FLOAT_EQ(point.score, 1.0F);
-  EXPECT_EQ(point.visible, hrt::postprocess::KeypointVisible::Visible);
-}
-
 TEST(E2EKeypointTest, AbortsOnInvalidConfigOrOutputs) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto input = proto(DataType::Float32, {1, 3, 8, 8});

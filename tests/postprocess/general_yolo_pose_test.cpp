@@ -52,26 +52,6 @@ TEST(GeneralYoloPoseTest, KeepsTheBestBoxWithItsKeypoints) {
   EXPECT_EQ(object.keypoints[1].visible, KeypointVisible::Invisible);
 }
 
-TEST(GeneralYoloPoseTest, DecodesKeypointsWithoutVisibility) {
-  // [1, 4 + 1 class + 2 keypoints x 2, 1 candidate].
-  const auto output = proto(DataType::Float32, {1, 9, 1});
-  hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
-  auto automatic = config();
-  automatic.erase("keypoint_num");
-  auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("GeneralYoloPose", automatic, engine);
-
-  hrt::postprocess::KeypointResultMap result;
-  ASSERT_TRUE(postprocessor->process(result,
-                                     {hrt::test::buffer_of<float>(output, {20, 20, 20, 20, 0.9F, 12, 14, 28, 26})},
-                                     hrt::test::identity(40, 40)));
-  ASSERT_EQ(result.at(0).size(), 1U);
-  const auto& keypoints = result.at(0)[0].keypoints;
-  ASSERT_EQ(keypoints.size(), 2U);
-  EXPECT_FLOAT_EQ(keypoints[1].point.x, 28.0F);
-  EXPECT_FLOAT_EQ(keypoints[1].point.y, 26.0F);
-  EXPECT_EQ(keypoints[1].visible, KeypointVisible::Visible);
-}
-
 TEST(GeneralYoloPoseTest, AbortsOnOutputsThatDoNotFit) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {proto(DataType::Float32, {1, 10, 4})});
