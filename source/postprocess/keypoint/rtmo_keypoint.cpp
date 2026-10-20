@@ -57,10 +57,10 @@ public:
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const HeadGrid boxes(*outputs[boxes_index_], std::nullopt);
+    const HeadGridView boxes(*outputs[boxes_index_], std::nullopt);
     // [1, M, K, 3] keypoints as an NHWC grid of M rows, K cells, 3 channels.
     const auto& points_output = *outputs[1 - boxes_index_];
-    const HeadGrid points(points_output, engine::DataLayout::Nhwc);
+    const HeadGridView points(points_output, engine::DataLayout::Nhwc);
     const auto count = static_cast<std::size_t>(outputs[boxes_index_]->shape()[1]);
     const auto keypoint_num = static_cast<std::size_t>(points_output.shape()[2]);
 

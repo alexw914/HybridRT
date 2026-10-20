@@ -65,7 +65,7 @@ public:
 protected:
   auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const HeadGrid prototypes(*outputs[outputs_.prototypes], layout_);
+    const HeadGridView prototypes(*outputs[outputs_.prototypes], layout_);
     rects_.resize(param_.class_num);
     scores_.resize(param_.class_num);
     coefficients_.resize(param_.class_num);
@@ -75,7 +75,7 @@ protected:
       coefficients_[cls].clear();
     }
     for (std::size_t k = 0; k < outputs_.heads.size(); ++k) {
-      const HeadGrid grid(*outputs[outputs_.heads[k]], layout_);
+      const HeadGridView grid(*outputs[outputs_.heads[k]], layout_);
       decode_head(grid, param_.strides[k]);
     }
     const auto masks = outputs_.masks;
@@ -95,7 +95,7 @@ protected:
   }
 
 private:
-  auto decode_head(const HeadGrid& grid, core::Point2f stride) -> void {
+  auto decode_head(const HeadGridView& grid, core::Point2f stride) -> void {
     const auto first_mask = 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
     for (const auto cell : scan_.scan_max_score(grid, 4, param_.class_num, min_score)) {

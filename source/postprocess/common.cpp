@@ -74,19 +74,19 @@ auto is_4d_outputs(const engine::Engine& engine, std::string_view name) -> bool 
   return true;
 }
 
-auto HeadShape::from_proto(const core::BufferProto& proto, engine::DataLayout layout) -> HeadShape {
+auto HeadGridShape::from_proto(const core::BufferProto& proto, engine::DataLayout layout) -> HeadGridShape {
   const auto& shape = proto.shape;
   if (layout == engine::DataLayout::Nchw)
-    return HeadShape{shape[0], shape[1], shape[2], shape[3]};
-  return HeadShape{shape[0], shape[3], shape[1], shape[2]};
+    return HeadGridShape{shape[0], shape[1], shape[2], shape[3]};
+  return HeadGridShape{shape[0], shape[3], shape[1], shape[2]};
 }
 
-auto HeadShape::stride(core::Size input) const -> core::Point2f {
+auto HeadGridShape::stride(core::Size input) const -> core::Point2f {
   return {static_cast<float>(static_cast<double>(input.width) / static_cast<double>(cols)),
           static_cast<float>(static_cast<double>(input.height) / static_cast<double>(rows))};
 }
 
-HeadGrid::HeadGrid(const core::Buffer& buffer, std::optional<engine::DataLayout> layout)
+HeadGridView::HeadGridView(const core::Buffer& buffer, std::optional<engine::DataLayout> layout)
     : int8_(buffer.data_type() == core::DataType::Int8), scale_(buffer.scale), zero_point_(buffer.zero_point) {
   const auto& shape = buffer.shape();
   const auto& stride = buffer.stride();
@@ -113,7 +113,7 @@ HeadGrid::HeadGrid(const core::Buffer& buffer, std::optional<engine::DataLayout>
   data_ = buffer.memory()->cpu();
 }
 
-auto HeadGrid::raw_bound(float threshold) const -> float {
+auto HeadGridView::raw_bound(float threshold) const -> float {
   if (!int8_)
     return threshold;
   if (!(scale_ > 0.0F))
@@ -134,7 +134,7 @@ auto typed_bound(float bound) {
 }
 
 template <typename T>
-auto scan_max_cells(const HeadGrid& grid, std::size_t first, std::size_t count, float raw_bound, Vector<T>& best,
+auto scan_max_cells(const HeadGridView& grid, std::size_t first, std::size_t count, float raw_bound, Vector<T>& best,
                     Vector<std::uint32_t>& cells) -> void {
   const auto rows = grid.rows();
   const auto cols = grid.cols();
@@ -179,7 +179,7 @@ auto scan_max_cells(const HeadGrid& grid, std::size_t first, std::size_t count, 
 }
 
 template <typename T>
-auto scan_channel_cells(const HeadGrid& grid, std::size_t channel, float threshold, Vector<std::uint32_t>& cells)
+auto scan_channel_cells(const HeadGridView& grid, std::size_t channel, float threshold, Vector<std::uint32_t>& cells)
     -> void {
   const auto* values = grid.row<T>(0, channel);
   const auto step = grid.col_step();
@@ -193,7 +193,7 @@ auto scan_channel_cells(const HeadGrid& grid, std::size_t channel, float thresho
 
 } // namespace
 
-auto CellScanner::scan_max_score(const HeadGrid& grid, std::size_t first, std::size_t count, float bound)
+auto CellScanner::scan_max_score(const HeadGridView& grid, std::size_t first, std::size_t count, float bound)
     -> const Vector<std::uint32_t>& {
   if (grid.int8())
     scan_max_cells(grid, first, count, bound, int8_best_, cells_);
@@ -202,7 +202,7 @@ auto CellScanner::scan_max_score(const HeadGrid& grid, std::size_t first, std::s
   return cells_;
 }
 
-auto CellScanner::scan_channel(const HeadGrid& grid, std::size_t channel, float threshold)
+auto CellScanner::scan_channel(const HeadGridView& grid, std::size_t channel, float threshold)
     -> const Vector<std::uint32_t>& {
   if (grid.int8())
     scan_channel_cells<std::int8_t>(grid, channel, threshold, cells_);

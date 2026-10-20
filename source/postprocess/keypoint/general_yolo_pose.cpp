@@ -62,13 +62,13 @@ public:
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const HeadGrid rows(*outputs[0], std::nullopt);
+    const HeadGridView rows(*outputs[0], std::nullopt);
     decode_rows(result, rows, transform);
     return true;
   }
 
 private:
-  auto decode_rows(KeypointResultMap& result, const HeadGrid& rows, const preprocess::ImageTransform& transform)
+  auto decode_rows(KeypointResultMap& result, const HeadGridView& rows, const preprocess::ImageTransform& transform)
       -> void {
     const auto at = [&](std::size_t row, std::uint32_t i) -> float { return rows.at(0, i, row); };
     const auto classes = param_.class_num;

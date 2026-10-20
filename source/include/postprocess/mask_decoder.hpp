@@ -16,7 +16,7 @@
 
 namespace hrt::postprocess {
 
-class HeadGrid;
+class HeadGridView;
 
 // Keeps its scratch buffers between masks; not thread-safe.
 class MaskDecoder {
@@ -25,7 +25,7 @@ public:
   // the box's source pixels and thresholded as a logit. The prototype grid
   // has one channel per coefficient; only the box region is read, and int8
   // prototypes are accumulated without being dequantized.
-  auto decode(const HeadGrid& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
+  auto decode(const HeadGridView& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
               const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit) -> Mask;
 
 private:

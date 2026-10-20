@@ -21,7 +21,8 @@ namespace {
 
 // Adds weights[j] * channel j of the region, read as T, to `logits`.
 template <typename T>
-auto accumulate(const HeadGrid& grid, const Vector<float>& weights, const core::Rect& region, cv::Mat& logits) -> void {
+auto accumulate(const HeadGridView& grid, const Vector<float>& weights, const core::Rect& region, cv::Mat& logits)
+    -> void {
   const auto step = grid.col_step();
   for (std::size_t j = 0; j < weights.size(); ++j) {
     const auto weight = weights[j];
@@ -42,7 +43,7 @@ auto accumulate(const HeadGrid& grid, const Vector<float>& weights, const core::
 
 } // namespace
 
-auto MaskDecoder::decode(const HeadGrid& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
+auto MaskDecoder::decode(const HeadGridView& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
                          const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit)
     -> Mask {
   Mask mask;
@@ -145,7 +146,7 @@ auto find_raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f
   Vector<core::Point2f> inferred;
   std::size_t selected_channels = 0;
   for (std::size_t candidate = 0; candidate < outputs.size(); ++candidate) {
-    const auto proto = HeadShape::from_proto(outputs[candidate], layout);
+    const auto proto = HeadGridShape::from_proto(outputs[candidate], layout);
     if (proto.batch != 1 || proto.channels <= 0 || proto.rows <= 0 || proto.cols <= 0)
       continue;
     RawSegmentOutputs found{{}, candidate, static_cast<std::size_t>(proto.channels)};
@@ -155,7 +156,7 @@ auto find_raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f
     for (std::size_t i = 0; i < outputs.size() && fits; ++i) {
       if (i == candidate)
         continue;
-      const auto head = HeadShape::from_proto(outputs[i], layout);
+      const auto head = HeadGridShape::from_proto(outputs[i], layout);
       const auto channels = head.channels - static_cast<std::int64_t>(classes) - static_cast<std::int64_t>(found.masks);
       fits = channels > 0 && channels % 4 == 0;
       if (fits && candidate_channels == 0)

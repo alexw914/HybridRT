@@ -61,7 +61,7 @@ public:
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const HeadGrid output(*outputs[0], std::nullopt);
+    const HeadGridView output(*outputs[0], std::nullopt);
     const auto count = static_cast<std::size_t>(outputs[0]->shape()[1]);
     const auto columns = outputs[0]->shape()[2];
     const auto dims = static_cast<std::int64_t>(dims_);

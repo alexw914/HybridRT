@@ -63,15 +63,15 @@ public:
 protected:
   auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const HeadGrid prototypes(*outputs[prototypes_], engine::DataLayout::Nchw);
-    const HeadGrid det(*outputs[detections_], std::nullopt);
+    const HeadGridView prototypes(*outputs[prototypes_], engine::DataLayout::Nchw);
+    const HeadGridView det(*outputs[detections_], std::nullopt);
     decode_rows(result, det, transform, prototypes, static_cast<std::size_t>(outputs[prototypes_]->shape()[1]));
     return true;
   }
 
 private:
-  auto decode_rows(SegmentResultMap& result, const HeadGrid& det, const preprocess::ImageTransform& transform,
-                   const HeadGrid& prototypes, std::size_t masks) -> void {
+  auto decode_rows(SegmentResultMap& result, const HeadGridView& det, const preprocess::ImageTransform& transform,
+                   const HeadGridView& prototypes, std::size_t masks) -> void {
     const auto at = [&](std::size_t row, std::uint32_t i) -> float { return det.at(0, i, row); };
     const auto classes = param_.class_num;
     rects_.resize(classes);

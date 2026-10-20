@@ -43,14 +43,14 @@ protected:
   auto decode(RotatedResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
     for (std::size_t head = 0; head < outputs.size(); ++head) {
-      const HeadGrid grid(*outputs[head], layout_);
+      const HeadGridView grid(*outputs[head], layout_);
       decode_head(result, grid, param_.strides[head]);
     }
     return nms_rotated_to_source(result, param_.iou_threshold, transform);
   }
 
 private:
-  auto decode_head(RotatedResultMap& result, const HeadGrid& grid, core::Point2f stride) -> void {
+  auto decode_head(RotatedResultMap& result, const HeadGridView& grid, core::Point2f stride) -> void {
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
     for (const auto cell : scan_.scan_max_score(grid, 5, param_.class_num, min_score)) {
       const std::int64_t y = cell / grid.cols();

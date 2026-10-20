@@ -57,8 +57,8 @@ protected:
   auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
     const bool combined = param_.output_format == DetrOutputFormat::Combined;
-    const HeadGrid boxes(*outputs[0], std::nullopt);
-    const HeadGrid scores(*outputs[combined ? 0 : 1], std::nullopt);
+    const HeadGridView boxes(*outputs[0], std::nullopt);
+    const HeadGridView scores(*outputs[combined ? 0 : 1], std::nullopt);
     const std::int64_t score_first = combined ? 4 : 0;
     logits_.resize(score_channels_);
     for (std::size_t i = 0; i < count_; ++i) {

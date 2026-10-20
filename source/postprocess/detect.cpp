@@ -74,7 +74,7 @@ auto resolve_yolov5_heads(YoloV5Param& param, const engine::Engine& engine, std:
                   "yolov5: needs one anchor list per head, got {} outputs", outputs.size());
   Vector<core::Point2f> inferred;
   for (std::size_t i = 0; i < outputs.size(); ++i) {
-    const auto head = HeadShape::from_proto(outputs[i], engine.proto().output_layout);
+    const auto head = HeadGridShape::from_proto(outputs[i], engine.proto().output_layout);
     const auto anchors = param.anchors[i].size() / 2;
     if (anchors == 0 || param.anchors[i].size() % 2 != 0 ||
         static_cast<std::size_t>(head.channels) != (param.class_num + 5 + extra_channels) * anchors) {
@@ -95,7 +95,7 @@ auto resolve_yolov8_heads(YoloV8Param& param, const engine::Engine& engine, std:
     return false;
   const auto input = *engine.input_size();
   const auto& outputs = engine.output_protos();
-  const auto channels = HeadShape::from_proto(outputs.front(), engine.proto().output_layout).channels -
+  const auto channels = HeadGridShape::from_proto(outputs.front(), engine.proto().output_layout).channels -
                         static_cast<std::int64_t>(param.class_num) - static_cast<std::int64_t>(extra_channels);
   KZ_CHECK_RETURN(channels > 0 && channels % 4 == 0, false, "yolov8: invalid channels for reg_max");
   const auto inferred_bins = static_cast<std::size_t>(channels / 4);
@@ -104,7 +104,7 @@ auto resolve_yolov8_heads(YoloV8Param& param, const engine::Engine& engine, std:
   param.reg_max = inferred_bins;
   Vector<core::Point2f> inferred;
   for (std::size_t i = 0; i < outputs.size(); ++i) {
-    const auto head = HeadShape::from_proto(outputs[i], engine.proto().output_layout);
+    const auto head = HeadGridShape::from_proto(outputs[i], engine.proto().output_layout);
     if (static_cast<std::size_t>(head.channels) != param.reg_max * 4 + param.class_num + extra_channels) {
       KZ_LOG_ERROR("yolov8: output {} does not match reg_max or class_num", i);
       return false;

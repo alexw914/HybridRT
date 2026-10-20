@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/include/postprocess/common.hpp
-// Description: Declares helpers shared by postprocessors: head views, output
+// Description: Declares helpers shared by postprocessors: head grid views, output
 //              validation and float views of outputs.
 // -----------------------------------------------------------------------------
 
@@ -27,26 +27,12 @@ namespace hrt::postprocess {
 
 auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* name) -> bool;
 
-// Whether every engine output is float32 or int8, the types HeadGrid and
+// Whether every engine output is float32 or int8, the types HeadGridView and
 // float_view() read. Checked once in init, so decode() relies on it.
 auto is_float_outputs(const engine::Engine& engine, std::string_view name) -> bool;
 
-// Whether the engine has outputs and every one is 4-D, as HeadShape expects.
+// Whether the engine has outputs and every one is 4-D, as HeadGridShape expects.
 auto is_4d_outputs(const engine::Engine& engine, std::string_view name) -> bool;
-
-// Batch, channels and grid of one 4-D head output.
-struct HeadShape {
-  std::int64_t batch = 0;
-  std::int64_t channels = 0;
-  std::int64_t rows = 0;
-  std::int64_t cols = 0;
-
-  // `proto` must be 4-D; see is_4d_outputs().
-  static auto from_proto(const core::BufferProto& proto, engine::DataLayout layout) -> HeadShape;
-
-  // Input-to-head scale along x and y.
-  KZ_NODISCARD auto stride(core::Size input) const -> core::Point2f;
-};
 
 struct KeypointShape {
   unsigned int count = 0;
@@ -59,13 +45,27 @@ struct KeypointShape {
 auto keypoint_shape(std::int64_t channels, unsigned int count, std::optional<std::size_t> reg_max = std::nullopt)
     -> std::optional<KeypointShape>;
 
-// Element access into one detection head output, NCHW or NHWC, float32 or
-// quantized int8, honoring buffer strides. Without a layout, a decoded
+// Batch, channels, rows and cols of one 4-D output under the engine layout.
+struct HeadGridShape {
+  std::int64_t batch = 0;
+  std::int64_t channels = 0;
+  std::int64_t rows = 0;
+  std::int64_t cols = 0;
+
+  // `proto` must be 4-D; see is_4d_outputs().
+  static auto from_proto(const core::BufferProto& proto, engine::DataLayout layout) -> HeadGridShape;
+
+  // Input-to-head scale along x and y.
+  KZ_NODISCARD auto stride(core::Size input) const -> core::Point2f;
+};
+
+// Element access into one engine output as a grid of rows x cols cells with
+// channels, NCHW or NHWC, float32 or quantized int8, honoring buffer strides. Without a layout, a decoded
 // [1, rows, N] output is one grid row of N cells whose channels are its rows.
 // Other data types are rejected in init by is_float_outputs().
-class HeadGrid {
+class HeadGridView {
 public:
-  HeadGrid(const core::Buffer& buffer, std::optional<engine::DataLayout> layout);
+  HeadGridView(const core::Buffer& buffer, std::optional<engine::DataLayout> layout);
 
   KZ_NODISCARD auto int8() const -> bool { return int8_; }
 
@@ -127,17 +127,17 @@ private:
 class CellScanner {
 public:
   // Cells (y * cols + x) whose largest raw score over channels [first, first +
-  // count) is at least `bound` (a HeadGrid::raw_bound()), in row-major order.
+  // count) is at least `bound` (a HeadGridView::raw_bound()), in row-major order.
   // With NCHW heads the class planes are read one after another into a
   // running maximum, a sequential pass the compiler vectorizes, instead of
   // striding every plane for every cell; int8 scores stay int8.
-  auto scan_max_score(const HeadGrid& grid, std::size_t first, std::size_t count, float bound)
+  auto scan_max_score(const HeadGridView& grid, std::size_t first, std::size_t count, float bound)
       -> const Vector<std::uint32_t>&;
 
   // Cells x of row 0, in order, whose `channel` value exceeds `threshold`.
   // int8 values are compared as integers against the bound and dequantized
   // only when they reach it.
-  auto scan_channel(const HeadGrid& grid, std::size_t channel, float threshold) -> const Vector<std::uint32_t>&;
+  auto scan_channel(const HeadGridView& grid, std::size_t channel, float threshold) -> const Vector<std::uint32_t>&;
 
 private:
   Vector<float> float_best_;
@@ -147,7 +147,8 @@ private:
 
 // Expected value of the softmax over `bins` consecutive channels starting at
 // `first` (YOLOv8 distribution focal loss decoding).
-inline auto dfl(const HeadGrid& grid, std::int64_t y, std::int64_t x, std::size_t first, std::size_t bins) -> float {
+inline auto dfl(const HeadGridView& grid, std::int64_t y, std::int64_t x, std::size_t first, std::size_t bins)
+    -> float {
   auto max = grid.at(y, x, first);
   for (std::size_t i = 1; i < bins; ++i)
     max = std::max(max, grid.at(y, x, first + i));
@@ -166,7 +167,7 @@ inline auto dfl(const HeadGrid& grid, std::int64_t y, std::int64_t x, std::size_
 // holding a dequantized or packed copy, created on first use and resized only
 // when the output shape changes. The output must be float32 or int8, as
 // is_float_outputs() checks in init.
-// Decoders reading part of an output use HeadGrid instead.
+// Decoders reading part of an output use HeadGridView instead.
 auto float_view(const SharedPtr<core::Buffer>& output, SharedPtr<core::Buffer>& scratch) -> SharedPtr<core::Buffer>;
 
 auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)

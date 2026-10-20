@@ -49,7 +49,7 @@ public:
     const auto& outputs = engine.output_protos();
     if (!is_4d_outputs(engine, "yolo26_keypoint"))
       return false;
-    const auto head = HeadShape::from_proto(outputs[0], engine.proto().output_layout);
+    const auto head = HeadGridShape::from_proto(outputs[0], engine.proto().output_layout);
     const auto extra = head.channels - static_cast<std::int64_t>(4 + param_.class_num);
     const auto shape = keypoint_shape(extra, param_.keypoint_num);
     if (!shape)
@@ -77,7 +77,7 @@ protected:
       per_class.clear();
     candidates_.resize(param_.class_num);
     for (std::size_t head = 0; head < outputs.size(); ++head) {
-      const HeadGrid grid(*outputs[head], layout_);
+      const HeadGridView grid(*outputs[head], layout_);
       decode_head(grid, param_.strides[head]);
     }
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
@@ -102,7 +102,7 @@ protected:
   }
 
 private:
-  auto decode_head(const HeadGrid& grid, core::Point2f stride) -> void {
+  auto decode_head(const HeadGridView& grid, core::Point2f stride) -> void {
     const auto first_keypoint = 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
     for (const auto cell : scan_.scan_max_score(grid, 4, param_.class_num, min_score)) {

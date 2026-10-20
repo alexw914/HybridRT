@@ -47,13 +47,13 @@ public:
 protected:
   auto decode(RotatedResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const HeadGrid rows(*outputs[0], std::nullopt);
+    const HeadGridView rows(*outputs[0], std::nullopt);
     decode_rows(result, rows);
     return nms_rotated_to_source(result, param_.iou_threshold, transform);
   }
 
 private:
-  auto decode_rows(RotatedResultMap& result, const HeadGrid& rows) -> void {
+  auto decode_rows(RotatedResultMap& result, const HeadGridView& rows) -> void {
     const auto at = [&](std::size_t row, std::uint32_t i) -> float { return rows.at(0, i, row); };
     const auto angle_row = param_.class_num + 4;
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {

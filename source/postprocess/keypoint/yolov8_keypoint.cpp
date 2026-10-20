@@ -62,7 +62,7 @@ public:
     const auto& outputs = engine.output_protos();
     if (!is_4d_outputs(engine, "yolov8_keypoint"))
       return false;
-    const auto head = HeadShape::from_proto(outputs[0], engine.proto().output_layout);
+    const auto head = HeadGridShape::from_proto(outputs[0], engine.proto().output_layout);
     if (!config.contains("class_num")) {
       KZ_CHECK_RETURN(head.channels > 0 && param_.reg_max <= static_cast<std::size_t>((head.channels - 1) / 4), false,
                       "yolov8_keypoint: reg_max exceeds output channels");
@@ -107,7 +107,7 @@ protected:
       per_class.clear();
     candidates_.resize(param_.class_num);
     for (std::size_t head = 0; head < outputs.size(); ++head) {
-      const HeadGrid grid(*outputs[head], layout_);
+      const HeadGridView grid(*outputs[head], layout_);
       decode_head(grid, param_.strides[head]);
     }
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
@@ -132,7 +132,7 @@ protected:
   }
 
 private:
-  auto decode_head(const HeadGrid& grid, core::Point2f stride) -> void {
+  auto decode_head(const HeadGridView& grid, core::Point2f stride) -> void {
     const auto bins = param_.reg_max;
     const auto first_keypoint = bins * 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
