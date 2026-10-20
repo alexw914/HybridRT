@@ -46,11 +46,7 @@ auto MaskDecoder::make(const HeadGrid& prototypes, const Vector<float>& coeffici
                        const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit)
     -> Mask {
   Mask mask;
-  const auto x0 = static_cast<int>(std::floor(source_box.x));
-  const auto y0 = static_cast<int>(std::floor(source_box.y));
-  mask.rect = core::intersect(core::Rect{x0, y0, static_cast<int>(std::ceil(source_box.x + source_box.width)) - x0,
-                                         static_cast<int>(std::ceil(source_box.y + source_box.height)) - y0},
-                              transform.src_roi);
+  mask.rect = core::intersect(core::cover_pixels(source_box), transform.src_roi);
   if (mask.rect.empty())
     return mask;
 

@@ -49,8 +49,9 @@ directly. Fusion and fallback decisions do not change the model's preprocess par
 
 A cascade passes each detection as `src_rect` to `process_sync`. Only `pad_outside` clips it to
 the image; for the other resize types a region leaving the image fails the call, so grow and clip
-detections with `hrt::core::pad_scale(box, scale_w, scale_h, image.rect())`. `center_crop` can still
-leave a clipped box when `resize_short_size` is below the input size.
+detections with `intersect(cover_pixels(pad_scale(box, scale_w, scale_h)), image.rect())` from
+`hrt::core`. `center_crop` can still leave a clipped box when `resize_short_size` is below the
+input size.
 
 ## Engine config
 

@@ -98,7 +98,8 @@ public:
 
   // Thread-safe; results are in source coordinates. `src_rect` must lie
   // inside `src` unless the preprocess resize_type is pad_outside; cascades
-  // grow and clip detections with core::pad_scale.
+  // grow and clip detections with core::pad_scale, core::cover_pixels and
+  // core::intersect.
   auto process_sync(const core::Image& src, const core::Rect& src_rect = {}) -> std::optional<Result>;
 
   KZ_NODISCARD auto context() const -> const SharedPtr<core::Context>& { return context_; }

@@ -388,7 +388,7 @@ TEST_F(ImageModelTest, RejectsCropsLeavingTheFrameUnlessClipped) {
   // A detection running past the bottom-right corner, as YOLO boxes may.
   const hrt::core::Rect2f detection{58.0F, 40.0F, 12.0F, 12.0F};
   const hrt::core::Rect raw{58, 40, 12, 12};
-  const auto clipped = hrt::core::pad_scale(detection, 1.0F, 1.0F, frame.rect());
+  const auto clipped = hrt::core::intersect(hrt::core::cover_pixels(detection), frame.rect());
   ASSERT_EQ(clipped, (hrt::core::Rect{58, 40, 6, 8}));
   for (const char* type : {"normal", "keep_ratio", "letter_box", "center_crop", "pad_outside"}) {
     SCOPED_TRACE(type);
@@ -411,7 +411,8 @@ TEST_F(ImageModelTest, FeedsHeadsGrownWithPadScale) {
   hrt::Vector<std::uint8_t> pixels;
   const auto frame = position_frame(pixels);
   // A head detected at the top edge, grown by 1.5 and clipped to the frame.
-  const auto head = hrt::core::pad_scale({40.3F, 0.6F, 7.5F, 7.8F}, 1.5F, 1.5F, frame.rect());
+  const auto head = hrt::core::intersect(
+      hrt::core::cover_pixels(hrt::core::pad_scale(hrt::core::Rect2f{40.3F, 0.6F, 7.5F, 7.8F}, 1.5F)), frame.rect());
   ASSERT_EQ(head, (hrt::core::Rect{38, 0, 12, 11}));
   for (const char* type : {"normal", "pad_outside"}) {
     SCOPED_TRACE(type);

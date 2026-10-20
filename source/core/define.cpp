@@ -7,7 +7,6 @@
 #include <hrt/core/define.hpp>
 
 #include <algorithm>
-#include <cmath>
 
 namespace hrt::core {
 
@@ -73,20 +72,6 @@ auto contiguous_stride(const Shape& shape, DataType type) -> Stride {
     stride[i - 1] = step;
   }
   return stride;
-}
-
-auto pad_scale(const Rect2f& rect, float scale_w, float scale_h, const Rect& bounds) -> Rect {
-  const auto width = static_cast<double>(rect.width);
-  const auto height = static_cast<double>(rect.height);
-  const auto cx = static_cast<double>(rect.x) + (width / 2.0);
-  const auto cy = static_cast<double>(rect.y) + (height / 2.0);
-  const auto half_w = width * static_cast<double>(scale_w) / 2.0;
-  const auto half_h = height * static_cast<double>(scale_h) / 2.0;
-  const auto x1 = static_cast<int>(std::floor(cx - half_w));
-  const auto y1 = static_cast<int>(std::floor(cy - half_h));
-  const auto x2 = static_cast<int>(std::ceil(cx + half_w));
-  const auto y2 = static_cast<int>(std::ceil(cy + half_h));
-  return intersect({x1, y1, x2 - x1, y2 - y1}, bounds);
 }
 
 } // namespace hrt::core

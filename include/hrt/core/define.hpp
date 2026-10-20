@@ -14,9 +14,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+#include <type_traits>
 
 namespace hrt::core {
 
@@ -110,6 +112,7 @@ using Size = BasicSize<int>;
 using Size2f = BasicSize<float>;
 using Rect = BasicRect<int>;
 using Rect2f = BasicRect<float>;
+using Rect2d = BasicRect<double>;
 
 // Overlap of two rects; empty when they do not overlap.
 template <typename T>
@@ -142,11 +145,45 @@ auto valid_box(const BasicRect<T>& rect) -> bool {
   return rect.width > 0 && rect.height > 0 && std::isfinite(rect.x + rect.y);
 }
 
-// Grows `rect` about its center by scale_w x scale_h, as a cascade grows a
-// detection before the next stage, and returns the whole pixels it covers
-// inside `bounds` (the image rect), a valid src_rect for any resize_type;
-// empty when they do not overlap.
-auto pad_scale(const Rect2f& rect, float scale_w, float scale_h, const Rect& bounds) -> Rect;
+// Grows the shorter side about the center so width / height equals `aspect`.
+template <std::floating_point T>
+constexpr auto pad_aspect_ratio(const BasicRect<T>& rect, std::type_identity_t<T> aspect) -> BasicRect<T> {
+  auto width = rect.width;
+  auto height = rect.height;
+  if (width > aspect * height)
+    height = width / aspect;
+  else
+    width = height * aspect;
+  return {rect.x + (rect.width - width) / 2, rect.y + (rect.height - height) / 2, width, height};
+}
+
+// Scales width and height about the center.
+template <std::floating_point T>
+constexpr auto pad_scale(const BasicRect<T>& rect, std::type_identity_t<T> scale_w, std::type_identity_t<T> scale_h)
+    -> BasicRect<T> {
+  const auto width = rect.width * scale_w;
+  const auto height = rect.height * scale_h;
+  return {rect.x + (rect.width - width) / 2, rect.y + (rect.height - height) / 2, width, height};
+}
+
+template <std::floating_point T>
+constexpr auto pad_scale(const BasicRect<T>& rect, std::type_identity_t<T> scale) -> BasicRect<T> {
+  return pad_scale(rect, scale, scale);
+}
+
+// Smallest rect of whole pixels covering `rect`.
+template <std::floating_point T>
+auto cover_pixels(const BasicRect<T>& rect) -> Rect {
+  const auto x1 = static_cast<int>(std::floor(rect.x));
+  const auto y1 = static_cast<int>(std::floor(rect.y));
+  return {x1, y1, static_cast<int>(std::ceil(rect.x + rect.width)) - x1,
+          static_cast<int>(std::ceil(rect.y + rect.height)) - y1};
+}
+
+// A cascade grows a detection for the next stage with
+// intersect(cover_pixels(pad_scale(box, scale_w, scale_h)), image.rect()): the
+// whole pixels it covers inside the image, a valid src_rect for any
+// resize_type, or empty when the box misses the image.
 
 // Angle in degrees, clockwise in image coordinates (y down).
 struct RotatedRect {

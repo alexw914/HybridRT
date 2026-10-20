@@ -74,18 +74,9 @@ auto scaled(core::Size size, double scale) -> core::Size {
 
 auto pad_to_aspect(const core::Rect& rect, core::Size target, float scale) -> core::Rect {
   const auto aspect = static_cast<double>(target.width) / target.height;
-  double width = rect.width;
-  double height = rect.height;
-  if (width > aspect * height)
-    height = width / aspect;
-  else
-    width = height * aspect;
-  width *= static_cast<double>(scale);
-  height *= static_cast<double>(scale);
-  const auto cx = rect.x + rect.width / 2.0;
-  const auto cy = rect.y + rect.height / 2.0;
-  return {static_cast<int>(std::lround(cx - width / 2)), static_cast<int>(std::lround(cy - height / 2)),
-          static_cast<int>(std::lround(width)), static_cast<int>(std::lround(height))};
+  const auto padded = core::pad_scale(core::pad_aspect_ratio(core::Rect2d(rect), aspect), static_cast<double>(scale));
+  return {static_cast<int>(std::lround(padded.x)), static_cast<int>(std::lround(padded.y)),
+          static_cast<int>(std::lround(padded.width)), static_cast<int>(std::lround(padded.height))};
 }
 
 } // namespace
@@ -229,7 +220,7 @@ auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const 
   const auto& read = transform.src_roi;
   KZ_CHECK_RETURN(core::intersect(read, src.rect()) == read, std::nullopt,
                   "ImagePreprocessor: source region ({}, {}, {}x{}) leaves the {}x{} image; clip it with "
-                  "core::pad_scale",
+                  "core::intersect",
                   read.x, read.y, read.width, read.height, src.size().width, src.size().height);
   adjust_roi(transform.dst_roi, transform.src_roi, dst, src);
 
