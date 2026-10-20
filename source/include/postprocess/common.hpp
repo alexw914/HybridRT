@@ -87,6 +87,10 @@ public:
 
   KZ_NODISCARD auto cols() const -> std::int64_t { return cols_; }
 
+  KZ_NODISCARD auto scale() const -> float { return scale_; }
+
+  KZ_NODISCARD auto zero_point() const -> std::int32_t { return zero_point_; }
+
   // Cell (y, 0) of `channel` as T, float or std::int8_t to match int8(); cells
   // of a row are col_step() elements apart.
   template <typename T>

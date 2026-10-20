@@ -160,8 +160,8 @@ YOLOv8 heads (`YoloV8Detect`, `YoloV8Keypoint`, `YoloV8Rotated`, `YoloV8Segment`
 distance bins, keypoints at `(raw * 2 + cell) * stride` and angles `(sigmoid(raw) - 0.25) * pi`. YOLO26
 heads (`Yolo26Detect`, `Yolo26Keypoint`, `Yolo26Rotated`, `Yolo26Segment`) carry the four distances in
 cells, keypoints at `(raw + cell + 0.5) * stride` and angles in radians. Segment heads add the mask
-coefficients after the classes, and the prototypes `[1, masks, mh, mw]` are a further output in any
-position.
+coefficients after the classes, and the prototypes `[1, masks, mh, mw]` (`[1, mh, mw, masks]` for NHWC
+outputs, like the heads) are a further output in any position.
 
 `DetrDetect` reads batch-1 normalized center-x, center-y, width and height boxes.
 It selects the highest-scoring foreground class of each query and does not apply

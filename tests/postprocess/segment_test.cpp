@@ -91,6 +91,28 @@ TEST(SegmentTest, DecodesInt8Detections) {
   expect_left_half_mask(result);
 }
 
+TEST(SegmentTest, AccumulatesInt8PrototypesWithZeroPoint) {
+  FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})},
+                    {proto(DataType::Float32, {1, 7, 1}), proto(DataType::Int8, {1, 2, 4, 4})});
+  auto postprocessor = hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", segment_config(), engine);
+  ASSERT_NE(postprocessor, nullptr);
+
+  // real = 0.5 * (q - 40). Both coefficients are 1, so ignoring the zero
+  // point would add 40 to every logit and fill the mask.
+  hrt::Vector<std::int8_t> quantized;
+  for (const auto value : prototypes())
+    quantized.push_back(static_cast<std::int8_t>(value * 2.0F + 40.0F));
+  auto masks = hrt::test::buffer_of(proto(DataType::Int8, {1, 2, 4, 4}), quantized);
+  masks->scale = 0.5F;
+  masks->zero_point = 40;
+  const hrt::Vector<float> detections{8, 8, 8, 8, 0.9F, 1, 1};
+  hrt::postprocess::SegmentResultMap result;
+  ASSERT_TRUE(postprocessor->process(result,
+                                     {hrt::test::buffer_of(proto(DataType::Float32, {1, 7, 1}), detections), masks},
+                                     hrt::test::identity(16, 16)));
+  expect_left_half_mask(result);
+}
+
 TEST(SegmentTest, KeepsNonzeroClassId) {
   const auto detections = proto(DataType::Float32, {1, 8, 1});
   const auto masks = proto(DataType::Float32, {1, 2, 4, 4});
@@ -159,6 +181,38 @@ TEST(SegmentTest, DecodesRawYoloV8AndYolo26Heads) {
         << type;
     expect_left_half_mask(result);
     EXPECT_EQ(hrt::model::task_of(type), hrt::model::Task::Segment);
+  }
+}
+
+// Channel-major [channels, cells] values as cell-major [cells, channels].
+auto channels_last(const hrt::Vector<float>& values, std::size_t channels) -> hrt::Vector<float> {
+  const auto cells = values.size() / channels;
+  hrt::Vector<float> out(values.size());
+  for (std::size_t c = 0; c < channels; ++c) {
+    for (std::size_t i = 0; i < cells; ++i)
+      out[i * channels + c] = values[c * cells + i];
+  }
+  return out;
+}
+
+TEST(SegmentTest, DecodesNhwcRawHeadsAndPrototypes) {
+  for (const auto& [type, bins] :
+       hrt::Vector<std::pair<const char*, std::size_t>>{{"YoloV8Segment", 2}, {"Yolo26Segment", 1}}) {
+    const auto channels = bins * 4 + 3;
+    const auto head = proto(DataType::Float32, {1, 2, 2, static_cast<std::int64_t>(channels)});
+    const auto masks = proto(DataType::Float32, {1, 4, 4, 2});
+    FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {masks, head}, hrt::engine::DataLayout::Nhwc);
+    auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5],
+                                  "iou_threshold": [0.45]})");
+    auto postprocessor = hrt::postprocess::create_segment_postprocessor(type, config, engine);
+    ASSERT_NE(postprocessor, nullptr) << type;
+    hrt::postprocess::SegmentResultMap result;
+    ASSERT_TRUE(postprocessor->process(result,
+                                       {hrt::test::buffer_of(masks, channels_last(prototypes(), 2)),
+                                        hrt::test::buffer_of(head, channels_last(raw_segment_head(bins), channels))},
+                                       hrt::test::identity(16, 16)))
+        << type;
+    expect_left_half_mask(result);
   }
 }
 

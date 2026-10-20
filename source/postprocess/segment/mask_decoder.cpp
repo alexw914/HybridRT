@@ -17,7 +17,32 @@
 
 namespace hrt::postprocess {
 
-auto MaskDecoder::make(const Prototypes& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
+namespace {
+
+// Adds weights[j] * channel j of the region, read as T, to `logits`.
+template <typename T>
+auto accumulate(const HeadGrid& grid, const Vector<float>& weights, const core::Rect& region, cv::Mat& logits) -> void {
+  const auto step = grid.col_step();
+  for (std::size_t j = 0; j < weights.size(); ++j) {
+    const auto weight = weights[j];
+    for (int y = 0; y < region.height; ++y) {
+      const auto* in = grid.row<T>(region.y + y, j) + static_cast<std::size_t>(region.x) * step;
+      auto* out = logits.ptr<float>(y);
+      // Contiguous NCHW rows vectorize; NHWC strides over the channels.
+      if (step == 1) {
+        for (int x = 0; x < region.width; ++x)
+          out[x] += weight * static_cast<float>(in[x]);
+      } else {
+        for (int x = 0; x < region.width; ++x)
+          out[x] += weight * static_cast<float>(in[static_cast<std::size_t>(x) * step]);
+      }
+    }
+  }
+}
+
+} // namespace
+
+auto MaskDecoder::make(const HeadGrid& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
                        const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit)
     -> Mask {
   Mask mask;
@@ -31,8 +56,10 @@ auto MaskDecoder::make(const Prototypes& prototypes, const Vector<float>& coeffi
 
   // Prototype pixels per network pixel, and the box region (plus a margin
   // for interpolation) in prototype space.
-  const auto sx = static_cast<double>(prototypes.width) / transform.input_size.width;
-  const auto sy = static_cast<double>(prototypes.height) / transform.input_size.height;
+  const auto proto_width = static_cast<int>(prototypes.cols());
+  const auto proto_height = static_cast<int>(prototypes.rows());
+  const auto sx = static_cast<double>(proto_width) / transform.input_size.width;
+  const auto sy = static_cast<double>(proto_height) / transform.input_size.height;
   const auto bx = static_cast<double>(net_box.x);
   const auto by = static_cast<double>(net_box.y);
   const auto bw = static_cast<double>(net_box.width);
@@ -40,16 +67,24 @@ auto MaskDecoder::make(const Prototypes& prototypes, const Vector<float>& coeffi
   const auto region =
       core::intersect(core::Rect{static_cast<int>(std::floor(bx * sx)) - 1, static_cast<int>(std::floor(by * sy)) - 1,
                                  static_cast<int>(std::ceil(bw * sx)) + 3, static_cast<int>(std::ceil(bh * sy)) + 3},
-                      core::Rect{0, 0, prototypes.width, prototypes.height});
+                      core::Rect{0, 0, proto_width, proto_height});
   if (region.empty())
     return mask;
   logits_.create(region.height, region.width, CV_32F);
-  logits_.setTo(0.0);
-  const auto plane = static_cast<std::size_t>(prototypes.width) * static_cast<std::size_t>(prototypes.height);
-  for (std::size_t j = 0; j < coefficients.size(); ++j) {
-    const cv::Mat channel(prototypes.height, prototypes.width, CV_32F, const_cast<float*>(prototypes.data + j * plane));
-    cv::scaleAdd(channel(cv::Rect(region.x, region.y, region.width, region.height)),
-                 static_cast<double>(coefficients[j]), logits_, logits_);
+  if (prototypes.int8()) {
+    // sum_j c_j * scale * (q_j - zero_point): the scale folds into the
+    // weights and the zero point into the starting value.
+    weights_.resize(coefficients.size());
+    float sum = 0.0F;
+    for (std::size_t j = 0; j < coefficients.size(); ++j) {
+      weights_[j] = coefficients[j] * prototypes.scale();
+      sum += weights_[j];
+    }
+    logits_.setTo(-static_cast<double>(sum) * prototypes.zero_point());
+    accumulate<std::int8_t>(prototypes, weights_, region, logits_);
+  } else {
+    logits_.setTo(0.0);
+    accumulate<float>(prototypes, coefficients, region, logits_);
   }
 
   // Source pixel center -> network coordinate -> prototype pixel in region:

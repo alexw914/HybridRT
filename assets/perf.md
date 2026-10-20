@@ -4,6 +4,37 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-20: accumulate mask prototypes in place over the box region
+
+**Bottleneck.** Instance segmentation decoders turned the whole prototype output into float32
+before decoding: int8 prototypes, e.g. 32 x 160 x 160, were dequantized on every run even with
+no detections, although each mask reads only its box region. Float32 prototypes were read in
+place, but `cv::scaleAdd` per channel and mask cost more than the arithmetic on small regions.
+
+**Change.** `MaskDecoder` reads the prototypes through `HeadGrid` and accumulates
+`coefficients . prototypes` row by row over the box region only. For int8 the scale is folded
+into the coefficients and the zero point into the starting value, so prototypes are never
+dequantized. `YoloV8Segment`, `Yolo26Segment`, `GeneralYoloSegment` and `E2ESegment` drop their
+prototype scratch buffers. NHWC prototypes are now read in their layout; before, they were read as
+NCHW and gave wrong masks.
+
+**Measurement.** Apple M4, macOS, Release, ONNX Runtime 1.31.0 CPU, one OpenCV thread,
+`hybridrt_bench_postprocess` `BM_Type`, 3 repetitions of at least 0.3 s, median; the previous
+commit and this change were run interleaved over 3 rounds and the median of rounds is shown.
+
+| Type (algo) | Before | After |
+| --- | ---: | ---: |
+| `E2ESegment` (`yolo26n_e2e_segment`) | 0.1603 ms | 0.1238 ms |
+
+The other available template algos (detect, rotated, pose, classify, OCR detection) stayed
+within +/-0.5%. Masks of `yolo26n_e2e_segment` on `bus.jpg` (4 objects) are byte-identical
+before and after.
+
+**Remaining.** int8 prototypes are covered by unit tests only; no int8 segmentation model was
+measured and RK3588 was not rerun. The `YoloV8Segment`, `Yolo26Segment` and
+`GeneralYoloSegment` template models were missing locally. NHWC prototypes take a strided loop
+that does not vectorize.
+
 ## 2026-10-20: read end-to-end rows lazily instead of dequantizing whole outputs
 
 **Bottleneck.** `float_data()` turned every int8 or strided output into a float32 copy each run,

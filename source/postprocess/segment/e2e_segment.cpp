@@ -60,14 +60,10 @@ protected:
       -> bool override {
     const HeadGrid det(*outputs[detections_], std::nullopt);
     KZ_CHECK_RETURN(det.valid(), false, "e2e_segment: detections must be float32 or int8");
-    const auto* proto = float_data(*outputs[prototypes_], scratch_);
-    if (proto == nullptr)
-      return false;
+    const HeadGrid prototypes(*outputs[prototypes_], engine::DataLayout::Nchw);
+    KZ_CHECK_RETURN(prototypes.valid(), false, "e2e_segment: prototypes must be float32 or int8");
     const auto count = static_cast<std::size_t>(outputs[detections_]->shape()[1]);
     const auto columns = outputs[detections_]->shape()[2];
-    const auto& proto_shape = outputs[prototypes_]->shape();
-    const MaskDecoder::Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
-                                             static_cast<int>(proto_shape[3])};
     for (std::size_t i = 0; i < count; ++i) {
       const auto label = det.at(i, 5);
       // Also skips NaN class ids, scores and boxes.
@@ -101,7 +97,6 @@ private:
   std::size_t prototypes_ = 1;
   float mask_logit_ = 0.0F;
   Vector<float> coefficients_;
-  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
   MaskDecoder masks_;
 };
 

@@ -61,22 +61,17 @@ public:
 protected:
   auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const auto* proto = float_data(*outputs[prototypes_], scratch_);
-    if (proto == nullptr)
-      return false;
-    const auto& proto_shape = outputs[prototypes_]->shape();
-    const MaskDecoder::Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
-                                             static_cast<int>(proto_shape[3])};
+    const HeadGrid prototypes(*outputs[prototypes_], engine::DataLayout::Nchw);
     const HeadGrid det(*outputs[detections_], std::nullopt);
-    if (!det.valid())
+    if (!det.valid() || !prototypes.valid())
       return false;
-    decode_rows(result, det, transform, prototypes);
+    decode_rows(result, det, transform, prototypes, static_cast<std::size_t>(outputs[prototypes_]->shape()[1]));
     return true;
   }
 
 private:
   auto decode_rows(SegmentResultMap& result, const HeadGrid& det, const preprocess::ImageTransform& transform,
-                   const MaskDecoder::Prototypes& prototypes) -> void {
+                   const HeadGrid& prototypes, std::size_t masks) -> void {
     const auto at = [&](std::size_t row, std::uint32_t i) -> float { return det.at(0, i, row); };
     const auto classes = param_.class_num;
     rects_.resize(classes);
@@ -98,7 +93,7 @@ private:
       }
     }
 
-    Vector<float> coefficients(static_cast<std::size_t>(prototypes.channels));
+    Vector<float> coefficients(masks);
     for (std::size_t cls = 0; cls < classes; ++cls) {
       for (auto k : nms_keep(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
         const auto box = transform.clip_to_source(rects_[cls][k]);
@@ -121,7 +116,6 @@ private:
   std::size_t detections_ = 0;
   std::size_t prototypes_ = 1;
   float mask_logit_ = 0.0F;
-  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
   MaskDecoder masks_;
 };
 

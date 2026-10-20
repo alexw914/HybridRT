@@ -66,12 +66,8 @@ public:
 protected:
   auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const auto* proto = float_data(*outputs[outputs_.prototypes], scratch_);
-    if (proto == nullptr)
-      return false;
-    const auto& proto_shape = outputs[outputs_.prototypes]->shape();
-    const MaskDecoder::Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
-                                             static_cast<int>(proto_shape[3])};
+    const HeadGrid prototypes(*outputs[outputs_.prototypes], layout_);
+    KZ_CHECK_RETURN(prototypes.valid(), false, "yolov8_segment: prototypes must be float32 or int8");
     rects_.resize(param_.class_num);
     scores_.resize(param_.class_num);
     coefficients_.resize(param_.class_num);
@@ -138,7 +134,6 @@ private:
   Vector<Vector<float>> scores_;
   Vector<Vector<float>> coefficients_;
   Vector<float> mask_coefficients_;
-  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
   MaskDecoder masks_;
 };
 

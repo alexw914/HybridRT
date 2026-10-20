@@ -16,19 +16,16 @@
 
 namespace hrt::postprocess {
 
+class HeadGrid;
+
 // Keeps its scratch buffers between masks; not thread-safe.
 class MaskDecoder {
 public:
-  struct Prototypes {
-    const float* data;
-    int channels;
-    int height;
-    int width;
-  };
-
   // Mask = coefficients . prototypes inside the box, sampled bilinearly into
-  // the box's source pixels and thresholded as a logit.
-  auto make(const Prototypes& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
+  // the box's source pixels and thresholded as a logit. The prototype grid
+  // has one channel per coefficient; only the box region is read, and int8
+  // prototypes are accumulated without being dequantized.
+  auto make(const HeadGrid& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
             const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit) -> Mask;
 
 private:
@@ -45,6 +42,7 @@ private:
   Vector<Tap> columns_;
   Vector<Tap> rows_;
   Vector<float> across_;
+  Vector<float> weights_;
 };
 
 // Outputs of a raw per-stride segmentation model: `heads` in engine output order and
