@@ -313,8 +313,7 @@ auto nms_keep(const Vector<core::Rect2f>& rects, const Vector<float>& scores, fl
   for (auto index : order) {
     const auto& rect = rects[index];
     const auto overlaps = std::any_of(kept.begin(), kept.end(), [&](std::size_t other) -> bool {
-      const auto inter = core::intersect(rect, rects[other]).area();
-      return inter / (rect.area() + rects[other].area() - inter) >= iou_threshold;
+      return core::iou(rect, rects[other]) >= iou_threshold;
     });
     if (!overlaps)
       kept.push_back(index);

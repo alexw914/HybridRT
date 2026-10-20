@@ -77,7 +77,7 @@ protected:
       const core::Point2f br{det.at(i, 2), det.at(i, 3)};
       if (!(br.x - tl.x > 0.0F && br.y - tl.y > 0.0F))
         continue;
-      const auto net_box = core::Rect2f::from_points(tl, br);
+      const auto net_box = core::Rect2f(tl, br);
       const auto box = transform.clip_to_source(net_box);
       if (box.empty())
         continue;

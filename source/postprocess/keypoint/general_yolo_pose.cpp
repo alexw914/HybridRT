@@ -83,11 +83,10 @@ private:
       scores_[cls].clear();
       anchors_[cls].clear();
       for (const auto i : scan_.above(rows, 4 + cls, param_.confidence_threshold[cls])) {
-        const auto [l, t, r, b] = center_box(at(0, i), at(1, i), at(2, i), at(3, i));
-        // Also skips NaN boxes.
-        if (!(r - l > 0.0F && b - t > 0.0F))
+        const auto rect = core::center_box(at(0, i), at(1, i), at(2, i), at(3, i));
+        if (!core::valid_box(rect))
           continue;
-        rects_[cls].push_back(core::Rect2f::from_points({l, t}, {r, b}));
+        rects_[cls].push_back(rect);
         scores_[cls].push_back(at(4 + cls, i));
         anchors_[cls].push_back(i);
       }

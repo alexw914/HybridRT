@@ -73,11 +73,7 @@ protected:
       if (!present.test(cls))
         continue;
       auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
-      object.box = {{static_cast<float>(src.x), static_cast<float>(src.y), static_cast<float>(src.width),
-                     static_cast<float>(src.height)},
-                    1.0F,
-                    static_cast<std::int64_t>(cls),
-                    -1};
+      object.box = {core::Rect2f(src), 1.0F, static_cast<std::int64_t>(cls), -1};
       object.mask.rect = src;
       object.mask.data.resize(pixels);
       cv::Mat mask(src.height, src.width, CV_8U, object.mask.data.data());

@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <gtest/gtest.h>
+#include <limits>
 
 #include "fake_engine.hpp"
 
@@ -301,6 +302,22 @@ TEST(DetectGeneralTest, DecodesCenterSizeBoxes) {
   EXPECT_FLOAT_EQ(box.rect.y, 12.0F);
   EXPECT_FLOAT_EQ(box.rect.width, 10.0F);
   EXPECT_FLOAT_EQ(box.rect.height, 6.0F);
+}
+
+TEST(DetectGeneralTest, SkipsNanCentersAndNonpositiveSizes) {
+  const auto output = proto(DataType::Float32, {1, 5, 3});
+  FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
+  auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
+  auto postprocessor = hrt::postprocess::create_detect_postprocessor("GeneralDetect", config, engine);
+  ASSERT_NE(postprocessor, nullptr);
+
+  // Columns: NaN center, valid box, negative width; all pass the score.
+  const auto nan = std::numeric_limits<float>::quiet_NaN();
+  const hrt::Vector<float> values{nan, 20, 20, 15, 15, 15, 10, 10, -1, 6, 6, 6, 0.9F, 0.9F, 0.9F};
+  hrt::postprocess::DetectResultMap result;
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(40, 40)));
+  ASSERT_EQ(result.at(0).size(), 1U);
+  EXPECT_FLOAT_EQ(result.at(0)[0].rect.x, 15.0F);
 }
 
 TEST(DetectGeneralTest, DecodesInt8) {

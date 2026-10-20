@@ -100,11 +100,7 @@ auto to_json(const hrt::postprocess::RotatedResultMap& result, const hrt::core::
 
 // One result over `region`; class_id and score are the top 1 of output 0.
 auto to_json(const hrt::postprocess::ClassifyResult& result, const hrt::core::Rect& region) -> Json {
-  hrt::postprocess::ObjectBox box{{static_cast<float>(region.x), static_cast<float>(region.y),
-                                   static_cast<float>(region.width), static_cast<float>(region.height)},
-                                  0.0F,
-                                  -1,
-                                  -1};
+  hrt::postprocess::ObjectBox box{hrt::core::Rect2f(region), 0.0F, -1, -1};
   Json cls = Json::array();
   for (std::size_t output = 0; output < result.size(); ++output) {
     const auto& scores = result[output];
@@ -133,11 +129,7 @@ auto to_json(const hrt::postprocess::ClassifyResult& result, const hrt::core::Re
 // One result over `region` with class_id -1; "embedding" holds the vector at
 // 6 decimals, as embeddings are compared by small differences.
 auto to_json(const hrt::postprocess::EmbeddingResult& result, const hrt::core::Rect& region) -> Json {
-  auto item = make_result({{static_cast<float>(region.x), static_cast<float>(region.y),
-                            static_cast<float>(region.width), static_cast<float>(region.height)},
-                           0.0F,
-                           -1,
-                           -1});
+  auto item = make_result({hrt::core::Rect2f(region), 0.0F, -1, -1});
   Json values = Json::array();
   for (const auto value : result)
     values.push_back(std::round(static_cast<double>(value) * 1e6) / 1e6);

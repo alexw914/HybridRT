@@ -302,8 +302,7 @@ auto ImageTransform::to_source(const core::Point2f& point) const -> core::Point2
 }
 
 auto ImageTransform::clip_to_source(const core::Rect2f& rect) const -> core::Rect2f {
-  return core::intersect(to_source(rect), {static_cast<float>(src_roi.x), static_cast<float>(src_roi.y),
-                                           static_cast<float>(src_roi.width), static_cast<float>(src_roi.height)});
+  return core::intersect(to_source(rect), core::Rect2f(src_roi));
 }
 
 auto ImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,

@@ -59,12 +59,10 @@ private:
     const auto at = [&](std::size_t row, std::uint32_t i) -> float { return rows.at(0, i, row); };
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
       for (const auto i : scan_.above(rows, 4 + cls, param_.confidence_threshold[cls])) {
-        const auto [l, t, r, b] = center_box(at(0, i), at(1, i), at(2, i), at(3, i));
-        // Also skips NaN boxes.
-        if (!(r - l > 0.0F && b - t > 0.0F))
+        const auto rect = core::center_box(at(0, i), at(1, i), at(2, i), at(3, i));
+        if (!core::valid_box(rect))
           continue;
-        result[cls].push_back(
-            {core::Rect2f::from_points({l, t}, {r, b}), at(4 + cls, i), static_cast<std::int64_t>(cls)});
+        result[cls].push_back({rect, at(4 + cls, i), static_cast<std::int64_t>(cls)});
       }
     }
   }

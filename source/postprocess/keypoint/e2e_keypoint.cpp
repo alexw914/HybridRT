@@ -78,7 +78,7 @@ protected:
       const core::Point2f br{output.at(i, 2), output.at(i, 3)};
       if (!(br.x - tl.x > 0.0F && br.y - tl.y > 0.0F))
         continue;
-      const auto box = transform.clip_to_source(core::Rect2f::from_points(tl, br));
+      const auto box = transform.clip_to_source(core::Rect2f(tl, br));
       if (box.empty())
         continue;
       auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();

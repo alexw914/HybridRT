@@ -76,7 +76,7 @@ protected:
       const core::Point2f br{boxes.at(i, 2), boxes.at(i, 3)};
       if (!(br.x - tl.x > 0.0F && br.y - tl.y > 0.0F))
         continue;
-      rects_.push_back(core::Rect2f::from_points(tl, br));
+      rects_.push_back(core::Rect2f(tl, br));
       scores_.push_back(score);
       candidates_.push_back(i);
     }

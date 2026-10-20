@@ -186,11 +186,7 @@ protected:
     const auto height = static_cast<float>(transform.input_size.height);
     for (auto& object : objects) {
       const auto& region = transform.src_roi;
-      object.box = {{static_cast<float>(region.x), static_cast<float>(region.y), static_cast<float>(region.width),
-                     static_cast<float>(region.height)},
-                    1.0F,
-                    0,
-                    -1};
+      object.box = {core::Rect2f(region), 1.0F, 0, -1};
       for (auto& keypoint : object.keypoints) {
         keypoint.point = transform.to_source(core::Point2f{keypoint.point.x * width, keypoint.point.y * height});
         if (!scored)

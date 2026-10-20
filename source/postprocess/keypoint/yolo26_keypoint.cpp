@@ -116,8 +116,8 @@ private:
         const auto cx = static_cast<float>(x) + 0.5F;
         const auto cy = static_cast<float>(y) + 0.5F;
         auto& object = candidates_[cls].emplace_back();
-        object.box = {core::Rect2f::from_points({(cx - grid.at(y, x, 0)) * stride, (cy - grid.at(y, x, 1)) * stride},
-                                                {(cx + grid.at(y, x, 2)) * stride, (cy + grid.at(y, x, 3)) * stride}),
+        object.box = {core::Rect2f({(cx - grid.at(y, x, 0)) * stride, (cy - grid.at(y, x, 1)) * stride},
+                                   {(cx + grid.at(y, x, 2)) * stride, (cy + grid.at(y, x, 3)) * stride}),
                       sigmoid(score), static_cast<std::int64_t>(cls), -1};
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {

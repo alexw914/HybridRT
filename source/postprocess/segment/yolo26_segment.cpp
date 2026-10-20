@@ -108,9 +108,8 @@ private:
           continue;
         const auto cx = static_cast<float>(x) + 0.5F;
         const auto cy = static_cast<float>(y) + 0.5F;
-        rects_[cls].push_back(
-            core::Rect2f::from_points({(cx - grid.at(y, x, 0)) * stride, (cy - grid.at(y, x, 1)) * stride},
-                                      {(cx + grid.at(y, x, 2)) * stride, (cy + grid.at(y, x, 3)) * stride}));
+        rects_[cls].push_back(core::Rect2f({(cx - grid.at(y, x, 0)) * stride, (cy - grid.at(y, x, 1)) * stride},
+                                           {(cx + grid.at(y, x, 2)) * stride, (cy + grid.at(y, x, 3)) * stride}));
         scores_[cls].push_back(sigmoid(score));
         for (std::size_t j = 0; j < outputs_.masks; ++j)
           coefficients_[cls].push_back(grid.at(y, x, first_mask + j));

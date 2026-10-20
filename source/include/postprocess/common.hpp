@@ -28,11 +28,6 @@ inline auto sigmoid(float x) -> float {
   return 1.0F / (1.0F + std::exp(-x));
 }
 
-// Corners l, t, r, b of a center x, center y, width, height box.
-inline auto center_box(float cx, float cy, float w, float h) -> Array<float, 4> {
-  return {cx - w / 2.0F, cy - h / 2.0F, cx + w / 2.0F, cy + h / 2.0F};
-}
-
 inline auto logit(float p) -> float {
   return p < 1.0F ? std::log(p / (1.0F - p)) : std::numeric_limits<float>::max();
 }

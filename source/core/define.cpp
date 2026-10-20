@@ -75,32 +75,6 @@ auto contiguous_stride(const Shape& shape, DataType type) -> Stride {
   return stride;
 }
 
-auto intersect(const Rect& a, const Rect& b) -> Rect {
-  const auto x1 = std::max(a.x, b.x);
-  const auto y1 = std::max(a.y, b.y);
-  const auto x2 = std::min(a.x + a.width, b.x + b.width);
-  const auto y2 = std::min(a.y + a.height, b.y + b.height);
-  if (x2 <= x1 || y2 <= y1)
-    return {};
-  return {x1, y1, x2 - x1, y2 - y1};
-}
-
-auto Rect2f::from_points(Point2f a, Point2f b) -> Rect2f {
-  const auto x = std::min(a.x, b.x);
-  const auto y = std::min(a.y, b.y);
-  return {x, y, std::max(a.x, b.x) - x, std::max(a.y, b.y) - y};
-}
-
-auto intersect(const Rect2f& a, const Rect2f& b) -> Rect2f {
-  const auto x1 = std::max(a.x, b.x);
-  const auto y1 = std::max(a.y, b.y);
-  const auto x2 = std::min(a.x + a.width, b.x + b.width);
-  const auto y2 = std::min(a.y + a.height, b.y + b.height);
-  if (x2 <= x1 || y2 <= y1)
-    return {};
-  return {x1, y1, x2 - x1, y2 - y1};
-}
-
 auto pad_scale(const Rect2f& rect, float scale_w, float scale_h, const Rect& bounds) -> Rect {
   const auto width = static_cast<double>(rect.width);
   const auto height = static_cast<double>(rect.height);

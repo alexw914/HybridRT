@@ -66,8 +66,8 @@ private:
         if (!decoded) {
           const auto cx = static_cast<float>(x) + 0.5F;
           const auto cy = static_cast<float>(y) + 0.5F;
-          box = core::Rect2f::from_points({(cx - grid.at(y, x, 0)) * stride, (cy - grid.at(y, x, 1)) * stride},
-                                          {(cx + grid.at(y, x, 2)) * stride, (cy + grid.at(y, x, 3)) * stride});
+          box = core::Rect2f({(cx - grid.at(y, x, 0)) * stride, (cy - grid.at(y, x, 1)) * stride},
+                             {(cx + grid.at(y, x, 2)) * stride, (cy + grid.at(y, x, 3)) * stride});
           decoded = true;
         }
         result[cls].push_back({box, sigmoid(score), static_cast<std::int64_t>(cls)});

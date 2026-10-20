@@ -148,7 +148,7 @@ private:
         const auto cy = static_cast<float>(y) + 0.5F;
         auto& object = candidates_[cls].emplace_back();
         object.box = {
-            core::Rect2f::from_points(
+            core::Rect2f(
                 {(cx - dfl(grid, y, x, 0, bins)) * stride, (cy - dfl(grid, y, x, bins, bins)) * stride},
                 {(cx + dfl(grid, y, x, bins * 2, bins)) * stride, (cy + dfl(grid, y, x, bins * 3, bins)) * stride}),
             sigmoid(score), static_cast<std::int64_t>(cls), -1};
