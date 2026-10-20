@@ -154,7 +154,6 @@ protected:
 
 private:
   auto detect(OcrResult& result, const float* data, const preprocess::ImageTransform& transform) -> bool {
-    KZ_CHECK_RETURN(!transform.src_roi.empty() && !transform.dst_roi.empty(), false, "Ocr DB: invalid transform");
     const auto height = static_cast<int>(shape_[2]);
     const auto width = static_cast<int>(shape_[3]);
     bitmap_.create(height, width, CV_8U);

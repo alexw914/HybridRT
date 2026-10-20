@@ -59,8 +59,6 @@ public:
 protected:
   auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    KZ_CHECK_RETURN(transform.dst_roi.width > 0 && transform.dst_roi.height > 0, false,
-                    "detr_detect: destination region is empty");
     const bool combined = param_.output_format == DetrOutputFormat::Combined;
     const HeadGrid boxes(*outputs[0], std::nullopt);
     const HeadGrid scores(*outputs[combined ? 0 : 1], std::nullopt);
