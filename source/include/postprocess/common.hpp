@@ -109,6 +109,9 @@ public:
                  : static_cast<const float*>(data_)[index];
   }
 
+  // Element (index, column) of a layout-less [1, N, C] output.
+  KZ_NODISCARD auto at(std::size_t index, std::int64_t column) const -> float { return at(0, column, index); }
+
   // Bound in the raw domain: at() >= threshold implies raw() >= bound, so
   // int8 cells are filtered without dequantizing.
   KZ_NODISCARD auto raw_bound(float threshold) const -> float;
@@ -168,7 +171,8 @@ inline auto dfl(const HeadGrid& grid, std::int64_t y, std::int64_t x, std::size_
 }
 
 // Contiguous float32 view of an output: the output itself, or `scratch`
-// holding a dequantized or packed copy. Null for other data types.
+// holding a dequantized or packed copy. Null for other data types. Decoders
+// reading only part of an output use HeadGrid instead.
 auto float_data(const core::Buffer& output, core::Buffer& scratch) -> const float*;
 
 auto nms_keep(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)

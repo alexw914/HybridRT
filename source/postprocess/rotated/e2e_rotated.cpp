@@ -50,29 +50,33 @@ public:
 protected:
   auto decode(RotatedResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const auto* data = float_data(*outputs[0], scratch_);
-    if (data == nullptr)
-      return false;
+    const HeadGrid output(*outputs[0], std::nullopt);
+    KZ_CHECK_RETURN(output.valid(), false, "e2e_rotated: output must be float32 or int8");
     const auto count = static_cast<std::size_t>(outputs[0]->shape()[1]);
     for (std::size_t i = 0; i < count; ++i) {
-      const auto* row = data + i * 7;
-      const auto label = row[5];
+      const auto label = output.at(i, 5);
       // Also skips NaN class ids, scores, sizes and angles.
       if (!(label >= 0.0F && label < static_cast<float>(param_.class_num)))
         continue;
       const auto cls = static_cast<std::size_t>(label);
-      if (!(row[4] > param_.confidence_threshold[cls]) || !(row[2] > 0.0F && row[3] > 0.0F) || !std::isfinite(row[6]))
+      const auto score = output.at(i, 4);
+      if (!(score > param_.confidence_threshold[cls]))
         continue;
-      result[cls].push_back({{{row[0], row[1]}, {row[2], row[3]}, row[6] * 180.0F / std::numbers::pi_v<float>},
-                             row[4],
-                             static_cast<std::int64_t>(cls)});
+      const auto width = output.at(i, 2);
+      const auto height = output.at(i, 3);
+      const auto angle = output.at(i, 6);
+      if (!(width > 0.0F && height > 0.0F) || !std::isfinite(angle))
+        continue;
+      result[cls].push_back(
+          {{{output.at(i, 0), output.at(i, 1)}, {width, height}, angle * 180.0F / std::numbers::pi_v<float>},
+           score,
+           static_cast<std::int64_t>(cls)});
     }
     return map_rotated(result, transform);
   }
 
 private:
   E2ERotatedParam param_;
-  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
 };
 
 } // namespace

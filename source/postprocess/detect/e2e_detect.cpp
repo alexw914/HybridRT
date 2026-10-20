@@ -48,21 +48,23 @@ public:
 protected:
   auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const auto* data = float_data(*outputs[0], scratch_);
-    if (data == nullptr)
-      return false;
+    const HeadGrid output(*outputs[0], std::nullopt);
+    KZ_CHECK_RETURN(output.valid(), false, "e2e_detect: output must be float32 or int8");
     const auto count = static_cast<std::size_t>(outputs[0]->shape()[1]);
     for (std::size_t i = 0; i < count; ++i) {
-      const auto* row = data + i * 6;
-      const auto score = row[4];
-      const auto label = row[5];
+      const auto label = output.at(i, 5);
       // Also skips NaN scores and class ids.
       if (!(label >= 0.0F && label < static_cast<float>(param_.class_num)))
         continue;
       const auto cls = static_cast<std::size_t>(label);
-      if (!(score > param_.confidence_threshold[cls]) || !(row[2] - row[0] > 0.0F && row[3] - row[1] > 0.0F))
+      const auto score = output.at(i, 4);
+      if (!(score > param_.confidence_threshold[cls]))
         continue;
-      const auto rect = transform.clip_to_source(core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]}));
+      const core::Point2f tl{output.at(i, 0), output.at(i, 1)};
+      const core::Point2f br{output.at(i, 2), output.at(i, 3)};
+      if (!(br.x - tl.x > 0.0F && br.y - tl.y > 0.0F))
+        continue;
+      const auto rect = transform.clip_to_source(core::Rect2f::from_points(tl, br));
       if (!rect.empty())
         result[cls].push_back({rect, score, static_cast<std::int64_t>(cls)});
     }
@@ -71,7 +73,6 @@ protected:
 
 private:
   E2EDetectParam param_;
-  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
 };
 
 } // namespace

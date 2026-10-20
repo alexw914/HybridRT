@@ -4,6 +4,43 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-20: read end-to-end rows lazily instead of dequantizing whole outputs
+
+**Bottleneck.** `float_data()` turned every int8 or strided output into a float32 copy each run,
+even for decoders that read a fraction of it: end-to-end detect, rotated, keypoint and segment
+outputs skip most rows after the label and score, and RTMO reads keypoints only for boxes kept
+by NMS. Strided int8 outputs also allocated a temporary packed buffer on every call.
+
+**Change.** `E2EDetect`, `E2ERotated`, `E2EKeypoint`, `E2ESegment` (detections), `DetrDetect` and
+`RtmoKeypoint` read their outputs through `HeadGrid`, which dequantizes only the elements read,
+in the order label, score, box, then keypoints or mask coefficients of passing rows; their
+scratch buffers are gone. `float_data()` dequantizes or packs strided rows straight into
+the scratch buffer, without the temporary packed buffer. Classify, embedding, OCR, semantic
+segmentation, `GeneralKeypoint` and mask prototypes still read whole outputs through it.
+
+**Measurement.** Apple M4, macOS, Release, ONNX Runtime 1.31.0 CPU, one OpenCV thread,
+`hybridrt_bench_postprocess` `BM_Type`, 3 repetitions of at least 0.3 s, median; the previous
+commit and this change were run interleaved over 3 rounds and the median of rounds is shown.
+Only these template models were available locally, all float32:
+
+| Type (algo) | Before | After |
+| --- | ---: | ---: |
+| `E2ESegment` (`yolo26n_e2e_segment`) | 0.1632 ms | 0.1630 ms |
+| `GeneralDetect` (`yolov8n_detect`) | 0.1586 ms | 0.1605 ms |
+| `GeneralRotated` (`yolov8n_obb`) | 0.1403 ms | 0.1405 ms |
+| `GeneralYoloPose` (`yolov8n_pose`) | 0.0025 ms | 0.0025 ms |
+| `GeneralClassify` (`yolov8n_classify`) | 0.00006 ms | 0.00006 ms |
+| `Ocr` (`ppocrv6_tiny_det`) | 0.3462 ms | 0.3437 ms |
+
+Float32 outputs stay zero-copy, so these are unchanged within noise. Writing classify and
+embedding scores straight into the result was tried and dropped: value-initializing the
+result first took classify from 0.056 to 0.085 us.
+
+**Remaining.** The int8 gain was not measured: no int8 end-to-end template model is available
+locally and RK3588 was not rerun. The E2EDetect, E2ERotated, E2EKeypoint, DetrDetect and
+RtmoKeypoint template models were missing, so they were not benchmarked. Mask prototypes are
+still dequantized whole.
+
 ## 2026-10-20: single-channel cell scans for YOLOv5 objectness and one-class heads
 
 **Bottleneck.** `HeadGrid` became a plain class whose element type (float32 or int8) is checked

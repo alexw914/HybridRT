@@ -10,6 +10,7 @@
 #include <kitzoo/log/logger.hpp>
 
 #include <algorithm>
+#include <cstring>
 #include <numeric>
 
 #include "include/postprocess/params.hpp"
@@ -237,35 +238,59 @@ auto keypoint_shape(std::int64_t channels, unsigned int count, std::optional<std
   return found;
 }
 
-auto float_data(const core::Buffer& output, core::Buffer& scratch) -> const float* {
-  if (output.data_type() == core::DataType::Float32) {
-    if (output.is_contiguous())
-      return static_cast<const float*>(output.memory()->cpu());
-    auto& source = const_cast<core::Buffer&>(output);
-    if (!core::Buffer::copy(scratch, source, core::CopyPolicy::AutoDstStride))
-      return nullptr;
-    return static_cast<const float*>(scratch.memory()->cpu());
+namespace {
+
+// Writes the output's volume() elements to `out` as packed float32,
+// dequantizing int8 and honoring strides. False for other data types.
+auto read_floats(const core::Buffer& output, float* out) -> bool {
+  const auto int8 = output.data_type() == core::DataType::Int8;
+  if (!int8 && output.data_type() != core::DataType::Float32) {
+    KZ_LOG_ERROR("postprocess: unsupported output type {}", to_string(output.data_type()));
+    return false;
   }
-  if (output.data_type() == core::DataType::Int8) {
-    // Strided outputs are packed first; engines rarely produce them.
-    const core::Buffer* source = &output;
-    core::Buffer packed(core::MemoryType::Cpu, core::DataType::Int8);
-    if (!output.is_contiguous()) {
-      if (!core::Buffer::copy(packed, const_cast<core::Buffer&>(output), core::CopyPolicy::AutoDstStride))
-        return nullptr;
-      source = &packed;
+  const auto* base = static_cast<const std::uint8_t*>(output.memory()->cpu());
+  const auto convert = [&](const std::uint8_t* in, std::size_t count) -> void {
+    if (int8) {
+      const auto* values = static_cast<const std::int8_t*>(static_cast<const void*>(in));
+      for (std::size_t i = 0; i < count; ++i)
+        out[i] = dequantize(values[i], output.scale, output.zero_point);
+    } else {
+      std::memcpy(out, in, count * sizeof(float));
     }
-    if (!scratch.reshape(core::DataType::Float32, output.shape()))
-      return nullptr;
-    const auto* in = static_cast<const std::int8_t*>(source->memory()->cpu());
-    auto* out = static_cast<float*>(scratch.memory()->mutable_cpu());
-    const auto count = static_cast<std::size_t>(output.volume());
-    for (std::size_t i = 0; i < count; ++i)
-      out[i] = dequantize(in[i], output.scale, output.zero_point);
-    return out;
+    out += count;
+  };
+  const auto count = static_cast<std::size_t>(output.volume());
+  if (output.is_contiguous()) {
+    convert(base, count);
+    return true;
   }
-  KZ_LOG_ERROR("postprocess: unsupported output type {}", to_string(output.data_type()));
-  return nullptr;
+  // Rows of the last dimension are contiguous; the outer index of a row is
+  // decomposed against the shape, dimension k - 1 stepping stride[k] bytes.
+  const auto& shape = output.shape();
+  const auto& stride = output.stride();
+  const auto cols = static_cast<std::size_t>(shape.back());
+  for (std::size_t row = 0; cols != 0 && row < count / cols; ++row) {
+    std::size_t offset = 0;
+    auto rest = row;
+    for (auto k = shape.size() - 1; k > 0; --k) {
+      const auto dim = static_cast<std::size_t>(shape[k - 1]);
+      offset += rest % dim * stride[k];
+      rest /= dim;
+    }
+    convert(base + offset, cols);
+  }
+  return true;
+}
+
+} // namespace
+
+auto float_data(const core::Buffer& output, core::Buffer& scratch) -> const float* {
+  if (output.data_type() == core::DataType::Float32 && output.is_contiguous())
+    return static_cast<const float*>(output.memory()->cpu());
+  if (!scratch.reshape(core::DataType::Float32, output.shape()))
+    return nullptr;
+  auto* out = static_cast<float*>(scratch.memory()->mutable_cpu());
+  return read_floats(output, out) ? out : nullptr;
 }
 
 auto nms_keep(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)

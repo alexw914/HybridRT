@@ -65,22 +65,21 @@ protected:
       KZ_CHECK_RETURN(outputs[i]->shape() == output_shapes_[i], false, "detr_detect: output shape changed");
     KZ_CHECK_RETURN(transform.dst_roi.width > 0 && transform.dst_roi.height > 0, false,
                     "detr_detect: destination region is empty");
-    const auto* boxes = float_data(*outputs[0], boxes_scratch_);
-    if (boxes == nullptr)
-      return false;
     const bool combined = param_.output_format == DetrOutputFormat::Combined;
-    const auto* scores = combined ? boxes + 4 : float_data(*outputs[1], scores_scratch_);
-    if (scores == nullptr)
-      return false;
+    const HeadGrid boxes(*outputs[0], std::nullopt);
+    const HeadGrid scores(*outputs[combined ? 0 : 1], std::nullopt);
+    KZ_CHECK_RETURN(boxes.valid() && scores.valid(), false, "detr_detect: outputs must be float32 or int8");
+    const std::int64_t score_first = combined ? 4 : 0;
     const auto count = static_cast<std::size_t>(output_shapes_[0][1]);
-    const auto box_step = combined ? 4 + score_channels_ : 4;
-    const auto score_step = combined ? box_step : score_channels_;
+    logits_.resize(score_channels_);
     for (std::size_t i = 0; i < count; ++i) {
-      const auto* box = boxes + i * box_step;
+      const Array<float, 4> box{boxes.at(i, 0), boxes.at(i, 1), boxes.at(i, 2), boxes.at(i, 3)};
       if (!std::isfinite(box[0]) || !std::isfinite(box[1]) || !std::isfinite(box[2]) || !std::isfinite(box[3]) ||
           box[2] <= 0.0F || box[3] <= 0.0F)
         continue;
-      const auto* logits = scores + i * score_step;
+      for (std::size_t c = 0; c < score_channels_; ++c)
+        logits_[c] = scores.at(i, score_first + static_cast<std::int64_t>(c));
+      const auto* logits = logits_.data();
       float max_logit = std::numeric_limits<float>::lowest();
       float denominator = 0.0F;
       if (param_.score_activation == DetrScoreActivation::Softmax) {
@@ -124,8 +123,7 @@ private:
   core::Size input_size_;
   Vector<core::Shape> output_shapes_;
   std::size_t score_channels_ = 0;
-  core::Buffer boxes_scratch_{core::MemoryType::Cpu, core::DataType::Float32};
-  core::Buffer scores_scratch_{core::MemoryType::Cpu, core::DataType::Float32};
+  Vector<float> logits_;
 };
 
 } // namespace

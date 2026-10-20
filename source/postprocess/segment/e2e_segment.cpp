@@ -58,31 +58,38 @@ public:
 protected:
   auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const auto* det = float_data(*outputs[detections_], scratch_[0]);
-    const auto* proto = float_data(*outputs[prototypes_], scratch_[1]);
-    if (det == nullptr || proto == nullptr)
+    const HeadGrid det(*outputs[detections_], std::nullopt);
+    KZ_CHECK_RETURN(det.valid(), false, "e2e_segment: detections must be float32 or int8");
+    const auto* proto = float_data(*outputs[prototypes_], scratch_);
+    if (proto == nullptr)
       return false;
     const auto count = static_cast<std::size_t>(outputs[detections_]->shape()[1]);
-    const auto columns = static_cast<std::size_t>(outputs[detections_]->shape()[2]);
+    const auto columns = outputs[detections_]->shape()[2];
     const auto& proto_shape = outputs[prototypes_]->shape();
     const MaskDecoder::Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
                                              static_cast<int>(proto_shape[3])};
     for (std::size_t i = 0; i < count; ++i) {
-      const auto* row = det + i * columns;
-      const auto label = row[5];
+      const auto label = det.at(i, 5);
       // Also skips NaN class ids, scores and boxes.
       if (!(label >= 0.0F && label < static_cast<float>(param_.class_num)))
         continue;
       const auto cls = static_cast<std::size_t>(label);
-      if (!(row[4] > param_.confidence_threshold[cls]) || !(row[2] - row[0] > 0.0F && row[3] - row[1] > 0.0F))
+      const auto score = det.at(i, 4);
+      if (!(score > param_.confidence_threshold[cls]))
         continue;
-      const auto net_box = core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]});
+      const core::Point2f tl{det.at(i, 0), det.at(i, 1)};
+      const core::Point2f br{det.at(i, 2), det.at(i, 3)};
+      if (!(br.x - tl.x > 0.0F && br.y - tl.y > 0.0F))
+        continue;
+      const auto net_box = core::Rect2f::from_points(tl, br);
       const auto box = transform.clip_to_source(net_box);
       if (box.empty())
         continue;
-      coefficients_.assign(row + 6, row + columns);
+      coefficients_.clear();
+      for (std::int64_t c = 6; c < columns; ++c)
+        coefficients_.push_back(det.at(i, c));
       auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
-      object.box = {box, row[4], static_cast<std::int64_t>(cls), -1};
+      object.box = {box, score, static_cast<std::int64_t>(cls), -1};
       object.mask = masks_.make(prototypes, coefficients_, net_box, box, transform, mask_logit_);
     }
     return true;
@@ -94,8 +101,7 @@ private:
   std::size_t prototypes_ = 1;
   float mask_logit_ = 0.0F;
   Vector<float> coefficients_;
-  Array<core::Buffer, 2> scratch_{core::Buffer(core::MemoryType::Cpu, core::DataType::Float32),
-                                  core::Buffer(core::MemoryType::Cpu, core::DataType::Float32)};
+  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
   MaskDecoder masks_;
 };
 

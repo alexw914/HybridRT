@@ -59,31 +59,36 @@ public:
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const auto* data = float_data(*outputs[0], scratch_);
-    if (data == nullptr)
-      return false;
+    const HeadGrid output(*outputs[0], std::nullopt);
+    KZ_CHECK_RETURN(output.valid(), false, "e2e_keypoint: output must be float32 or int8");
     const auto count = static_cast<std::size_t>(outputs[0]->shape()[1]);
-    const auto columns = static_cast<std::size_t>(outputs[0]->shape()[2]);
+    const auto columns = outputs[0]->shape()[2];
+    const auto dims = static_cast<std::int64_t>(dims_);
     for (std::size_t i = 0; i < count; ++i) {
-      const auto* row = data + i * columns;
-      const auto label = row[5];
+      const auto label = output.at(i, 5);
       // Also skips NaN class ids, scores and boxes.
       if (!(label >= 0.0F && label < static_cast<float>(param_.class_num)))
         continue;
       const auto cls = static_cast<std::size_t>(label);
-      if (!(row[4] > param_.confidence_threshold[cls]) || !(row[2] - row[0] > 0.0F && row[3] - row[1] > 0.0F))
+      const auto score = output.at(i, 4);
+      if (!(score > param_.confidence_threshold[cls]))
         continue;
-      const auto box = transform.clip_to_source(core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]}));
+      const core::Point2f tl{output.at(i, 0), output.at(i, 1)};
+      const core::Point2f br{output.at(i, 2), output.at(i, 3)};
+      if (!(br.x - tl.x > 0.0F && br.y - tl.y > 0.0F))
+        continue;
+      const auto box = transform.clip_to_source(core::Rect2f::from_points(tl, br));
       if (box.empty())
         continue;
       auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
-      object.box = {box, row[4], static_cast<std::int64_t>(cls), -1};
+      object.box = {box, score, static_cast<std::int64_t>(cls), -1};
       object.keypoints.reserve(param_.keypoint_num);
-      for (const auto* point = row + 6; point < row + columns; point += dims_) {
-        const auto score = dims_ == 3 ? point[2] : 1.0F;
+      for (std::int64_t c = 6; c < columns; c += dims) {
+        const auto visibility = dims == 3 ? output.at(i, c + 2) : 1.0F;
         object.keypoints.push_back(
-            {transform.to_source(core::Point2f{point[0], point[1]}),
-             score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
+            {transform.to_source(core::Point2f{output.at(i, c), output.at(i, c + 1)}),
+             visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
+             visibility});
       }
     }
     return true;
@@ -92,7 +97,6 @@ protected:
 private:
   E2EKeypointParam param_;
   std::size_t dims_ = 3;
-  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
 };
 
 } // namespace

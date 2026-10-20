@@ -55,23 +55,28 @@ public:
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const auto* boxes = float_data(*outputs[boxes_index_], boxes_scratch_);
-    const auto* points = float_data(*outputs[1 - boxes_index_], points_scratch_);
-    if (boxes == nullptr || points == nullptr)
-      return false;
+    const HeadGrid boxes(*outputs[boxes_index_], std::nullopt);
+    // [1, M, K, 3] keypoints as an NHWC grid of M rows, K cells, 3 channels.
+    const auto& points_output = *outputs[1 - boxes_index_];
+    const HeadGrid points(points_output, engine::DataLayout::Nhwc);
+    KZ_CHECK_RETURN(boxes.valid() && points.valid(), false, "rtmo_keypoint: outputs must be float32 or int8");
     const auto count = static_cast<std::size_t>(outputs[boxes_index_]->shape()[1]);
-    const auto keypoint_num = static_cast<std::size_t>(outputs[1 - boxes_index_]->shape()[2]);
+    const auto keypoint_num = static_cast<std::size_t>(points_output.shape()[2]);
 
     rects_.clear();
     scores_.clear();
     candidates_.clear();
     for (std::size_t i = 0; i < count; ++i) {
-      const auto* box = boxes + i * 5;
+      const auto score = boxes.at(i, 4);
       // Also skips NaN boxes and scores.
-      if (!(box[4] > param_.confidence_threshold[0]) || !(box[2] - box[0] > 0.0F && box[3] - box[1] > 0.0F))
+      if (!(score > param_.confidence_threshold[0]))
         continue;
-      rects_.push_back(core::Rect2f::from_points({box[0], box[1]}, {box[2], box[3]}));
-      scores_.push_back(box[4]);
+      const core::Point2f tl{boxes.at(i, 0), boxes.at(i, 1)};
+      const core::Point2f br{boxes.at(i, 2), boxes.at(i, 3)};
+      if (!(br.x - tl.x > 0.0F && br.y - tl.y > 0.0F))
+        continue;
+      rects_.push_back(core::Rect2f::from_points(tl, br));
+      scores_.push_back(score);
       candidates_.push_back(i);
     }
 
@@ -82,11 +87,12 @@ protected:
       auto& object = result[0].emplace_back();
       object.box = {box, scores_[k], 0, -1};
       object.keypoints.reserve(keypoint_num);
-      const auto* point = points + candidates_[k] * keypoint_num * 3;
-      for (std::size_t j = 0; j < keypoint_num; ++j, point += 3) {
+      const auto row = static_cast<std::int64_t>(candidates_[k]);
+      for (std::int64_t j = 0; j < static_cast<std::int64_t>(keypoint_num); ++j) {
+        const auto score = points.at(row, j, 2);
         object.keypoints.push_back(
-            {transform.to_source(core::Point2f{point[0], point[1]}),
-             point[2] > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, point[2]});
+            {transform.to_source(core::Point2f{points.at(row, j, 0), points.at(row, j, 1)}),
+             score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
       }
     }
     return true;
@@ -98,8 +104,6 @@ private:
   Vector<core::Rect2f> rects_;
   Vector<float> scores_;
   Vector<std::size_t> candidates_;
-  core::Buffer boxes_scratch_{core::MemoryType::Cpu, core::DataType::Float32};
-  core::Buffer points_scratch_{core::MemoryType::Cpu, core::DataType::Float32};
 };
 
 } // namespace
