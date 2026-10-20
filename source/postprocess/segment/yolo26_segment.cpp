@@ -40,7 +40,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "yolo26_segment"))
+    if (!is_float_outputs(engine, "yolo26_segment"))
       return false;
     param_ = config.get<Yolo26SegmentParam>();
     if (param_.class_num == 0 ||
@@ -48,7 +48,8 @@ public:
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
       return false;
     std::size_t box_channels = 4;
-    const auto outputs = raw_segment_outputs(engine, param_.strides, box_channels, param_.class_num, "yolo26_segment");
+    const auto outputs =
+        find_raw_segment_outputs(engine, param_.strides, box_channels, param_.class_num, "yolo26_segment");
     if (!outputs)
       return false;
     outputs_ = *outputs;
@@ -79,7 +80,7 @@ protected:
     }
     const auto masks = outputs_.masks;
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
-      for (auto k : nms_keep(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
+      for (auto k : nms_indices(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
         const auto box = transform.clip_to_source(rects_[cls][k]);
         if (box.empty())
           continue;
@@ -87,7 +88,7 @@ protected:
         mask_coefficients_.assign(first, first + masks);
         auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
         object.box = {box, scores_[cls][k], static_cast<std::int64_t>(cls), -1};
-        object.mask = masks_.make(prototypes, mask_coefficients_, rects_[cls][k], box, transform, mask_logit_);
+        object.mask = masks_.decode(prototypes, mask_coefficients_, rects_[cls][k], box, transform, mask_logit_);
       }
     }
     return true;
@@ -97,7 +98,7 @@ private:
   auto decode_head(const HeadGrid& grid, core::Point2f stride) -> void {
     const auto first_mask = 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
-    for (const auto cell : scan_.scan(grid, 4, param_.class_num, min_score)) {
+    for (const auto cell : scan_.scan_max_score(grid, 4, param_.class_num, min_score)) {
       const std::int64_t y = cell / grid.cols();
       const std::int64_t x = cell % grid.cols();
       for (std::size_t cls = 0; cls < param_.class_num; ++cls) {

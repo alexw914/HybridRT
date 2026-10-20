@@ -36,7 +36,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "e2e_segment"))
+    if (!is_float_outputs(engine, "e2e_segment"))
       return false;
     param_ = config.get<E2ESegmentParam>();
     if (param_.class_num == 0 ||
@@ -85,7 +85,7 @@ protected:
         coefficients_.push_back(det.at(i, c));
       auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
       object.box = {box, score, static_cast<std::int64_t>(cls), -1};
-      object.mask = masks_.make(prototypes, coefficients_, net_box, box, transform, mask_logit_);
+      object.mask = masks_.decode(prototypes, coefficients_, net_box, box, transform, mask_logit_);
     }
     return true;
   }

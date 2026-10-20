@@ -42,8 +42,8 @@ auto accumulate(const HeadGrid& grid, const Vector<float>& weights, const core::
 
 } // namespace
 
-auto MaskDecoder::make(const HeadGrid& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
-                       const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit)
+auto MaskDecoder::decode(const HeadGrid& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
+                         const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit)
     -> Mask {
   Mask mask;
   mask.rect = core::intersect(core::cover_pixels(source_box), transform.src_roi);
@@ -94,8 +94,10 @@ auto MaskDecoder::make(const HeadGrid& prototypes, const Vector<float>& coeffici
   const auto rh = static_cast<double>(dst.height) / src.height;
   const auto width = mask.rect.width;
   const auto height = mask.rect.height;
-  taps(columns_, width, rw * sx, ((mask.rect.x + 0.5 - src.x) * rw + dst.x) * sx - 0.5 - region.x, region.width);
-  taps(rows_, height, rh * sy, ((mask.rect.y + 0.5 - src.y) * rh + dst.y) * sy - 0.5 - region.y, region.height);
+  bilinear_taps(columns_, width, rw * sx, ((mask.rect.x + 0.5 - src.x) * rw + dst.x) * sx - 0.5 - region.x,
+                region.width);
+  bilinear_taps(rows_, height, rh * sy, ((mask.rect.y + 0.5 - src.y) * rh + dst.y) * sy - 0.5 - region.y,
+                region.height);
   across_.resize(static_cast<std::size_t>(region.height) * static_cast<std::size_t>(width));
   for (int y = 0; y < region.height; ++y) {
     const auto* in = logits_.ptr<float>(y);
@@ -117,7 +119,7 @@ auto MaskDecoder::make(const HeadGrid& prototypes, const Vector<float>& coeffici
   return mask;
 }
 
-auto MaskDecoder::taps(Vector<Tap>& out, int count, double scale, double offset, int size) -> void {
+auto MaskDecoder::bilinear_taps(Vector<Tap>& out, int count, double scale, double offset, int size) -> void {
   out.resize(static_cast<std::size_t>(count));
   for (int i = 0; i < count; ++i) {
     const auto position = scale * i + offset;
@@ -132,8 +134,8 @@ auto MaskDecoder::taps(Vector<Tap>& out, int count, double scale, double offset,
   }
 }
 
-auto raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f>& strides, std::size_t& box_channels,
-                         std::size_t classes, const char* name) -> std::optional<RawSegmentOutputs> {
+auto find_raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f>& strides, std::size_t& box_channels,
+                              std::size_t classes, const char* name) -> std::optional<RawSegmentOutputs> {
   const auto& outputs = engine.output_protos();
   const auto layout = engine.proto().output_layout;
   const auto input = *engine.input_size();
@@ -143,7 +145,7 @@ auto raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f>& st
   Vector<core::Point2f> inferred;
   std::size_t selected_channels = 0;
   for (std::size_t candidate = 0; candidate < outputs.size(); ++candidate) {
-    const auto proto = HeadShape::of(outputs[candidate], layout);
+    const auto proto = HeadShape::from_proto(outputs[candidate], layout);
     if (proto.batch != 1 || proto.channels <= 0 || proto.rows <= 0 || proto.cols <= 0)
       continue;
     RawSegmentOutputs found{{}, candidate, static_cast<std::size_t>(proto.channels)};
@@ -153,7 +155,7 @@ auto raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f>& st
     for (std::size_t i = 0; i < outputs.size() && fits; ++i) {
       if (i == candidate)
         continue;
-      const auto head = HeadShape::of(outputs[i], layout);
+      const auto head = HeadShape::from_proto(outputs[i], layout);
       const auto channels = head.channels - static_cast<std::int64_t>(classes) - static_cast<std::int64_t>(found.masks);
       fits = channels > 0 && channels % 4 == 0;
       if (fits && candidate_channels == 0)

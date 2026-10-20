@@ -43,7 +43,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "general_classify"))
+    if (!is_float_outputs(engine, "general_classify"))
       return false;
     activation_ = config.get<GeneralClassifyParam>().classify_postprocess_type;
     scratch_.assign(engine.output_protos().size(), nullptr);
@@ -90,7 +90,7 @@ auto make_classify(std::string_view type) -> UniquePtr<ClassifyPostprocessor> {
 
 auto create_classify_postprocessor(std::string_view type, const kitzoo::json::Json& config,
                                    const engine::Engine& engine) -> UniquePtr<ClassifyPostprocessor> {
-  return checked(make_classify(type), type, config, engine);
+  return init_or_abort(make_classify(type), type, config, engine);
 }
 
 } // namespace hrt::postprocess

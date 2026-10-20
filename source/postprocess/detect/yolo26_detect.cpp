@@ -25,10 +25,10 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "yolo26_detect"))
+    if (!is_float_outputs(engine, "yolo26_detect"))
       return false;
     param_ = config.get<Yolo26Param>();
-    if (!check_yolo26(param_, engine, 0))
+    if (!resolve_yolo26_heads(param_, engine, 0))
       return false;
     // Scores are compared as logits so most cells skip the sigmoid.
     logit_threshold_.resize(param_.class_num);
@@ -45,14 +45,14 @@ protected:
       const HeadGrid grid(*outputs[head], layout_);
       decode_head(result, grid, param_.strides[head]);
     }
-    finish_detect(result, param_.iou_threshold, transform);
+    nms_to_source(result, param_.iou_threshold, transform);
     return true;
   }
 
 private:
   auto decode_head(DetectResultMap& result, const HeadGrid& grid, core::Point2f stride) -> void {
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
-    for (const auto cell : scan_.scan(grid, 4, param_.class_num, min_score)) {
+    for (const auto cell : scan_.scan_max_score(grid, 4, param_.class_num, min_score)) {
       const std::int64_t y = cell / grid.cols();
       const std::int64_t x = cell % grid.cols();
       bool decoded = false;

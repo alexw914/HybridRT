@@ -37,7 +37,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "e2e_keypoint"))
+    if (!is_float_outputs(engine, "e2e_keypoint"))
       return false;
     param_ = config.get<E2EKeypointParam>();
     KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,

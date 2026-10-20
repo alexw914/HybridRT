@@ -31,7 +31,7 @@ struct YoloV8KeypointParam {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8KeypointParam, class_num, keypoint_num, reg_max,
                                                 confidence_threshold, iou_threshold, keypoint_threshold)
 
-auto has_shape_parameters(const kitzoo::json::Json& config) -> bool {
+auto has_two_shape_keys(const kitzoo::json::Json& config) -> bool {
   return config.contains("class_num") + config.contains("reg_max") + config.contains("keypoint_num") >= 2;
 }
 
@@ -43,15 +43,15 @@ class YoloV8Keypoint final : public KeypointPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
     auto problems = check_section<YoloV8KeypointParam>(config);
-    if (!has_shape_parameters(config))
+    if (!has_two_shape_keys(config))
       problems.emplace_back("postprocess: YoloV8Keypoint needs at least two of class_num, reg_max and keypoint_num");
     return problems;
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "yolov8_keypoint"))
+    if (!is_float_outputs(engine, "yolov8_keypoint"))
       return false;
-    KZ_CHECK_RETURN(has_shape_parameters(config), false,
+    KZ_CHECK_RETURN(has_two_shape_keys(config), false,
                     "yolov8_keypoint: supply at least two of class_num, reg_max and keypoint_num");
     param_ = config.get<YoloV8KeypointParam>();
     KZ_CHECK_RETURN(!config.contains("class_num") || param_.class_num > 0, false,
@@ -62,7 +62,7 @@ public:
     const auto& outputs = engine.output_protos();
     if (!is_4d_outputs(engine, "yolov8_keypoint"))
       return false;
-    const auto head = HeadShape::of(outputs[0], engine.proto().output_layout);
+    const auto head = HeadShape::from_proto(outputs[0], engine.proto().output_layout);
     if (!config.contains("class_num")) {
       KZ_CHECK_RETURN(head.channels > 0 && param_.reg_max <= static_cast<std::size_t>((head.channels - 1) / 4), false,
                       "yolov8_keypoint: reg_max exceeds output channels");
@@ -86,7 +86,7 @@ public:
     param_.reg_max = shape->reg_max;
     YoloV8Param heads{param_.class_num, param_.strides, param_.reg_max, param_.confidence_threshold,
                       param_.iou_threshold};
-    if (!check_yolov8(heads, engine, param_.keypoint_num * dims_))
+    if (!resolve_yolov8_heads(heads, engine, param_.keypoint_num * dims_))
       return false;
     param_.reg_max = heads.reg_max;
     param_.strides = std::move(heads.strides);
@@ -118,7 +118,7 @@ protected:
         rects_.push_back(object.box.rect);
         scores_.push_back(object.box.score);
       }
-      for (auto k : nms_keep(rects_, scores_, param_.iou_threshold[cls])) {
+      for (auto k : nms_indices(rects_, scores_, param_.iou_threshold[cls])) {
         auto& object = objects[k];
         object.box.rect = transform.clip_to_source(object.box.rect);
         if (object.box.rect.empty())
@@ -136,7 +136,7 @@ private:
     const auto bins = param_.reg_max;
     const auto first_keypoint = bins * 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
-    for (const auto cell : scan_.scan(grid, bins * 4, param_.class_num, min_score)) {
+    for (const auto cell : scan_.scan_max_score(grid, bins * 4, param_.class_num, min_score)) {
       const std::int64_t y = cell / grid.cols();
       const std::int64_t x = cell % grid.cols();
       for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
@@ -148,11 +148,11 @@ private:
         const auto cx = static_cast<float>(x) + 0.5F;
         const auto cy = static_cast<float>(y) + 0.5F;
         auto& object = candidates_[cls].emplace_back();
-        object.box = {
-            core::Rect2f(
-                {(cx - dfl(grid, y, x, 0, bins)) * stride.x, (cy - dfl(grid, y, x, bins, bins)) * stride.y},
-                {(cx + dfl(grid, y, x, bins * 2, bins)) * stride.x, (cy + dfl(grid, y, x, bins * 3, bins)) * stride.y}),
-            core::sigmoid(score), static_cast<std::int64_t>(cls), -1};
+        object.box = {core::Rect2f({(cx - dfl_distance(grid, y, x, 0, bins)) * stride.x,
+                                    (cy - dfl_distance(grid, y, x, bins, bins)) * stride.y},
+                                   {(cx + dfl_distance(grid, y, x, bins * 2, bins)) * stride.x,
+                                    (cy + dfl_distance(grid, y, x, bins * 3, bins)) * stride.y}),
+                      core::sigmoid(score), static_cast<std::int64_t>(cls), -1};
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
           const auto channel = first_keypoint + j * dims_;

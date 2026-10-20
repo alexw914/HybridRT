@@ -51,7 +51,7 @@ protected:
     const auto channels = shape.size() == 4 ? static_cast<int>(shape[1]) : 1;
     const auto height = static_cast<int>(shape[shape.size() - 2]);
     const auto width = static_cast<int>(shape.back());
-    if (!labels_at_output(outputs[0], channels, height, width))
+    if (!output_labels(outputs[0], channels, height, width))
       return false;
 
     // Source pixel center -> network coordinate -> output pixel.
@@ -84,7 +84,7 @@ protected:
   }
 
 private:
-  auto labels_at_output(const SharedPtr<core::Buffer>& buffer, int channels, int height, int width) -> bool {
+  auto output_labels(const SharedPtr<core::Buffer>& buffer, int channels, int height, int width) -> bool {
     const auto& output = *buffer;
     labels_.create(height, width, CV_16U);
     const auto plane = static_cast<std::size_t>(height) * static_cast<std::size_t>(width);

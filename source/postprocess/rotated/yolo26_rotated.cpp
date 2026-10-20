@@ -27,10 +27,10 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "yolo26_rotated"))
+    if (!is_float_outputs(engine, "yolo26_rotated"))
       return false;
     param_ = config.get<Yolo26Param>();
-    if (!check_yolo26(param_, engine, 1))
+    if (!resolve_yolo26_heads(param_, engine, 1))
       return false;
     logit_threshold_.resize(param_.class_num);
     std::transform(param_.confidence_threshold.begin(), param_.confidence_threshold.end(), logit_threshold_.begin(),
@@ -46,13 +46,13 @@ protected:
       const HeadGrid grid(*outputs[head], layout_);
       decode_head(result, grid, param_.strides[head]);
     }
-    return finish_rotated(result, param_.iou_threshold, transform);
+    return nms_rotated_to_source(result, param_.iou_threshold, transform);
   }
 
 private:
   auto decode_head(RotatedResultMap& result, const HeadGrid& grid, core::Point2f stride) -> void {
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
-    for (const auto cell : scan_.scan(grid, 5, param_.class_num, min_score)) {
+    for (const auto cell : scan_.scan_max_score(grid, 5, param_.class_num, min_score)) {
       const std::int64_t y = cell / grid.cols();
       const std::int64_t x = cell % grid.cols();
       bool decoded = false;

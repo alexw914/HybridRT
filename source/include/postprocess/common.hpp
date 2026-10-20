@@ -29,7 +29,7 @@ auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* 
 
 // Whether every engine output is float32 or int8, the types HeadGrid and
 // float_view() read. Checked once in init, so decode() relies on it.
-auto float_outputs(const engine::Engine& engine, std::string_view name) -> bool;
+auto is_float_outputs(const engine::Engine& engine, std::string_view name) -> bool;
 
 // Whether the engine has outputs and every one is 4-D, as HeadShape expects.
 auto is_4d_outputs(const engine::Engine& engine, std::string_view name) -> bool;
@@ -42,7 +42,7 @@ struct HeadShape {
   std::int64_t cols = 0;
 
   // `proto` must be 4-D; see is_4d_outputs().
-  static auto of(const core::BufferProto& proto, engine::DataLayout layout) -> HeadShape;
+  static auto from_proto(const core::BufferProto& proto, engine::DataLayout layout) -> HeadShape;
 
   // Input-to-head scale along x and y.
   KZ_NODISCARD auto stride(core::Size input) const -> core::Point2f;
@@ -62,7 +62,7 @@ auto keypoint_shape(std::int64_t channels, unsigned int count, std::optional<std
 // Element access into one detection head output, NCHW or NHWC, float32 or
 // quantized int8, honoring buffer strides. Without a layout, a decoded
 // [1, rows, N] output is one grid row of N cells whose channels are its rows.
-// Other data types are rejected in init by float_outputs().
+// Other data types are rejected in init by is_float_outputs().
 class HeadGrid {
 public:
   HeadGrid(const core::Buffer& buffer, std::optional<engine::DataLayout> layout);
@@ -131,12 +131,13 @@ public:
   // With NCHW heads the class planes are read one after another into a
   // running maximum, a sequential pass the compiler vectorizes, instead of
   // striding every plane for every cell; int8 scores stay int8.
-  auto scan(const HeadGrid& grid, std::size_t first, std::size_t count, float bound) -> const Vector<std::uint32_t>&;
+  auto scan_max_score(const HeadGrid& grid, std::size_t first, std::size_t count, float bound)
+      -> const Vector<std::uint32_t>&;
 
   // Cells x of row 0, in order, whose `channel` value exceeds `threshold`.
   // int8 values are compared as integers against the bound and dequantized
   // only when they reach it.
-  auto above(const HeadGrid& grid, std::size_t channel, float threshold) -> const Vector<std::uint32_t>&;
+  auto scan_channel(const HeadGrid& grid, std::size_t channel, float threshold) -> const Vector<std::uint32_t>&;
 
 private:
   Vector<float> float_best_;
@@ -146,7 +147,8 @@ private:
 
 // Expected value of the softmax over `bins` consecutive channels starting at
 // `first` (YOLOv8 distribution focal loss decoding).
-inline auto dfl(const HeadGrid& grid, std::int64_t y, std::int64_t x, std::size_t first, std::size_t bins) -> float {
+inline auto dfl_distance(const HeadGrid& grid, std::int64_t y, std::int64_t x, std::size_t first, std::size_t bins)
+    -> float {
   auto max = grid.at(y, x, first);
   for (std::size_t i = 1; i < bins; ++i)
     max = std::max(max, grid.at(y, x, first + i));
@@ -164,11 +166,11 @@ inline auto dfl(const HeadGrid& grid, std::int64_t y, std::int64_t x, std::size_
 // the output itself when it is contiguous float32, otherwise `scratch`
 // holding a dequantized or packed copy, created on first use and resized only
 // when the output shape changes. The output must be float32 or int8, as
-// float_outputs() checks in init.
+// is_float_outputs() checks in init.
 // Decoders reading part of an output use HeadGrid instead.
 auto float_view(const SharedPtr<core::Buffer>& output, SharedPtr<core::Buffer>& scratch) -> SharedPtr<core::Buffer>;
 
-auto nms_keep(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
+auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
     -> Vector<std::size_t>;
 
 // check_config of a decoder reading `Param` from the "postprocess" section.
@@ -183,8 +185,8 @@ auto check_section(const kitzoo::json::Json& config) -> Vector<String> {
 // one image input, or engine outputs init() rejects. init() may therefore
 // dereference engine.input_size().
 template <typename Postprocessor>
-auto checked(UniquePtr<Postprocessor> postprocessor, std::string_view type, const kitzoo::json::Json& config,
-             const engine::Engine& engine) -> UniquePtr<Postprocessor> {
+auto init_or_abort(UniquePtr<Postprocessor> postprocessor, std::string_view type, const kitzoo::json::Json& config,
+                   const engine::Engine& engine) -> UniquePtr<Postprocessor> {
   KZ_CHECK_MSG(postprocessor != nullptr, "postprocess: unknown type \"{}\"", type);
   const auto problems = postprocessor->check_config(config);
   KZ_CHECK_MSG(problems.empty(), "postprocess: invalid {} config: {}", type, core::join(problems));

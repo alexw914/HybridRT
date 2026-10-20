@@ -34,7 +34,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "e2e_detect"))
+    if (!is_float_outputs(engine, "e2e_detect"))
       return false;
     param_ = config.get<E2EDetectParam>();
     if (param_.class_num == 0 ||

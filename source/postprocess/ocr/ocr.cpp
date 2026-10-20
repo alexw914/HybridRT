@@ -89,7 +89,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "ocr"))
+    if (!is_float_outputs(engine, "ocr"))
       return false;
     detection_ = config["stage"] == "detection";
     const auto& outputs = engine.output_protos();
@@ -248,7 +248,7 @@ auto make_ocr(std::string_view type) -> UniquePtr<OcrPostprocessor> {
 
 auto create_ocr_postprocessor(const kitzoo::json::Json& config, const engine::Engine& engine)
     -> UniquePtr<OcrPostprocessor> {
-  return checked(make_ocr("Ocr"), "Ocr", config, engine);
+  return init_or_abort(make_ocr("Ocr"), "Ocr", config, engine);
 }
 
 } // namespace hrt::postprocess

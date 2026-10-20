@@ -89,7 +89,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "general_keypoint"))
+    if (!is_float_outputs(engine, "general_keypoint"))
       return false;
     param_ = config.get<GeneralKeypointParam>();
     const auto type = param_.general_keypoint_type;
@@ -358,7 +358,7 @@ auto make_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor> {
 
 auto create_keypoint_postprocessor(std::string_view type, const kitzoo::json::Json& config,
                                    const engine::Engine& engine) -> UniquePtr<KeypointPostprocessor> {
-  return checked(make_keypoint(type), type, config, engine);
+  return init_or_abort(make_keypoint(type), type, config, engine);
 }
 
 } // namespace hrt::postprocess

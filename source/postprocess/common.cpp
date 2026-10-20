@@ -57,7 +57,7 @@ auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* 
   return true;
 }
 
-auto float_outputs(const engine::Engine& engine, std::string_view name) -> bool {
+auto is_float_outputs(const engine::Engine& engine, std::string_view name) -> bool {
   for (const auto& output : engine.output_protos()) {
     KZ_CHECK_RETURN(output.data_type == core::DataType::Float32 || output.data_type == core::DataType::Int8, false,
                     "{}: outputs must be float32 or int8, got {}", name, to_string(output.data_type));
@@ -74,7 +74,7 @@ auto is_4d_outputs(const engine::Engine& engine, std::string_view name) -> bool 
   return true;
 }
 
-auto HeadShape::of(const core::BufferProto& proto, engine::DataLayout layout) -> HeadShape {
+auto HeadShape::from_proto(const core::BufferProto& proto, engine::DataLayout layout) -> HeadShape {
   const auto& shape = proto.shape;
   if (layout == engine::DataLayout::Nchw)
     return HeadShape{shape[0], shape[1], shape[2], shape[3]};
@@ -134,8 +134,8 @@ auto typed_bound(float bound) {
 }
 
 template <typename T>
-auto scan_cells(const HeadGrid& grid, std::size_t first, std::size_t count, float raw_bound, Vector<T>& best,
-                Vector<std::uint32_t>& cells) -> void {
+auto scan_max_cells(const HeadGrid& grid, std::size_t first, std::size_t count, float raw_bound, Vector<T>& best,
+                    Vector<std::uint32_t>& cells) -> void {
   const auto rows = grid.rows();
   const auto cols = grid.cols();
   const auto bound = typed_bound<T>(raw_bound);
@@ -179,7 +179,8 @@ auto scan_cells(const HeadGrid& grid, std::size_t first, std::size_t count, floa
 }
 
 template <typename T>
-auto cells_above(const HeadGrid& grid, std::size_t channel, float threshold, Vector<std::uint32_t>& cells) -> void {
+auto scan_channel_cells(const HeadGrid& grid, std::size_t channel, float threshold, Vector<std::uint32_t>& cells)
+    -> void {
   const auto* values = grid.row<T>(0, channel);
   const auto step = grid.col_step();
   const auto bound = typed_bound<T>(grid.raw_bound(threshold));
@@ -192,20 +193,21 @@ auto cells_above(const HeadGrid& grid, std::size_t channel, float threshold, Vec
 
 } // namespace
 
-auto CellScanner::scan(const HeadGrid& grid, std::size_t first, std::size_t count, float bound)
+auto CellScanner::scan_max_score(const HeadGrid& grid, std::size_t first, std::size_t count, float bound)
     -> const Vector<std::uint32_t>& {
   if (grid.int8())
-    scan_cells(grid, first, count, bound, int8_best_, cells_);
+    scan_max_cells(grid, first, count, bound, int8_best_, cells_);
   else
-    scan_cells(grid, first, count, bound, float_best_, cells_);
+    scan_max_cells(grid, first, count, bound, float_best_, cells_);
   return cells_;
 }
 
-auto CellScanner::above(const HeadGrid& grid, std::size_t channel, float threshold) -> const Vector<std::uint32_t>& {
+auto CellScanner::scan_channel(const HeadGrid& grid, std::size_t channel, float threshold)
+    -> const Vector<std::uint32_t>& {
   if (grid.int8())
-    cells_above<std::int8_t>(grid, channel, threshold, cells_);
+    scan_channel_cells<std::int8_t>(grid, channel, threshold, cells_);
   else
-    cells_above<float>(grid, channel, threshold, cells_);
+    scan_channel_cells<float>(grid, channel, threshold, cells_);
   return cells_;
 }
 
@@ -291,7 +293,7 @@ auto float_view(const SharedPtr<core::Buffer>& output, SharedPtr<core::Buffer>& 
   return scratch;
 }
 
-auto nms_keep(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
+auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
     -> Vector<std::size_t> {
   Vector<std::size_t> order(rects.size());
   std::iota(order.begin(), order.end(), std::size_t{0});

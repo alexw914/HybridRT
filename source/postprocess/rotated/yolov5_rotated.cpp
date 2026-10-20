@@ -23,10 +23,10 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "yolov5_rotated"))
+    if (!is_float_outputs(engine, "yolov5_rotated"))
       return false;
     param_ = config.get<YoloV5Param>();
-    if (!check_yolov5(param_, engine, 1))
+    if (!resolve_yolov5_heads(param_, engine, 1))
       return false;
     const auto min_threshold =
         *std::min_element(param_.confidence_threshold.begin(), param_.confidence_threshold.end());
@@ -42,7 +42,7 @@ protected:
       const HeadGrid grid(*outputs[head], layout_);
       decode_head(result, grid, head);
     }
-    return finish_rotated(result, param_.iou_threshold, transform);
+    return nms_rotated_to_source(result, param_.iou_threshold, transform);
   }
 
 private:
@@ -53,7 +53,7 @@ private:
     const auto channels = param_.class_num + 6;
     for (std::size_t anchor = 0; anchor < anchors.size() / 2; ++anchor) {
       const auto base = channels * anchor;
-      for (const auto cell : scan_.scan(grid, base + 5, 1, min_objectness)) {
+      for (const auto cell : scan_.scan_max_score(grid, base + 5, 1, min_objectness)) {
         const std::int64_t y = cell / grid.cols();
         const std::int64_t x = cell % grid.cols();
         const auto objectness = core::sigmoid(grid.at(y, x, base + 5));

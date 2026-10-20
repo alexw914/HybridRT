@@ -36,7 +36,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "e2e_rotated"))
+    if (!is_float_outputs(engine, "e2e_rotated"))
       return false;
     param_ = config.get<E2ERotatedParam>();
     if (param_.class_num == 0 ||
@@ -73,7 +73,7 @@ protected:
            score,
            static_cast<std::int64_t>(cls)});
     }
-    return map_rotated(result, transform);
+    return rotated_to_source(result, transform);
   }
 
 private:

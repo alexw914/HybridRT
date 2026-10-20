@@ -25,8 +25,8 @@ public:
   // the box's source pixels and thresholded as a logit. The prototype grid
   // has one channel per coefficient; only the box region is read, and int8
   // prototypes are accumulated without being dequantized.
-  auto make(const HeadGrid& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
-            const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit) -> Mask;
+  auto decode(const HeadGrid& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
+              const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit) -> Mask;
 
 private:
   // Bilinear neighbors and the weight of the second along one axis.
@@ -36,7 +36,7 @@ private:
     float weight = 0.0F;
   };
 
-  static auto taps(Vector<Tap>& out, int count, double scale, double offset, int size) -> void;
+  static auto bilinear_taps(Vector<Tap>& out, int count, double scale, double offset, int size) -> void;
 
   cv::Mat logits_;
   Vector<Tap> columns_;
@@ -57,8 +57,8 @@ struct RawSegmentOutputs {
 // every other output box_channels + classes + masks) and checks one head per
 // stride against the input size, storing the inferred strides; fails on ambiguity.
 // A zero box_channels requests inference of a positive multiple of four.
-auto raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f>& strides, std::size_t& box_channels,
-                         std::size_t classes, const char* name) -> std::optional<RawSegmentOutputs>;
+auto find_raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f>& strides, std::size_t& box_channels,
+                              std::size_t classes, const char* name) -> std::optional<RawSegmentOutputs>;
 
 } // namespace hrt::postprocess
 

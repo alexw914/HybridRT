@@ -156,22 +156,22 @@ auto make_e2e_segment() -> UniquePtr<SegmentPostprocessor>;
 
 auto make_semantic_segment() -> UniquePtr<SegmentPostprocessor>;
 
-auto finish_detect(DetectResultMap& result, const Vector<float>& iou_threshold,
+auto nms_to_source(DetectResultMap& result, const Vector<float>& iou_threshold,
                    const preprocess::ImageTransform& transform) -> void;
 
 // Maps network-space rotated boxes back to the source; fails without uniform
 // scaling.
-auto map_rotated(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool;
+auto rotated_to_source(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool;
 
-auto finish_rotated(RotatedResultMap& result, const Vector<float>& iou_threshold,
-                    const preprocess::ImageTransform& transform) -> bool;
+auto nms_rotated_to_source(RotatedResultMap& result, const Vector<float>& iou_threshold,
+                           const preprocess::ImageTransform& transform) -> bool;
 
-auto check_yolov5(YoloV5Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
+auto resolve_yolov5_heads(YoloV5Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
 
-auto check_yolov8(YoloV8Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
+auto resolve_yolov8_heads(YoloV8Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
 
-// check_yolov8() for YOLO26 heads (reg_max 1); fills strides and per-class thresholds.
-auto check_yolo26(Yolo26Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
+// resolve_yolov8_heads() for YOLO26 heads (reg_max 1); fills strides and per-class thresholds.
+auto resolve_yolo26_heads(Yolo26Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
 
 } // namespace hrt::postprocess
 

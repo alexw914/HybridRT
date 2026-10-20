@@ -41,7 +41,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "yolo26_keypoint"))
+    if (!is_float_outputs(engine, "yolo26_keypoint"))
       return false;
     param_ = config.get<Yolo26KeypointParam>();
     KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
@@ -49,7 +49,7 @@ public:
     const auto& outputs = engine.output_protos();
     if (!is_4d_outputs(engine, "yolo26_keypoint"))
       return false;
-    const auto head = HeadShape::of(outputs[0], engine.proto().output_layout);
+    const auto head = HeadShape::from_proto(outputs[0], engine.proto().output_layout);
     const auto extra = head.channels - static_cast<std::int64_t>(4 + param_.class_num);
     const auto shape = keypoint_shape(extra, param_.keypoint_num);
     if (!shape)
@@ -57,7 +57,7 @@ public:
     param_.keypoint_num = shape->count;
     dims_ = shape->dims;
     Yolo26Param heads{param_.class_num, param_.strides, param_.confidence_threshold, param_.iou_threshold};
-    if (!check_yolo26(heads, engine, param_.keypoint_num * dims_))
+    if (!resolve_yolo26_heads(heads, engine, param_.keypoint_num * dims_))
       return false;
     param_.strides = std::move(heads.strides);
     param_.confidence_threshold = heads.confidence_threshold;
@@ -88,7 +88,7 @@ protected:
         rects_.push_back(object.box.rect);
         scores_.push_back(object.box.score);
       }
-      for (auto k : nms_keep(rects_, scores_, param_.iou_threshold[cls])) {
+      for (auto k : nms_indices(rects_, scores_, param_.iou_threshold[cls])) {
         auto& object = objects[k];
         object.box.rect = transform.clip_to_source(object.box.rect);
         if (object.box.rect.empty())
@@ -105,7 +105,7 @@ private:
   auto decode_head(const HeadGrid& grid, core::Point2f stride) -> void {
     const auto first_keypoint = 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
-    for (const auto cell : scan_.scan(grid, 4, param_.class_num, min_score)) {
+    for (const auto cell : scan_.scan_max_score(grid, 4, param_.class_num, min_score)) {
       const std::int64_t y = cell / grid.cols();
       const std::int64_t x = cell % grid.cols();
       for (std::size_t cls = 0; cls < param_.class_num; ++cls) {

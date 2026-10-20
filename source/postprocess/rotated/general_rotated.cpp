@@ -27,7 +27,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "general_rotated"))
+    if (!is_float_outputs(engine, "general_rotated"))
       return false;
     param_ = config.get<GeneralDetectParam>();
     if (param_.class_num == 0 ||
@@ -49,7 +49,7 @@ protected:
       -> bool override {
     const HeadGrid rows(*outputs[0], std::nullopt);
     decode_rows(result, rows);
-    return finish_rotated(result, param_.iou_threshold, transform);
+    return nms_rotated_to_source(result, param_.iou_threshold, transform);
   }
 
 private:
@@ -57,7 +57,7 @@ private:
     const auto at = [&](std::size_t row, std::uint32_t i) -> float { return rows.at(0, i, row); };
     const auto angle_row = param_.class_num + 4;
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
-      for (const auto i : scan_.above(rows, 4 + cls, param_.confidence_threshold[cls])) {
+      for (const auto i : scan_.scan_channel(rows, 4 + cls, param_.confidence_threshold[cls])) {
         const core::RotatedRect rect{
             {at(0, i), at(1, i)}, {at(2, i), at(3, i)}, at(angle_row, i) * 180.0F / std::numbers::pi_v<float>};
         // Also skips NaN boxes.

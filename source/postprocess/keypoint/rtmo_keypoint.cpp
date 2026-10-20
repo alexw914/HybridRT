@@ -36,7 +36,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "rtmo_keypoint"))
+    if (!is_float_outputs(engine, "rtmo_keypoint"))
       return false;
     param_ = config.get<RtmoKeypointParam>();
     if (!expand_per_class(param_.confidence_threshold, 1, "confidence_threshold") ||
@@ -81,7 +81,7 @@ protected:
       candidates_.push_back(i);
     }
 
-    for (auto k : nms_keep(rects_, scores_, param_.iou_threshold[0])) {
+    for (auto k : nms_indices(rects_, scores_, param_.iou_threshold[0])) {
       const auto box = transform.clip_to_source(rects_[k]);
       if (box.empty())
         continue;

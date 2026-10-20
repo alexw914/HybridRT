@@ -25,7 +25,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "detr_detect"))
+    if (!is_float_outputs(engine, "detr_detect"))
       return false;
     param_ = config.get<DetrParam>();
     if (!config.contains("confidence_threshold"))

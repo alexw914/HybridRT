@@ -26,7 +26,7 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
-    if (!float_outputs(engine, "general_detect"))
+    if (!is_float_outputs(engine, "general_detect"))
       return false;
     param_ = config.get<GeneralDetectParam>();
     if (param_.class_num == 0 ||
@@ -48,7 +48,7 @@ protected:
       -> bool override {
     const HeadGrid rows(*outputs[0], std::nullopt);
     decode_rows(result, rows);
-    finish_detect(result, param_.iou_threshold, transform);
+    nms_to_source(result, param_.iou_threshold, transform);
     return true;
   }
 
@@ -58,7 +58,7 @@ private:
   auto decode_rows(DetectResultMap& result, const HeadGrid& rows) -> void {
     const auto at = [&](std::size_t row, std::uint32_t i) -> float { return rows.at(0, i, row); };
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
-      for (const auto i : scan_.above(rows, 4 + cls, param_.confidence_threshold[cls])) {
+      for (const auto i : scan_.scan_channel(rows, 4 + cls, param_.confidence_threshold[cls])) {
         const auto rect = core::center_box(at(0, i), at(1, i), at(2, i), at(3, i));
         if (!core::valid_box(rect))
           continue;
