@@ -50,7 +50,7 @@ protected:
   }
 
 private:
-  auto decode_head(DetectResultMap& result, const HeadGrid& grid, float stride) -> void {
+  auto decode_head(DetectResultMap& result, const HeadGrid& grid, core::Point2f stride) -> void {
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
     for (const auto cell : scan_.scan(grid, 4, param_.class_num, min_score)) {
       const std::int64_t y = cell / grid.cols();
@@ -66,8 +66,8 @@ private:
         if (!decoded) {
           const auto cx = static_cast<float>(x) + 0.5F;
           const auto cy = static_cast<float>(y) + 0.5F;
-          box = core::Rect2f({(cx - grid.at(y, x, 0)) * stride, (cy - grid.at(y, x, 1)) * stride},
-                             {(cx + grid.at(y, x, 2)) * stride, (cy + grid.at(y, x, 3)) * stride});
+          box = core::Rect2f({(cx - grid.at(y, x, 0)) * stride.x, (cy - grid.at(y, x, 1)) * stride.y},
+                             {(cx + grid.at(y, x, 2)) * stride.x, (cy + grid.at(y, x, 3)) * stride.y});
           decoded = true;
         }
         result[cls].push_back({box, sigmoid(score), static_cast<std::int64_t>(cls)});

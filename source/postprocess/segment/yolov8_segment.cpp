@@ -20,14 +20,14 @@ namespace {
 
 struct YoloV8SegmentParam {
   unsigned int class_num = 0;
-  Vector<float> strides;
+  Vector<core::Point2f> strides; // Inferred in init from the input and head sizes; not a config key.
   std::size_t reg_max = 0;
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
   float mask_threshold = 0.5F;
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8SegmentParam, class_num, strides, reg_max, confidence_threshold,
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8SegmentParam, class_num, reg_max, confidence_threshold,
                                                 iou_threshold, mask_threshold)
 
 // One output per stride with channels 4 * reg_max distance bins, class logits
@@ -98,7 +98,7 @@ protected:
   }
 
 private:
-  auto decode_head(const HeadGrid& grid, float stride) -> void {
+  auto decode_head(const HeadGrid& grid, core::Point2f stride) -> void {
     const auto bins = param_.reg_max;
     const auto first_mask = bins * 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
@@ -114,8 +114,8 @@ private:
         const auto cx = static_cast<float>(x) + 0.5F;
         const auto cy = static_cast<float>(y) + 0.5F;
         rects_[cls].push_back(core::Rect2f(
-            {(cx - dfl(grid, y, x, 0, bins)) * stride, (cy - dfl(grid, y, x, bins, bins)) * stride},
-            {(cx + dfl(grid, y, x, bins * 2, bins)) * stride, (cy + dfl(grid, y, x, bins * 3, bins)) * stride}));
+            {(cx - dfl(grid, y, x, 0, bins)) * stride.x, (cy - dfl(grid, y, x, bins, bins)) * stride.y},
+            {(cx + dfl(grid, y, x, bins * 2, bins)) * stride.x, (cy + dfl(grid, y, x, bins * 3, bins)) * stride.y}));
         scores_[cls].push_back(sigmoid(score));
         for (std::size_t j = 0; j < outputs_.masks; ++j)
           coefficients_[cls].push_back(grid.at(y, x, first_mask + j));

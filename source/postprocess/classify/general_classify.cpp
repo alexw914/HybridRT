@@ -55,8 +55,6 @@ protected:
       -> bool override {
     for (std::size_t i = 0; i < outputs.size(); ++i) {
       const auto floats = float_view(outputs[i], scratch_[i]);
-      if (floats == nullptr)
-        return false;
       const auto* data = static_cast<const float*>(floats->memory()->cpu());
       auto& scores = result.emplace_back(data, data + floats->volume());
       if (activation_ == ClassifyActivation::Sigmoid) {

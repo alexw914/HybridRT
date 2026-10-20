@@ -185,16 +185,14 @@ TEST(YoloV8KeypointTest, AbortsOnHeadsThatDoNotFit) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto input = proto(DataType::Float32, {1, 3, 32, 32});
   const auto output = proto(DataType::Float32, {1, kChannels, 4, 4});
-  for (const auto& shape : hrt::Vector<hrt::core::Shape>{{1, kChannels + 1, 4, 4}, {1, kChannels, 2, 4}}) {
+  for (const auto& shape : hrt::Vector<hrt::core::Shape>{{1, kChannels + 1, 4, 4}}) {
     FakeEngine engine({input}, {proto(DataType::Float32, shape)});
     EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", config(), engine), "");
   }
   FakeEngine valid({input}, {output});
-  for (const char* key : {"keypoint_num", "strides"}) {
-    auto broken = config();
-    broken[key] = key == hrt::String("strides") ? Json::array({8, 16}) : Json(0);
-    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", broken, valid), "");
-  }
+  auto broken = config();
+  broken["keypoint_num"] = 0;
+  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", broken, valid), "");
 }
 
 #ifdef HRT_ORT_MODEL_TEST

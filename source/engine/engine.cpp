@@ -145,9 +145,11 @@ auto Engine::input_size() const -> std::optional<core::Size> {
     return std::nullopt;
   }
   const auto& shape = input_protos_[0].shape;
-  if (proto_.input_layout == DataLayout::Nchw)
-    return core::Size{static_cast<int>(shape[3]), static_cast<int>(shape[2])};
-  return core::Size{static_cast<int>(shape[2]), static_cast<int>(shape[1])};
+  const auto size = proto_.input_layout == DataLayout::Nchw
+                        ? core::Size{static_cast<int>(shape[3]), static_cast<int>(shape[2])}
+                        : core::Size{static_cast<int>(shape[2]), static_cast<int>(shape[1])};
+  KZ_CHECK_RETURN(!size.empty(), std::nullopt, "Engine: input size {}x{} is dynamic or empty", size.width, size.height);
+  return size;
 }
 
 auto Engine::create_host_memory() const -> SharedPtr<core::Memory> {

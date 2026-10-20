@@ -103,31 +103,30 @@ each in [0, 1].
 
 | `type` | Keys |
 | --- | --- |
-| `YoloV8Detect`, `YoloV8Rotated` | `class_num`, `strides` (optional; inferred from input/head sizes), `reg_max` (optional; inferred from output channels), thresholds |
-| `Yolo26Detect`, `Yolo26Rotated` | `class_num`, `strides` (optional; inferred from input/head sizes), thresholds |
-| `YoloV5Detect`, `YoloV5Rotated` | `class_num`, `strides` (optional; inferred from input/head sizes), `anchors` (one list per head: w0, h0, w1, h1, ...), thresholds |
+| `YoloV8Detect`, `YoloV8Rotated` | `class_num`, `reg_max` (optional; inferred from output channels), thresholds |
+| `Yolo26Detect`, `Yolo26Rotated` | `class_num`, thresholds |
+| `YoloV5Detect`, `YoloV5Rotated` | `class_num`, `anchors` (one list per head: w0, h0, w1, h1, ...), thresholds |
 | `GeneralDetect`, `GeneralRotated` | `class_num`, thresholds; decoded `[1, 4 + classes (+ angle), N]` output |
 | `E2EDetect` | `class_num`, `confidence_threshold`; Ultralytics end-to-end `[1, N, 6]` output, no NMS |
 | `E2ERotated` | `class_num`, `confidence_threshold`; end-to-end OBB `[1, N, 7]` |
 | `DetrDetect` | `class_num`, `confidence_threshold` (0.25), `output_format` (`combined`/`separate`), `score_activation` (`none`/`sigmoid`/`softmax`), `background_class` (-1: none) |
 | `GeneralYoloPose` | `class_num`, `keypoint_num` (optional; inferred when unambiguous), `keypoint_threshold` (0.5), thresholds |
-| `YoloV8Keypoint` | at least two of `class_num`, `reg_max`, `keypoint_num`; `strides` (optional; inferred), `keypoint_threshold` (0.5), thresholds |
-| `Yolo26Keypoint` | `class_num`, `keypoint_num` (optional; inferred when unambiguous), `strides` (optional; inferred from input/head sizes), `keypoint_threshold` (0.5), thresholds |
+| `YoloV8Keypoint` | at least two of `class_num`, `reg_max`, `keypoint_num`; `keypoint_threshold` (0.5), thresholds |
+| `Yolo26Keypoint` | `class_num`, `keypoint_num` (optional; inferred when unambiguous), `keypoint_threshold` (0.5), thresholds |
 | `E2EKeypoint` | `class_num`, `keypoint_num` (optional; inferred when unambiguous), `keypoint_threshold` (0.5), `confidence_threshold`; end-to-end pose `[1, N, 6 + K x (2 \| 3)]` |
 | `RtmoKeypoint` | `confidence_threshold` ([0.15]), `iou_threshold` ([0.65]), `keypoint_threshold` (0.3); one class |
 | `GeneralKeypoint` | `general_keypoint_type` (`heatmap`/`heatmap_udp`/`simcc`/`point_with_visible`/`point_channel_first`/`point_channel_last`), `heatmap_refine` (`dark`/`none`), `score_activation` (`none`/`sigmoid`), `keypoint_threshold` (0) |
 | `GeneralYoloSegment` | `class_num`, `mask_threshold` (0.5), thresholds |
-| `YoloV8Segment` | `class_num`, `strides` (optional; inferred from input/head sizes), `reg_max` (optional; inferred from output channels), `mask_threshold` (0.5), thresholds |
-| `Yolo26Segment` | `class_num`, `strides` (optional; inferred from input/head sizes), `mask_threshold` (0.5), thresholds |
+| `YoloV8Segment` | `class_num`, `reg_max` (optional; inferred from output channels), `mask_threshold` (0.5), thresholds |
+| `Yolo26Segment` | `class_num`, `mask_threshold` (0.5), thresholds |
 | `E2ESegment` | `class_num`, `mask_threshold` (0.5), `confidence_threshold`; end-to-end `[1, N, 6 + masks]` plus prototypes |
 | `SemanticSegment` | none |
 | `GeneralClassify` | `classify_postprocess_type`: `none`, `sigmoid`, `softmax` |
 | `Embedding` | none; returns the single engine output as a float vector (int8 outputs dequantized), with no normalization; models with more outputs are rejected |
 | `Ocr` | DB detection or CTC recognition; parameters and cascade usage are in [OCR model](#ocr-model) |
 
-Raw YOLO postprocessors compute each stride during initialization from the input width/height
-and the corresponding output grid. Both ratios must be positive and equal. Omit `strides`
-(or use `[]`) to infer them; a nonempty list must exactly match the inferred values and count.
+Raw YOLO postprocessors compute each head's x and y stride during initialization as the input
+width over the grid width and the input height over the grid height; strides are not configured.
 Segmentation identifies the prototype output first and rejects ambiguous output structures.
 YOLOv8 also infers `reg_max` from the box channels divided by four, after subtracting
 classes and task-specific channels (one angle, keypoint coordinates, or mask coefficients).
@@ -144,8 +143,8 @@ ambiguous inferred class counts. The face template explicitly lists all three:
 `class_num: 1`, `reg_max: 16`, and `keypoint_num: 5`. Initialization fails if the partition is invalid or ambiguous;
 it does not assume three components or a particular bin count. Segmentation likewise
 requires an unambiguous prototype/head structure; explicit `reg_max` can constrain that match.
-Engines report outputs sorted by name on every backend; `anchors`, output indices and any
-explicit `strides` follow that order, excluding the prototype output for segmentation.
+Engines report outputs sorted by name on every backend; `anchors`, output indices and the
+inferred strides follow that order, excluding the prototype output for segmentation.
 For a 640 x 640 input with outputs `output0` (80 x 80), `393` (40 x 40) and `401` (20 x 20),
 the inferred strides are `[16, 32, 8]`.
 

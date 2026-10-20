@@ -20,14 +20,14 @@ namespace {
 
 struct Yolo26SegmentParam {
   unsigned int class_num = 0;
-  Vector<float> strides;
+  Vector<core::Point2f> strides; // Inferred in init from the input and head sizes; not a config key.
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
   float mask_threshold = 0.5F;
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Yolo26SegmentParam, class_num, strides, confidence_threshold,
-                                                iou_threshold, mask_threshold)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Yolo26SegmentParam, class_num, confidence_threshold, iou_threshold,
+                                                mask_threshold)
 
 // One output per stride with channels left, top, right and bottom distances
 // in cells (no distance bins), class logits and mask coefficients, as the
@@ -94,7 +94,7 @@ protected:
   }
 
 private:
-  auto decode_head(const HeadGrid& grid, float stride) -> void {
+  auto decode_head(const HeadGrid& grid, core::Point2f stride) -> void {
     const auto first_mask = 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
     for (const auto cell : scan_.scan(grid, 4, param_.class_num, min_score)) {
@@ -108,8 +108,8 @@ private:
           continue;
         const auto cx = static_cast<float>(x) + 0.5F;
         const auto cy = static_cast<float>(y) + 0.5F;
-        rects_[cls].push_back(core::Rect2f({(cx - grid.at(y, x, 0)) * stride, (cy - grid.at(y, x, 1)) * stride},
-                                           {(cx + grid.at(y, x, 2)) * stride, (cy + grid.at(y, x, 3)) * stride}));
+        rects_[cls].push_back(core::Rect2f({(cx - grid.at(y, x, 0)) * stride.x, (cy - grid.at(y, x, 1)) * stride.y},
+                                           {(cx + grid.at(y, x, 2)) * stride.x, (cy + grid.at(y, x, 3)) * stride.y}));
         scores_[cls].push_back(sigmoid(score));
         for (std::size_t j = 0; j < outputs_.masks; ++j)
           coefficients_[cls].push_back(grid.at(y, x, first_mask + j));

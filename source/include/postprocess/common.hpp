@@ -42,6 +42,9 @@ auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* 
 // float_view() read. Checked once in init, so decode() relies on it.
 auto float_outputs(const engine::Engine& engine, std::string_view name) -> bool;
 
+// Whether the engine has outputs and every one is 4-D, as HeadShape expects.
+auto is_4d_outputs(const engine::Engine& engine, std::string_view name) -> bool;
+
 // Batch, channels and grid of one 4-D head output.
 struct HeadShape {
   std::int64_t batch = 0;
@@ -49,15 +52,12 @@ struct HeadShape {
   std::int64_t rows = 0;
   std::int64_t cols = 0;
 
-  // Nullopt unless `proto` is 4-D.
-  static auto of(const core::BufferProto& proto, engine::DataLayout layout) -> std::optional<HeadShape>;
+  // `proto` must be 4-D; see is_4d_outputs().
+  static auto of(const core::BufferProto& proto, engine::DataLayout layout) -> HeadShape;
 
-  // Uniform input-to-head scale of a positive batch-1 grid.
-  KZ_NODISCARD auto stride(core::Size input) const -> std::optional<float>;
+  // Input-to-head scale along x and y.
+  KZ_NODISCARD auto stride(core::Size input) const -> core::Point2f;
 };
-
-// Validates an optional configured list and stores the inferred strides.
-auto resolve_strides(Vector<float>& strides, const Vector<float>& inferred) -> bool;
 
 struct KeypointShape {
   unsigned int count = 0;
@@ -174,7 +174,8 @@ inline auto dfl(const HeadGrid& grid, std::int64_t y, std::int64_t x, std::size_
 // Contiguous float32 view of an output for decoders that read all of it:
 // the output itself when it is contiguous float32, otherwise `scratch`
 // holding a dequantized or packed copy, created on first use and resized only
-// when the output shape changes. Null for types other than float32 and int8.
+// when the output shape changes. The output must be float32 or int8, as
+// float_outputs() checks in init.
 // Decoders reading part of an output use HeadGrid instead.
 auto float_view(const SharedPtr<core::Buffer>& output, SharedPtr<core::Buffer>& scratch) -> SharedPtr<core::Buffer>;
 
@@ -189,14 +190,16 @@ auto check_section(const kitzoo::json::Json& config) -> Vector<String> {
   return problems;
 }
 
-// Aborts on an unknown type, a config check_config rejects, or engine
-// outputs init() rejects.
+// Aborts on an unknown type, a config check_config rejects, an engine without
+// one image input, or engine outputs init() rejects. init() may therefore
+// dereference engine.input_size().
 template <typename Postprocessor>
 auto checked(UniquePtr<Postprocessor> postprocessor, std::string_view type, const kitzoo::json::Json& config,
              const engine::Engine& engine) -> UniquePtr<Postprocessor> {
   KZ_CHECK_MSG(postprocessor != nullptr, "postprocess: unknown type \"{}\"", type);
   const auto problems = postprocessor->check_config(config);
   KZ_CHECK_MSG(problems.empty(), "postprocess: invalid {} config: {}", type, core::join(problems));
+  KZ_CHECK_MSG(engine.input_size().has_value(), "postprocess: {} needs one batch-1 4-D image input", type);
   KZ_CHECK_MSG(postprocessor->init(config, engine), "postprocess: {} does not fit the engine", type);
   return postprocessor;
 }

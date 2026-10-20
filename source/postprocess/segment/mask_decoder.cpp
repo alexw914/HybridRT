@@ -132,37 +132,36 @@ auto MaskDecoder::taps(Vector<Tap>& out, int count, double scale, double offset,
   }
 }
 
-auto raw_segment_outputs(const engine::Engine& engine, Vector<float>& strides, std::size_t& box_channels,
+auto raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f>& strides, std::size_t& box_channels,
                          std::size_t classes, const char* name) -> std::optional<RawSegmentOutputs> {
   const auto& outputs = engine.output_protos();
   const auto layout = engine.proto().output_layout;
-  const auto input = engine.input_size();
-  KZ_CHECK_RETURN(input && outputs.size() >= 2, std::nullopt, "{}: needs raw heads plus the prototypes", name);
+  const auto input = *engine.input_size();
+  KZ_CHECK_RETURN(outputs.size() >= 2 && is_4d_outputs(engine, name), std::nullopt,
+                  "{}: needs 4-D raw heads plus the prototypes", name);
   std::optional<RawSegmentOutputs> selected;
-  Vector<float> inferred;
+  Vector<core::Point2f> inferred;
   std::size_t selected_channels = 0;
   for (std::size_t candidate = 0; candidate < outputs.size(); ++candidate) {
     const auto proto = HeadShape::of(outputs[candidate], layout);
-    if (!proto || outputs[candidate].shape[0] != 1 || proto->channels <= 0 || proto->rows <= 0 || proto->cols <= 0)
+    if (proto.batch != 1 || proto.channels <= 0 || proto.rows <= 0 || proto.cols <= 0)
       continue;
-    RawSegmentOutputs found{{}, candidate, static_cast<std::size_t>(proto->channels)};
-    Vector<float> candidate_strides;
+    RawSegmentOutputs found{{}, candidate, static_cast<std::size_t>(proto.channels)};
+    Vector<core::Point2f> candidate_strides;
     bool fits = true;
     auto candidate_channels = box_channels;
     for (std::size_t i = 0; i < outputs.size() && fits; ++i) {
       if (i == candidate)
         continue;
       const auto head = HeadShape::of(outputs[i], layout);
-      const auto stride = head ? head->stride(*input) : std::nullopt;
-      const auto channels =
-          head ? head->channels - static_cast<std::int64_t>(classes) - static_cast<std::int64_t>(found.masks) : 0;
-      fits = head && stride && channels > 0 && channels % 4 == 0;
+      const auto channels = head.channels - static_cast<std::int64_t>(classes) - static_cast<std::int64_t>(found.masks);
+      fits = channels > 0 && channels % 4 == 0;
       if (fits && candidate_channels == 0)
         candidate_channels = static_cast<std::size_t>(channels);
       fits = fits && static_cast<std::size_t>(channels) == candidate_channels;
       if (fits) {
         found.heads.push_back(i);
-        candidate_strides.push_back(*stride);
+        candidate_strides.push_back(head.stride(input));
       }
     }
     if (!fits)
@@ -174,8 +173,7 @@ auto raw_segment_outputs(const engine::Engine& engine, Vector<float>& strides, s
   }
   KZ_CHECK_RETURN(selected, std::nullopt, "{}: outputs must be raw heads matching the input size plus mask prototypes",
                   name);
-  if (!resolve_strides(strides, inferred))
-    return std::nullopt;
+  strides = std::move(inferred);
   box_channels = selected_channels;
   return selected;
 }

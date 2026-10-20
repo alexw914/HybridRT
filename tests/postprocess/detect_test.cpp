@@ -77,12 +77,9 @@ TEST(DetectTest, InfersStridesInOutputOrderAndChecksExplicitValues) {
     else if (hrt::String(type) == "YoloV8Detect")
       config["reg_max"] = 1;
     EXPECT_NE(hrt::postprocess::create_detect_postprocessor(type, config, engine), nullptr);
+    // Strides are always inferred, so a configured list is an unknown key.
     config["strides"] = {16, 8};
-    EXPECT_NE(hrt::postprocess::create_detect_postprocessor(type, config, engine), nullptr);
-    for (const auto& invalid : {Json::array({8, 16}), Json::array({16}), Json::array({0, 8}), Json::array({-16, 8})}) {
-      config["strides"] = invalid;
-      EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor(type, config, engine), "");
-    }
+    EXPECT_FALSE(hrt::postprocess::check_config(type, config).empty());
   }
 }
 
@@ -100,16 +97,6 @@ TEST(DetectTest, ChecksExplicitRegMaxAgainstEveryHead) {
   FakeEngine inconsistent({proto(DataType::Float32, {1, 3, 16, 16})},
                           {proto(DataType::Float32, {1, 9, 2, 2}), proto(DataType::Float32, {1, 13, 1, 1})});
   EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", config, inconsistent), "");
-}
-
-TEST(DetectTest, RejectsInvalidGridsWithoutConfiguredStrides) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
-  auto config = yolov8_config();
-  config.erase("strides");
-  for (const auto& shape : hrt::Vector<hrt::core::Shape>{{1, 9, 2, 4}, {1, 9, 0, 2}, {1, 9, -1, 2}, {2, 9, 2, 2}}) {
-    FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, shape)});
-    EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", config, engine), "");
-  }
 }
 
 TEST(DetectYoloV8Test, DecodesNchwFloat) {
@@ -190,8 +177,7 @@ TEST(DetectYolo26Test, ReadsDistancesInCells) {
   // right and down.
   const auto output = proto(DataType::Float32, {1, 5, 2, 2});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
-  const auto config =
-      Json::parse(R"({"class_num": 1, "strides": [8], "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
+  const auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
   auto postprocessor = hrt::postprocess::create_detect_postprocessor("Yolo26Detect", config, engine);
   hrt::Vector<float> values(5 * 4, -10.0F);
   const hrt::Vector<float> cell{1.0F, 1.0F, 0.5F, 0.5F, 3.0F};
@@ -218,8 +204,8 @@ TEST(DetectYoloV5Test, KeepsLowObjectnessAboveThreshold) {
   // Objectness 0.4 (logit < 0.25) with a confident class still clears 0.25.
   const auto output = proto(DataType::Float32, {1, 6, 2, 2});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
-  auto config = Json::parse(
-      R"({"class_num": 1, "strides": [8], "anchors": [[8, 8]], "confidence_threshold": [0.25], "iou_threshold": [0.45]})");
+  auto config =
+      Json::parse(R"({"class_num": 1, "anchors": [[8, 8]], "confidence_threshold": [0.25], "iou_threshold": [0.45]})");
   auto postprocessor = hrt::postprocess::create_detect_postprocessor("YoloV5Detect", config, engine);
   ASSERT_NE(postprocessor, nullptr);
 
@@ -243,7 +229,7 @@ TEST(DetectYoloV5Test, TakesOneStrideAndAnchorListPerHead) {
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
   // Two anchors in the head: 2 * (class_num + 5) channels.
   const auto good = Json::parse(
-      R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "strides": [8], "anchors": [[8, 8, 16, 16]]})");
+      R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "anchors": [[8, 8, 16, 16]]})");
   EXPECT_TRUE(hrt::postprocess::check_config("YoloV5Detect", good).empty());
   EXPECT_NE(hrt::postprocess::create_detect_postprocessor("YoloV5Detect", good, engine), nullptr);
 
@@ -253,11 +239,9 @@ TEST(DetectYoloV5Test, TakesOneStrideAndAnchorListPerHead) {
                                    "anchors": [[8, 8, 16, 16]]})");
   EXPECT_EQ(hrt::postprocess::check_config("YoloV5Detect", old).size(), 3U);
 
-  for (
-      const auto* bad :
-      {R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "strides": [8, 16], "anchors": [[8, 8, 16, 16]]})",
-       R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "strides": [8], "anchors": [[8, 8, 16]]})",
-       R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "strides": [8], "anchors": [[8, 8]]})"})
+  for (const auto* bad :
+       {R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "anchors": [[8, 8, 16]]})",
+        R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "anchors": [[8, 8]]})"})
     EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV5Detect", Json::parse(bad), engine), "") << bad;
 }
 

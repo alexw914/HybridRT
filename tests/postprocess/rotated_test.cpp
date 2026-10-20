@@ -31,7 +31,6 @@ TEST(RotatedTest, InfersYoloV8StridesAndRegMax) {
       kitzoo::json::Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
   EXPECT_NE(hrt::postprocess::create_rotated_postprocessor("YoloV8Rotated", config, engine), nullptr);
   config["reg_max"] = 2;
-  config["strides"] = {8};
   EXPECT_NE(hrt::postprocess::create_rotated_postprocessor("YoloV8Rotated", config, engine), nullptr);
   config["reg_max"] = 16;
   EXPECT_DEATH(hrt::postprocess::create_rotated_postprocessor("YoloV8Rotated", config, engine), "");

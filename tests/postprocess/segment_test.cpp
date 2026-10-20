@@ -227,11 +227,7 @@ TEST(SegmentTest, ChecksExplicitRawHeadStrides) {
       config["reg_max"] = 1;
     EXPECT_NE(hrt::postprocess::create_segment_postprocessor(type, config, engine), nullptr);
     config["strides"] = {16, 8};
-    EXPECT_NE(hrt::postprocess::create_segment_postprocessor(type, config, engine), nullptr);
-    for (const auto& invalid : {Json::array({8, 16}), Json::array({16})}) {
-      config["strides"] = invalid;
-      EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor(type, config, engine), "");
-    }
+    EXPECT_FALSE(hrt::postprocess::check_config(type, config).empty());
   }
 }
 
@@ -252,12 +248,9 @@ TEST(SegmentTest, AbortsOnRawHeadsThatDoNotFit) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto input = proto(DataType::Float32, {1, 3, 16, 16});
   const auto masks = proto(DataType::Float32, {1, 2, 4, 4});
-  const auto config = Json::parse(R"({"class_num": 1, "strides": [8], "confidence_threshold": [0.5],
-                                      "iou_threshold": [0.45]})");
-  for (const auto& outputs :
-       hrt::Vector<hrt::Vector<hrt::core::BufferProto>>{{proto(DataType::Float32, {1, 7, 2, 2})},
-                                                        {proto(DataType::Float32, {1, 8, 2, 2}), masks},
-                                                        {proto(DataType::Float32, {1, 7, 4, 4}), masks}}) {
+  const auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
+  for (const auto& outputs : hrt::Vector<hrt::Vector<hrt::core::BufferProto>>{
+           {proto(DataType::Float32, {1, 7, 2, 2})}, {proto(DataType::Float32, {1, 8, 2, 2}), masks}}) {
     FakeEngine engine({input}, outputs);
     EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("Yolo26Segment", config, engine), "");
   }

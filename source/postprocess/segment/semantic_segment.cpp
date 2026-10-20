@@ -30,9 +30,9 @@ public:
 
   auto init(const kitzoo::json::Json& /*config*/, const engine::Engine& engine) -> bool override {
     const auto& outputs = engine.output_protos();
-    if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 1 || !engine.input_size() ||
+    if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 1 ||
         (outputs[0].shape.size() != 3 && outputs[0].shape.size() != 4) || outputs[0].shape[0] != 1) {
-      KZ_LOG_ERROR("semantic_segment: needs one image input and one [1, C, H, W] or [1, H, W] output");
+      KZ_LOG_ERROR("semantic_segment: needs one [1, C, H, W] or [1, H, W] output");
       return false;
     }
     const auto type = outputs[0].data_type;
@@ -107,8 +107,6 @@ private:
       return true;
     }
     const auto floats = float_view(buffer, scratch_);
-    if (floats == nullptr)
-      return false;
     const auto* data = static_cast<const float*>(floats->memory()->cpu());
     if (channels == 1) {
       for (std::size_t i = 0; i < plane; ++i)

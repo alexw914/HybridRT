@@ -63,7 +63,7 @@ TEST(Yolo26KeypointTest, DecodesDistancesAndKeypointOffsets) {
 
 TEST(Yolo26KeypointTest, AbortsOnHeadsThatDoNotFit) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
-  const auto config = Json::parse(R"({"class_num": 1, "keypoint_num": 17, "strides": [8],
+  const auto config = Json::parse(R"({"class_num": 1, "keypoint_num": 17,
                                       "confidence_threshold": [0.25], "iou_threshold": [0.45]})");
   // A YOLOv8 head with distance bins: 64 + 1 + 51 channels.
   FakeEngine engine({proto(DataType::Float32, {1, 3, 32, 32})}, {proto(DataType::Float32, {1, 116, 4, 4})});

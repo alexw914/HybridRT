@@ -55,9 +55,9 @@ struct RawSegmentOutputs {
 
 // Finds the prototypes among the outputs (the one whose channel count makes
 // every other output box_channels + classes + masks) and checks one head per
-// stride against the input size, inferring strides when omitted; fails on ambiguity.
+// stride against the input size, storing the inferred strides; fails on ambiguity.
 // A zero box_channels requests inference of a positive multiple of four.
-auto raw_segment_outputs(const engine::Engine& engine, Vector<float>& strides, std::size_t& box_channels,
+auto raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f>& strides, std::size_t& box_channels,
                          std::size_t classes, const char* name) -> std::optional<RawSegmentOutputs>;
 
 } // namespace hrt::postprocess

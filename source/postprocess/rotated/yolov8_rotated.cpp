@@ -48,7 +48,7 @@ protected:
   }
 
 private:
-  auto decode_head(RotatedResultMap& result, const HeadGrid& grid, float stride) -> void {
+  auto decode_head(RotatedResultMap& result, const HeadGrid& grid, core::Point2f stride) -> void {
     const auto bins = param_.reg_max;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
     for (const auto cell : scan_.scan(grid, bins * 4 + 1, param_.class_num, min_score)) {
@@ -73,9 +73,9 @@ private:
           const auto b = dfl(grid, y, x, bins * 3, bins);
           const auto xf = (r - l) / 2.0F;
           const auto yf = (b - t) / 2.0F;
-          rect.center = {(xf * cos - yf * sin + static_cast<float>(x) + 0.5F) * stride,
-                         (xf * sin + yf * cos + static_cast<float>(y) + 0.5F) * stride};
-          rect.size = {(r + l) * stride, (b + t) * stride};
+          rect.center = {(xf * cos - yf * sin + static_cast<float>(x) + 0.5F) * stride.x,
+                         (xf * sin + yf * cos + static_cast<float>(y) + 0.5F) * stride.y};
+          rect.size = {(r + l) * stride.x, (b + t) * stride.y};
           rect.angle = theta;
           decoded = true;
         }

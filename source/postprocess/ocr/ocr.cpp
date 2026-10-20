@@ -93,7 +93,7 @@ public:
       return false;
     detection_ = config["stage"] == "detection";
     const auto& outputs = engine.output_protos();
-    KZ_CHECK_RETURN(engine.input_size() && outputs.size() == 1, false, "Ocr: expected one image input and one output");
+    KZ_CHECK_RETURN(outputs.size() == 1, false, "Ocr: expected one output");
     shape_ = outputs[0].shape;
     if (detection_) {
       det_ = config.get<DetectionParam>();
@@ -126,8 +126,6 @@ protected:
   auto decode(OcrResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
     const auto floats = float_view(outputs[0], scratch_);
-    if (floats == nullptr)
-      return false;
     const auto* data = static_cast<const float*>(floats->memory()->cpu());
     if (detection_)
       return detect(result, data, transform);

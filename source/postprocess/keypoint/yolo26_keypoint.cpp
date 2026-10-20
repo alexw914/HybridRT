@@ -20,20 +20,20 @@ namespace {
 struct Yolo26KeypointParam {
   unsigned int class_num = 0;
   unsigned int keypoint_num = 0;
-  Vector<float> strides;
+  Vector<core::Point2f> strides; // Inferred in init from the input and head sizes; not a config key.
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
   // Visibility score above which a keypoint counts as visible.
   float keypoint_threshold = 0.5F;
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Yolo26KeypointParam, class_num, keypoint_num, strides,
-                                                confidence_threshold, iou_threshold, keypoint_threshold)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Yolo26KeypointParam, class_num, keypoint_num, confidence_threshold,
+                                                iou_threshold, keypoint_threshold)
 
 // One output per stride with channels left, top, right and bottom distances
 // in cells (no distance bins), class logits, then x, y (and visibility logit)
 // per keypoint, as the one-to-many head of a YOLO26 pose model emits them. A
-// keypoint at cell (x, y) lies at ((raw + x + 0.5) * stride, (raw + y + 0.5) * stride).
+// keypoint at cell (x, y) lies at ((raw + x + 0.5) * stride.x, (raw + y + 0.5) * stride.y).
 class Yolo26Keypoint final : public KeypointPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
@@ -47,9 +47,10 @@ public:
     KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
                     "yolo26_keypoint: keypoint_num must be positive");
     const auto& outputs = engine.output_protos();
-    const auto head = outputs.empty() ? std::nullopt : HeadShape::of(outputs[0], engine.proto().output_layout);
-    KZ_CHECK_RETURN(head.has_value(), false, "yolo26_keypoint: needs one [1, channels, h, w] output per stride");
-    const auto extra = head->channels - static_cast<std::int64_t>(4 + param_.class_num);
+    if (!is_4d_outputs(engine, "yolo26_keypoint"))
+      return false;
+    const auto head = HeadShape::of(outputs[0], engine.proto().output_layout);
+    const auto extra = head.channels - static_cast<std::int64_t>(4 + param_.class_num);
     const auto shape = keypoint_shape(extra, param_.keypoint_num);
     if (!shape)
       return false;
@@ -101,7 +102,7 @@ protected:
   }
 
 private:
-  auto decode_head(const HeadGrid& grid, float stride) -> void {
+  auto decode_head(const HeadGrid& grid, core::Point2f stride) -> void {
     const auto first_keypoint = 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
     for (const auto cell : scan_.scan(grid, 4, param_.class_num, min_score)) {
@@ -116,13 +117,14 @@ private:
         const auto cx = static_cast<float>(x) + 0.5F;
         const auto cy = static_cast<float>(y) + 0.5F;
         auto& object = candidates_[cls].emplace_back();
-        object.box = {core::Rect2f({(cx - grid.at(y, x, 0)) * stride, (cy - grid.at(y, x, 1)) * stride},
-                                   {(cx + grid.at(y, x, 2)) * stride, (cy + grid.at(y, x, 3)) * stride}),
+        object.box = {core::Rect2f({(cx - grid.at(y, x, 0)) * stride.x, (cy - grid.at(y, x, 1)) * stride.y},
+                                   {(cx + grid.at(y, x, 2)) * stride.x, (cy + grid.at(y, x, 3)) * stride.y}),
                       sigmoid(score), static_cast<std::int64_t>(cls), -1};
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
           const auto channel = first_keypoint + j * dims_;
-          const core::Point2f point{(grid.at(y, x, channel) + cx) * stride, (grid.at(y, x, channel + 1) + cy) * stride};
+          const core::Point2f point{(grid.at(y, x, channel) + cx) * stride.x,
+                                    (grid.at(y, x, channel + 1) + cy) * stride.y};
           const auto visibility = dims_ == 3 ? sigmoid(grid.at(y, x, channel + 2)) : 1.0F;
           object.keypoints.push_back(
               {point, visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,

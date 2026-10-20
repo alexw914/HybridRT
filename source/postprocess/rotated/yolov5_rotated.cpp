@@ -67,8 +67,8 @@ private:
           if (score <= threshold)
             continue;
           if (!decoded) {
-            rect.center = {(sigmoid(grid.at(y, x, base)) * 2.0F - 0.5F + static_cast<float>(x)) * stride,
-                           (sigmoid(grid.at(y, x, base + 1)) * 2.0F - 0.5F + static_cast<float>(y)) * stride};
+            rect.center = {(sigmoid(grid.at(y, x, base)) * 2.0F - 0.5F + static_cast<float>(x)) * stride.x,
+                           (sigmoid(grid.at(y, x, base + 1)) * 2.0F - 0.5F + static_cast<float>(y)) * stride.y};
             rect.size = {std::pow(sigmoid(grid.at(y, x, base + 2)) * 2.0F, 2.0F) * anchors[anchor * 2],
                          std::pow(sigmoid(grid.at(y, x, base + 3)) * 2.0F, 2.0F) * anchors[anchor * 2 + 1]};
             rect.angle = -(sigmoid(grid.at(y, x, base + 4)) - 0.5F) * 180.0F;

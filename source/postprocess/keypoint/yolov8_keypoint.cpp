@@ -20,7 +20,7 @@ namespace {
 struct YoloV8KeypointParam {
   unsigned int class_num = 0;
   unsigned int keypoint_num = 0;
-  Vector<float> strides;
+  Vector<core::Point2f> strides; // Inferred in init from the input and head sizes; not a config key.
   std::size_t reg_max = 0;
   Vector<float> confidence_threshold;
   Vector<float> iou_threshold;
@@ -28,7 +28,7 @@ struct YoloV8KeypointParam {
   float keypoint_threshold = 0.5F;
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8KeypointParam, class_num, keypoint_num, strides, reg_max,
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8KeypointParam, class_num, keypoint_num, reg_max,
                                                 confidence_threshold, iou_threshold, keypoint_threshold)
 
 auto has_shape_parameters(const kitzoo::json::Json& config) -> bool {
@@ -38,7 +38,7 @@ auto has_shape_parameters(const kitzoo::json::Json& config) -> bool {
 // One output per stride with channels 4 * reg_max distance bins, class
 // logits, then x, y (and visibility logit) per keypoint, as Ultralytics pose
 // heads emit them before decoding (e.g. YOLOv8 face models with 5 landmarks).
-// A keypoint at cell (x, y) lies at ((raw * 2 + x) * stride, (raw * 2 + y) * stride).
+// A keypoint at cell (x, y) lies at ((raw * 2 + x) * stride.x, (raw * 2 + y) * stride.y).
 class YoloV8Keypoint final : public KeypointPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
@@ -60,13 +60,14 @@ public:
     KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
                     "yolov8_keypoint: keypoint_num must be positive");
     const auto& outputs = engine.output_protos();
-    const auto head = outputs.empty() ? std::nullopt : HeadShape::of(outputs[0], engine.proto().output_layout);
-    KZ_CHECK_RETURN(head.has_value(), false, "yolov8_keypoint: needs one [1, channels, h, w] output per stride");
+    if (!is_4d_outputs(engine, "yolov8_keypoint"))
+      return false;
+    const auto head = HeadShape::of(outputs[0], engine.proto().output_layout);
     if (!config.contains("class_num")) {
-      KZ_CHECK_RETURN(head->channels > 0 && param_.reg_max <= static_cast<std::size_t>((head->channels - 1) / 4), false,
+      KZ_CHECK_RETURN(head.channels > 0 && param_.reg_max <= static_cast<std::size_t>((head.channels - 1) / 4), false,
                       "yolov8_keypoint: reg_max exceeds output channels");
       for (const std::int64_t dims : {2, 3}) {
-        const auto classes = head->channels - static_cast<std::int64_t>(param_.reg_max) * 4 -
+        const auto classes = head.channels - static_cast<std::int64_t>(param_.reg_max) * 4 -
                              static_cast<std::int64_t>(param_.keypoint_num) * dims;
         if (classes <= 0 || classes > std::numeric_limits<unsigned int>::max())
           continue;
@@ -76,7 +77,7 @@ public:
       }
       KZ_CHECK_RETURN(param_.class_num > 0, false, "yolov8_keypoint: no positive class count fits the outputs");
     }
-    const auto shape = keypoint_shape(head->channels - static_cast<std::int64_t>(param_.class_num), param_.keypoint_num,
+    const auto shape = keypoint_shape(head.channels - static_cast<std::int64_t>(param_.class_num), param_.keypoint_num,
                                       param_.reg_max);
     if (!shape)
       return false;
@@ -131,7 +132,7 @@ protected:
   }
 
 private:
-  auto decode_head(const HeadGrid& grid, float stride) -> void {
+  auto decode_head(const HeadGrid& grid, core::Point2f stride) -> void {
     const auto bins = param_.reg_max;
     const auto first_keypoint = bins * 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
@@ -149,14 +150,14 @@ private:
         auto& object = candidates_[cls].emplace_back();
         object.box = {
             core::Rect2f(
-                {(cx - dfl(grid, y, x, 0, bins)) * stride, (cy - dfl(grid, y, x, bins, bins)) * stride},
-                {(cx + dfl(grid, y, x, bins * 2, bins)) * stride, (cy + dfl(grid, y, x, bins * 3, bins)) * stride}),
+                {(cx - dfl(grid, y, x, 0, bins)) * stride.x, (cy - dfl(grid, y, x, bins, bins)) * stride.y},
+                {(cx + dfl(grid, y, x, bins * 2, bins)) * stride.x, (cy + dfl(grid, y, x, bins * 3, bins)) * stride.y}),
             sigmoid(score), static_cast<std::int64_t>(cls), -1};
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
           const auto channel = first_keypoint + j * dims_;
-          const core::Point2f point{(grid.at(y, x, channel) * 2.0F + static_cast<float>(x)) * stride,
-                                    (grid.at(y, x, channel + 1) * 2.0F + static_cast<float>(y)) * stride};
+          const core::Point2f point{(grid.at(y, x, channel) * 2.0F + static_cast<float>(x)) * stride.x,
+                                    (grid.at(y, x, channel + 1) * 2.0F + static_cast<float>(y)) * stride.y};
           const auto visibility = dims_ == 3 ? sigmoid(grid.at(y, x, channel + 2)) : 1.0F;
           object.keypoints.push_back(
               {point, visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,

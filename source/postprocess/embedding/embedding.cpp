@@ -35,8 +35,6 @@ protected:
   auto decode(EmbeddingResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& /*transform*/)
       -> bool override {
     const auto floats = float_view(outputs.front(), scratch_);
-    if (floats == nullptr)
-      return false;
     const auto* data = static_cast<const float*>(floats->memory()->cpu());
     result.assign(data, data + floats->volume());
     return true;

@@ -65,23 +65,25 @@ auto float_outputs(const engine::Engine& engine, std::string_view name) -> bool 
   return true;
 }
 
-auto HeadShape::of(const core::BufferProto& proto, engine::DataLayout layout) -> std::optional<HeadShape> {
+auto is_4d_outputs(const engine::Engine& engine, std::string_view name) -> bool {
+  const auto& outputs = engine.output_protos();
+  KZ_CHECK_RETURN(!outputs.empty() &&
+                      std::all_of(outputs.begin(), outputs.end(),
+                                  [](const core::BufferProto& output) -> bool { return output.shape.size() == 4; }),
+                  false, "{}: needs 4-D head outputs", name);
+  return true;
+}
+
+auto HeadShape::of(const core::BufferProto& proto, engine::DataLayout layout) -> HeadShape {
   const auto& shape = proto.shape;
-  if (shape.size() != 4)
-    return std::nullopt;
   if (layout == engine::DataLayout::Nchw)
     return HeadShape{shape[0], shape[1], shape[2], shape[3]};
   return HeadShape{shape[0], shape[3], shape[1], shape[2]};
 }
 
-auto HeadShape::stride(core::Size input) const -> std::optional<float> {
-  if (batch != 1 || input.width <= 0 || input.height <= 0 || rows <= 0 || cols <= 0 || channels <= 0)
-    return std::nullopt;
-  const auto x = static_cast<double>(input.width) / static_cast<double>(cols);
-  const auto y = static_cast<double>(input.height) / static_cast<double>(rows);
-  if (x != y)
-    return std::nullopt;
-  return static_cast<float>(x);
+auto HeadShape::stride(core::Size input) const -> core::Point2f {
+  return {static_cast<float>(static_cast<double>(input.width) / static_cast<double>(cols)),
+          static_cast<float>(static_cast<double>(input.height) / static_cast<double>(rows))};
 }
 
 HeadGrid::HeadGrid(const core::Buffer& buffer, std::optional<engine::DataLayout> layout)
@@ -89,8 +91,6 @@ HeadGrid::HeadGrid(const core::Buffer& buffer, std::optional<engine::DataLayout>
   const auto& shape = buffer.shape();
   const auto& stride = buffer.stride();
   const auto dims = shape.size();
-  if ((!int8_ && buffer.data_type() != core::DataType::Float32) || dims < (layout ? 3U : 2U))
-    return;
   const auto item = int8_ ? sizeof(std::int8_t) : sizeof(float);
   if (!layout) {
     rows_ = 1;
@@ -209,13 +209,6 @@ auto CellScanner::above(const HeadGrid& grid, std::size_t channel, float thresho
   return cells_;
 }
 
-auto resolve_strides(Vector<float>& strides, const Vector<float>& inferred) -> bool {
-  KZ_CHECK_RETURN(strides.empty() || strides == inferred, false,
-                  "postprocess: configured strides do not match the input/output shapes");
-  strides = inferred;
-  return true;
-}
-
 auto keypoint_shape(std::int64_t channels, unsigned int count, std::optional<std::size_t> reg_max)
     -> std::optional<KeypointShape> {
   KZ_CHECK_RETURN(channels > 0, std::nullopt, "postprocess: keypoint channels must be positive");
@@ -249,13 +242,9 @@ auto keypoint_shape(std::int64_t channels, unsigned int count, std::optional<std
 namespace {
 
 // Writes the output's volume() elements to `out` as packed float32,
-// dequantizing int8 and honoring strides. False for other data types.
-auto read_floats(const core::Buffer& output, float* out) -> bool {
+// dequantizing int8 and honoring strides.
+auto read_floats(const core::Buffer& output, float* out) -> void {
   const auto int8 = output.data_type() == core::DataType::Int8;
-  if (!int8 && output.data_type() != core::DataType::Float32) {
-    KZ_LOG_ERROR("postprocess: unsupported output type {}", to_string(output.data_type()));
-    return false;
-  }
   const auto* base = static_cast<const std::uint8_t*>(output.memory()->cpu());
   const auto convert = [&](const std::uint8_t* in, std::size_t count) -> void {
     if (int8) {
@@ -270,7 +259,7 @@ auto read_floats(const core::Buffer& output, float* out) -> bool {
   const auto count = static_cast<std::size_t>(output.volume());
   if (output.is_contiguous()) {
     convert(base, count);
-    return true;
+    return;
   }
   // Rows of the last dimension are contiguous; the outer index of a row is
   // decomposed against the shape, dimension k - 1 stepping stride[k] bytes.
@@ -287,7 +276,6 @@ auto read_floats(const core::Buffer& output, float* out) -> bool {
     }
     convert(base + offset, cols);
   }
-  return true;
 }
 
 } // namespace
@@ -297,10 +285,9 @@ auto float_view(const SharedPtr<core::Buffer>& output, SharedPtr<core::Buffer>& 
     return output;
   if (scratch == nullptr)
     scratch = std::make_shared<core::Buffer>(core::MemoryType::Cpu, core::DataType::Float32);
-  if (scratch->shape() != output->shape() && !scratch->reshape(core::DataType::Float32, output->shape()))
-    return nullptr;
-  if (!read_floats(*output, static_cast<float*>(scratch->memory()->mutable_cpu())))
-    return nullptr;
+  if (scratch->shape() != output->shape())
+    scratch->reshape(core::DataType::Float32, output->shape());
+  read_floats(*output, static_cast<float*>(scratch->memory()->mutable_cpu()));
   return scratch;
 }
 

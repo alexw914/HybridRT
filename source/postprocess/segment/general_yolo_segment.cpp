@@ -43,8 +43,8 @@ public:
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
       return false;
     const auto& outputs = engine.output_protos();
-    if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 2 || !engine.input_size()) {
-      KZ_LOG_ERROR("general_yolo_segment: needs one image input and two NCHW outputs");
+    if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 2) {
+      KZ_LOG_ERROR("general_yolo_segment: needs two NCHW outputs");
       return false;
     }
     detections_ = outputs[0].shape.size() == 3 ? 0 : 1;

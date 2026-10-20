@@ -67,8 +67,8 @@ private:
           if (score <= threshold)
             continue;
           if (!decoded) {
-            const auto cx = (sigmoid(grid.at(y, x, base)) * 2.0F - 0.5F + static_cast<float>(x)) * stride;
-            const auto cy = (sigmoid(grid.at(y, x, base + 1)) * 2.0F - 0.5F + static_cast<float>(y)) * stride;
+            const auto cx = (sigmoid(grid.at(y, x, base)) * 2.0F - 0.5F + static_cast<float>(x)) * stride.x;
+            const auto cy = (sigmoid(grid.at(y, x, base + 1)) * 2.0F - 0.5F + static_cast<float>(y)) * stride.y;
             const auto w = std::pow(sigmoid(grid.at(y, x, base + 2)) * 2.0F, 2.0F) * anchors[anchor * 2];
             const auto h = std::pow(sigmoid(grid.at(y, x, base + 3)) * 2.0F, 2.0F) * anchors[anchor * 2 + 1];
             box = {cx - w / 2.0F, cy - h / 2.0F, w, h};
