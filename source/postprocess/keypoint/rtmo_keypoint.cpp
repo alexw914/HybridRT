@@ -81,7 +81,7 @@ protected:
       candidates_.push_back(i);
     }
 
-    for (auto k : nms_indices(rects_, scores_, param_.iou_threshold[0])) {
+    for (auto k : nms(rects_, scores_, param_.iou_threshold[0])) {
       const auto box = transform.clip_to_source(rects_[k]);
       if (box.empty())
         continue;

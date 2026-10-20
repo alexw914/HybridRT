@@ -79,7 +79,7 @@ protected:
         rects_.push_back(object.box.rect);
         scores_.push_back(object.box.score);
       }
-      for (auto k : nms_indices(rects_, scores_, param_.iou_threshold[cls])) {
+      for (auto k : nms(rects_, scores_, param_.iou_threshold[cls])) {
         auto& object = objects[k];
         object.box.rect = transform.clip_to_source(object.box.rect);
         if (object.box.rect.empty())

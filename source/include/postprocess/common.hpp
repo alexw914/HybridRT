@@ -163,8 +163,8 @@ auto dequantize_buffer(const core::Buffer& output, core::Buffer& scratch) -> voi
 // One dequantize_buffer() buffer per engine output, shaped like the int8 ones.
 auto make_scratch(const engine::Engine& engine) -> Vector<core::Buffer>;
 
-auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
-    -> Vector<std::size_t>;
+// Indices of the rects kept by greedy NMS, highest score first.
+auto nms(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold) -> Vector<std::size_t>;
 
 // check_config of a decoder reading `Param` from the "postprocess" section.
 template <typename Param>
