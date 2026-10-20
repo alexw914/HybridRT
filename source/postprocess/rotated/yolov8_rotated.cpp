@@ -67,10 +67,10 @@ private:
           const auto rad = theta / 180.0F * std::numbers::pi_v<float>;
           const auto cos = std::cos(rad);
           const auto sin = std::sin(rad);
-          const auto l = dfl_distance(grid, y, x, 0, bins);
-          const auto t = dfl_distance(grid, y, x, bins, bins);
-          const auto r = dfl_distance(grid, y, x, bins * 2, bins);
-          const auto b = dfl_distance(grid, y, x, bins * 3, bins);
+          const auto l = dfl(grid, y, x, 0, bins);
+          const auto t = dfl(grid, y, x, bins, bins);
+          const auto r = dfl(grid, y, x, bins * 2, bins);
+          const auto b = dfl(grid, y, x, bins * 3, bins);
           const auto xf = (r - l) / 2.0F;
           const auto yf = (b - t) / 2.0F;
           rect.center = {(xf * cos - yf * sin + static_cast<float>(x) + 0.5F) * stride.x,

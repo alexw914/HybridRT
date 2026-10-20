@@ -114,10 +114,9 @@ private:
           continue;
         const auto cx = static_cast<float>(x) + 0.5F;
         const auto cy = static_cast<float>(y) + 0.5F;
-        rects_[cls].push_back(core::Rect2f({(cx - dfl_distance(grid, y, x, 0, bins)) * stride.x,
-                                            (cy - dfl_distance(grid, y, x, bins, bins)) * stride.y},
-                                           {(cx + dfl_distance(grid, y, x, bins * 2, bins)) * stride.x,
-                                            (cy + dfl_distance(grid, y, x, bins * 3, bins)) * stride.y}));
+        rects_[cls].push_back(core::Rect2f(
+            {(cx - dfl(grid, y, x, 0, bins)) * stride.x, (cy - dfl(grid, y, x, bins, bins)) * stride.y},
+            {(cx + dfl(grid, y, x, bins * 2, bins)) * stride.x, (cy + dfl(grid, y, x, bins * 3, bins)) * stride.y}));
         scores_[cls].push_back(core::sigmoid(score));
         for (std::size_t j = 0; j < outputs_.masks; ++j)
           coefficients_[cls].push_back(grid.at(y, x, first_mask + j));

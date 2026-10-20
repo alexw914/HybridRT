@@ -65,10 +65,9 @@ private:
         if (!decoded) {
           const auto cx = static_cast<float>(x) + 0.5F;
           const auto cy = static_cast<float>(y) + 0.5F;
-          box = core::Rect2f({(cx - dfl_distance(grid, y, x, 0, bins)) * stride.x,
-                              (cy - dfl_distance(grid, y, x, bins, bins)) * stride.y},
-                             {(cx + dfl_distance(grid, y, x, bins * 2, bins)) * stride.x,
-                              (cy + dfl_distance(grid, y, x, bins * 3, bins)) * stride.y});
+          box = core::Rect2f(
+              {(cx - dfl(grid, y, x, 0, bins)) * stride.x, (cy - dfl(grid, y, x, bins, bins)) * stride.y},
+              {(cx + dfl(grid, y, x, bins * 2, bins)) * stride.x, (cy + dfl(grid, y, x, bins * 3, bins)) * stride.y});
           decoded = true;
         }
         result[cls].push_back({box, core::sigmoid(score), static_cast<std::int64_t>(cls)});

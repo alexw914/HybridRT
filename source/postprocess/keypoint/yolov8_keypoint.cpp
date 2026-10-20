@@ -148,11 +148,11 @@ private:
         const auto cx = static_cast<float>(x) + 0.5F;
         const auto cy = static_cast<float>(y) + 0.5F;
         auto& object = candidates_[cls].emplace_back();
-        object.box = {core::Rect2f({(cx - dfl_distance(grid, y, x, 0, bins)) * stride.x,
-                                    (cy - dfl_distance(grid, y, x, bins, bins)) * stride.y},
-                                   {(cx + dfl_distance(grid, y, x, bins * 2, bins)) * stride.x,
-                                    (cy + dfl_distance(grid, y, x, bins * 3, bins)) * stride.y}),
-                      core::sigmoid(score), static_cast<std::int64_t>(cls), -1};
+        object.box = {
+            core::Rect2f(
+                {(cx - dfl(grid, y, x, 0, bins)) * stride.x, (cy - dfl(grid, y, x, bins, bins)) * stride.y},
+                {(cx + dfl(grid, y, x, bins * 2, bins)) * stride.x, (cy + dfl(grid, y, x, bins * 3, bins)) * stride.y}),
+            core::sigmoid(score), static_cast<std::int64_t>(cls), -1};
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
           const auto channel = first_keypoint + j * dims_;

@@ -147,8 +147,7 @@ private:
 
 // Expected value of the softmax over `bins` consecutive channels starting at
 // `first` (YOLOv8 distribution focal loss decoding).
-inline auto dfl_distance(const HeadGrid& grid, std::int64_t y, std::int64_t x, std::size_t first, std::size_t bins)
-    -> float {
+inline auto dfl(const HeadGrid& grid, std::int64_t y, std::int64_t x, std::size_t first, std::size_t bins) -> float {
   auto max = grid.at(y, x, first);
   for (std::size_t i = 1; i < bins; ++i)
     max = std::max(max, grid.at(y, x, first + i));
