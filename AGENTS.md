@@ -58,7 +58,7 @@
 
 ## 模板与资源
 
-- `assets/` 只提交 `template/` 和 `PERF.md`；模型、.hrtc、图片、夹具 manifest、输出结果、
+- `assets/` 只提交 `template/`、`perf.md` 和 `benchmark.md`；模型、.hrtc、图片、夹具 manifest、输出结果、
   下载到 `external/` 的 SDK 均不提交。测试资源统一放本地 `assets/test/`，ONNX 放其 onnx 子目录；
   不另建夹具 README、manifest 或 sources 文件。manifest 路径为绝对路径或相对运行时工作目录。
 - `assets/template/hrtc_template.json` 展示模型参数，每种 postprocess 至少一个 algo，不要求每个模型都有 algo。
@@ -69,7 +69,7 @@
   类型、参数、默认值或平台行为变化时，同一提交同步文档及相关 JSON 模板。
   同类型模型的变体、导出方式、输出列含义在此说明；Test models 记录来源、导出或转换方式、
   sha256 和验证结论，转换脚本只放本地 assets/test/scripts/，不提交。
-- 前处理、后处理或 ImageModel pipeline 性能优化在同一提交更新 `assets/PERF.md`，最新在前：
+- 前处理、后处理或 ImageModel pipeline 性能优化在同一提交更新 `assets/perf.md`，最新在前：
   记录瓶颈与定位、改动、测量条件（平台、模型、输入、线程、次数、工具）、前后数据及剩余问题。
   普通功能不写入。引擎推理耗时只用 `tools/hrt-model-bench` 测量；
   benchmarks/ 只保留 preprocess_bench、postprocess_bench、pipeline_bench。

@@ -6,7 +6,7 @@ root. Image-task files use `<type>.onnx`; OCR files add their stage and optional
 The first algo shows every preprocess key. Engine-specific `config` keys are
 collected in `hrtc_device_config.json`, using the same raw YOLOv8 detector as an example;
 `hrtc_template.json` omits them and uses engine defaults. Tests and benchmarks load these same algos. Model files
-and images stay local and untracked; only this directory and `assets/PERF.md` are committed.
+and images stay local and untracked; only this directory, `assets/perf.md` and `assets/benchmark.md` are committed.
 Values are defaults or model-specific values where the defaults do not fit. Check the whole
 manifest with `hrt-compress -c -j assets/template/hrtc_template.json`.
 
@@ -40,6 +40,12 @@ most 64) to `ImageModel::create`.
 | `default_color` | `[0, 0, 0]` | Padding color |
 | `resize_short_size` | `-1` | Short side before `center_crop` |
 | `pad_scale` | `1.0` | Scale of `pad_outside` |
+
+Fused preprocessing is optional. A device without a fused implementation uses its
+independent operators when it supports every required stage (CUDA uses multi-stage NPP).
+For device-only memory, an unsupported stage retains the whole-call CPU fallback,
+including source download and result upload. Host-accessible buffers can use CPU operators
+directly. Fusion and fallback decisions do not change the model's preprocess parameters.
 
 A cascade passes each detection as `src_rect` to `process_sync`. Only `pad_outside` clips it to
 the image; for the other resize types a region leaving the image fails the call, so grow and clip
@@ -372,6 +378,13 @@ establish runnable pipelines, not model accuracy or other-backend compatibility.
 Local `assets/test/onnx_validation.json` records shapes and hashes;
 `assets/test/pipeline_validation/` contains CLI logs and results.
 
+`hybridrt_bench_postprocess` measures postprocessing on real model outputs, excluding
+preprocessing and inference. `BM_Task` covers decoded YOLO outputs; `BM_RawDetect/0`
+and `/1` cover `YoloV5Detect` and `YoloV8Detect`, and `BM_RawSegment` covers `YoloV8Segment`.
+All raw-head cases use `bus.jpg` and the corresponding template algo's actual input size.
+`BM_Type` covers every template algo, including all postprocessor types and OCR variants.
+Single-thread timing results and reproduction commands are in [benchmark.md](../benchmark.md).
+
 | Algo | ONNX file in `assets/test/onnx/` | Input NCHW | SHA256 |
 | --- | --- | --- | --- |
 | `yolov8_detect` | `YoloV8Detect.onnx` | `1 x 3 x 480 x 640` | `f529061cd7158d11fb1f4e8219fb3a9f0160f62462b636987a65e67765f9ec9a` |
@@ -604,7 +617,7 @@ preprocessing from a host image, 100 runs):
 | `rtmpose_m_pose` (192 x 256 crop) | 0.8 | 18.6 | 0.06 | 20.4 |
 
 A dma-buffer source saves 0.4 to 0.8 ms of preprocessing. int8 models, not measured here, cut the
-inference time. Optimization history and measurements are in `assets/PERF.md`.
+inference time. Optimization history and measurements are in `assets/perf.md`.
 
 ### CANN on Ascend 910B2
 

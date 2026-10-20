@@ -247,11 +247,17 @@ TEST(SegmentTest, DecodesInt8SemanticScoresWithoutDequantizing) {
   auto postprocessor = hrt::postprocess::create_segment_postprocessor("SemanticSegment", Json::object(), engine);
   // Quantized scores keep their order; ties go to the lower class: 0, 1 / 2, 0.
   auto buffer = hrt::test::buffer_of<std::int8_t>(output, {
-                                                              90, -5, 0,
+                                                              90,
+                                                              -5,
+                                                              0,
                                                               7, // class 0
-                                                              -10, 9, 0,
+                                                              -10,
+                                                              9,
+                                                              0,
                                                               7, // class 1
-                                                              -10, -5, 90,
+                                                              -10,
+                                                              -5,
+                                                              90,
                                                               7, // class 2
                                                           });
   buffer->scale = 0.1F;
@@ -373,9 +379,14 @@ TEST(SegmentTest, RunsSemanticModelWhenAvailable) {
 TEST(SegmentTest, RunsRawSegmentHeadsWhenAvailable) {
   auto bgr = cv::imread((hrt::test::source_root() / "assets/test/images/bus.jpg").string());
   bool ran = false;
-  // bus.jpg: four people and the bus, and YOLOv8n also a tie (class 36).
-  for (const auto& [name, extra] :
-       hrt::Vector<std::pair<const char*, bool>>{{"yolov8n_segment_raw", true}, {"yolo26n_segment_raw", false}}) {
+
+  struct Expected {
+    const char* name;
+    std::size_t people;
+  };
+
+  // The 640x480 YOLOv8 and 640x640 YOLO26 fixtures retain different people on bus.jpg.
+  for (const auto& [name, people] : hrt::Array<Expected, 2>{{{"yolov8n_segment_raw", 3}, {"yolo26n_segment_raw", 4}}}) {
     const auto algo = hrt::test::template_algo(name);
     if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
       continue;
@@ -386,9 +397,9 @@ TEST(SegmentTest, RunsRawSegmentHeadsWhenAvailable) {
     const auto result = model->process_sync(*image);
     ASSERT_TRUE(result) << name;
     ASSERT_TRUE(result->contains(0)) << name;
-    EXPECT_EQ(result->at(0).size(), 4U) << name;
+    EXPECT_EQ(result->at(0).size(), people) << name;
     ASSERT_TRUE(result->contains(5)) << name;
-    EXPECT_EQ(result->contains(36), extra) << name;
+    EXPECT_FALSE(result->contains(36)) << name;
     for (const auto& [cls, objects] : *result) {
       for (const auto& object : objects)
         EXPECT_FALSE(object.mask.data.empty()) << name;

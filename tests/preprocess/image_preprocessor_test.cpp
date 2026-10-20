@@ -246,6 +246,100 @@ TEST(ImagePreprocessorTest, NormalizesInterleavedFloatOutputThroughFallback) {
   }
 }
 
+class CountingCudaPreprocessor final : public hrt::preprocess::ImagePreprocessor {
+public:
+  CountingCudaPreprocessor(hrt::UniquePtr<ImagePreprocessor> device, hrt::preprocess::ImageOperation unsupported)
+      : device_(std::move(device)), unsupported_(unsupported) {}
+
+  auto type() const -> hrt::preprocess::ImagePreprocessorType override { return device_->type(); }
+
+  auto memory_type() const -> hrt::core::MemoryType override { return device_->memory_type(); }
+
+  auto accepts(hrt::core::MemoryType type) const -> bool override { return device_->accepts(type); }
+
+  auto supports(hrt::preprocess::ImageOperation op, const hrt::core::Image& dst, const hrt::core::Image& src) const
+      -> bool override {
+    return op != unsupported_ && device_->supports(op, dst, src);
+  }
+
+  auto fill(hrt::core::Image& image, const hrt::core::Rect& roi, const hrt::Array<float, 3>& color,
+            hrt::core::Stream* stream) -> bool override {
+    ++calls[0];
+    return device_->fill(image, roi, color, stream);
+  }
+
+  auto resize(hrt::core::Image& dst, const hrt::core::Rect& dst_roi, const hrt::core::Image& src,
+              const hrt::core::Rect& src_roi, hrt::preprocess::InterpolationMode mode, hrt::core::Stream* stream)
+      -> bool override {
+    ++calls[1];
+    return device_->resize(dst, dst_roi, src, src_roi, mode, stream);
+  }
+
+  auto convert(hrt::core::Image& dst, const hrt::core::Image& src, hrt::core::Stream* stream) -> bool override {
+    ++calls[2];
+    return device_->convert(dst, src, stream);
+  }
+
+  auto normalize(hrt::core::Image& image, const hrt::core::Rect& roi, const hrt::Array<float, 3>& mean,
+                 const hrt::Array<float, 3>& stddev, hrt::core::Stream* stream) -> bool override {
+    ++calls[3];
+    return device_->normalize(image, roi, mean, stddev, stream);
+  }
+
+  hrt::Array<unsigned int, 4> calls{};
+
+private:
+  hrt::UniquePtr<ImagePreprocessor> device_;
+  hrt::preprocess::ImageOperation unsupported_;
+};
+
+TEST(ImagePreprocessorTest, KeepsCudaStagesOnDeviceAndPreservesUnsupportedFallback) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto context = Context::create(DeviceType::Cuda);
+  if (!context)
+    GTEST_SKIP() << "CUDA unavailable";
+  context->make_current();
+  auto stream = context->create_stream();
+  ASSERT_TRUE(stream);
+  auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  auto src = uniform_bgr(8, 4, {10, 20, 30});
+  for (const auto unsupported : {ImageOperation::Fused, ImageOperation::Fill, ImageOperation::Resize,
+                                 ImageOperation::Convert, ImageOperation::Normalize}) {
+    for (const auto mode : {NormalizeType::Full, NormalizeType::Roi}) {
+      SCOPED_TRACE(testing::Message() << "unsupported " << static_cast<int>(unsupported) << " normalization "
+                                      << static_cast<int>(mode));
+      auto cuda = ImagePreprocessor::create(ImagePreprocessorType::Cuda);
+      ASSERT_TRUE(cuda);
+      CountingCudaPreprocessor processor(std::move(cuda), unsupported);
+      ImagePreprocessorParam param;
+      param.resize_type = ResizeType::LetterBox;
+      param.normalize_type = mode;
+      param.default_color = {114, 114, 114};
+      param.mean = {2, 4, 6};
+      param.std = {2, 4, 8};
+      Image expected(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {8, 8});
+      Image actual(MemoryType::Cuda, ImageFormat::PlanarRgb, DataType::Float32, {8, 8});
+      ASSERT_TRUE(actual.valid());
+      ASSERT_TRUE(cpu->process(expected, src.image, {}, param));
+      for (int repeat = 0; repeat < 3; ++repeat) {
+        ASSERT_TRUE(processor.process(actual, src.image, {}, param, stream.get()));
+        Image host(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {8, 8});
+        ASSERT_TRUE(Buffer::copy(*host.buffer(), *actual.buffer(), CopyPolicy::DirectCopy, stream.get()));
+        stream->synchronize();
+        for (int c = 0; c < 3; ++c)
+          for (int y = 0; y < 8; ++y)
+            for (int x = 0; x < 8; ++x)
+              ASSERT_NEAR(planar_at(host, c, x, y), planar_at(expected, c, x, y), 1.0e-5F);
+      }
+      for (std::size_t i = 0; i < processor.calls.size(); ++i) {
+        const auto runs_on_cpu = unsupported != ImageOperation::Fused;
+        EXPECT_EQ(processor.calls[i], runs_on_cpu ? 0U : 3U);
+      }
+    }
+  }
+}
+
 TEST(ImagePreprocessorTest, CropsTheSourceRect) {
   // Left half blue, right half red; cropping the right half yields pure red.
   auto src = uniform_bgr(8, 4, {255, 0, 0});

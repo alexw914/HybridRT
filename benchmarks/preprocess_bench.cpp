@@ -186,7 +186,7 @@ auto BM_Resolution(benchmark::State& state) -> void {
 }
 
 auto resolution_cases(benchmark::Benchmark* bench) -> void {
-  for (const int width : {1920, 3840}) {
+  for (const int width : {1920, 2560, 3840}) {
     for (const auto size : {hrt::core::Size{640, 360}, hrt::core::Size{640, 640}, hrt::core::Size{960, 540},
                             hrt::core::Size{960, 960}, hrt::core::Size{1280, 720}, hrt::core::Size{1280, 1280}}) {
       bench->Args({width, width * 9 / 16, size.width, size.height, 0});
@@ -253,7 +253,7 @@ auto BM_CudaResolution(benchmark::State& state) -> void {
 }
 
 auto cuda_cases(benchmark::Benchmark* bench) -> void {
-  for (const int width : {1920, 3840})
+  for (const int width : {1920, 2560, 3840})
     for (const auto size : {hrt::core::Size{640, 640}, hrt::core::Size{1280, 1280}})
       for (const int mode : {0, 1, 2})
         bench->Args({width, width * 9 / 16, size.width, size.height, mode});

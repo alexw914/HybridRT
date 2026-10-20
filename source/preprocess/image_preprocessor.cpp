@@ -299,10 +299,33 @@ auto ImagePreprocessor::run(core::Image& dst, const core::Image& src, const Imag
     return fused(dst, transform, src, param, stream);
 
   auto* fallback = cpu();
-  // A device preprocessor that cannot fuse this step leaves it to the CPU operators, which
-  // only address host memory: run the whole step there and copy the result to the target.
+  auto supports_stages = [&]() -> bool {
+    const bool normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
+    if (normalize && !supports(ImageOperation::Normalize, dst, dst))
+      return false;
+    const core::Image* source = &src;
+    const auto resizable = supports(ImageOperation::Resize, src, src) ||
+                           (fallback != nullptr && fallback->supports(ImageOperation::Resize, src, src));
+    if (!resizable) {
+      source = scratch(converted_, memory_type(), dst.format(), src.data_type(), src.size());
+      if (source == nullptr || !supports(ImageOperation::Convert, *source, src))
+        return false;
+    }
+    core::Image* resized = &dst;
+    if (source->data_type() != dst.data_type() || !same_layout(dst.format(), source->format())) {
+      const auto format = same_layout(dst.format(), source->format()) ? dst.format() : source->format();
+      resized = scratch(resized_, memory_type(), format, source->data_type(), dst.size());
+      if (resized == nullptr)
+        return false;
+    }
+    return (transform.dst_roi == dst.rect() || supports(ImageOperation::Fill, *resized, *resized)) &&
+           supports(ImageOperation::Resize, *resized, *source) &&
+           (resized == &dst || supports(ImageOperation::Convert, dst, *resized));
+  };
+  // Non-fused device operators may run together only when every required stage is supported.
+  // Otherwise keep the whole-call host fallback so CPU operators never address device memory.
   if (fallback != nullptr && type() != ImagePreprocessorType::Cpu &&
-      !(dst.memory()->have_cpu() && src.memory()->have_cpu())) {
+      !(dst.memory()->have_cpu() && src.memory()->have_cpu()) && !supports_stages()) {
     const core::Image* host_src = &src;
     if (!src.memory()->have_cpu()) {
       auto* staged = scratch(host_src_, core::MemoryType::Cpu, src.format(), src.data_type(), src.size());

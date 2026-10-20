@@ -22,7 +22,8 @@ install/
 # Test fixtures: only the manifest reference is committed
 /assets/*
 !/assets/template/
-!/assets/PERF.md
+!/assets/perf.md
+!/assets/benchmark.md
 *.onnx
 *.mnn
 *.ncnn.param

@@ -4,6 +4,66 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-20: restore non-fused device preprocessing stages
+
+**Bottleneck.** The shared flow treated a missing fused implementation as requiring
+whole-call CPU processing for device-only buffers. CUDA's NPP implementation already
+supported fill, resize, conversion and normalization separately, but none ran. Even
+CUDA-resident input was downloaded, processed on the host and uploaded again.
+
+**Change.** Check every required independent operator before taking the existing host
+fallback. When the device supports the complete sequence, run the existing stages.
+Otherwise preserve the previous whole-call CPU fallback, including synchronization
+and staging; fused and host-accessible paths are unchanged. No SDK implementation or
+public interface was changed, and no fused CUDA kernel was added.
+
+**Measurement.** Linux x86_64, Xeon Gold 6462C, physical RTX 4090 GPU 1 (shared, idle at
+start), driver 550.54.14, CUDA 12.4.131, OpenCV 4.5.4, Release. Current source was synced,
+reconfigured and rebuilt in the fixed validation directory. `hybridrt_bench_preprocess`
+`BM_CudaResolution`, one caller, 20 explicit warm-up calls, 0.2 s benchmark warm-up,
+minimum 0.5 s per repetition, wall-clock median of 3 repetitions. Synthetic uint8 BGR,
+linear letterbox, padding 114, planar RGB float32 with std 255. Outputs remain in CUDA
+memory. Host cases include uploading the frame; device cases start with resident input.
+Every call ends with stream synchronization. Units below are ms/call.
+
+| Source -> target | Input location | Before (CPU fallback) | After (NPP stages) |
+| --- | --- | ---: | ---: |
+| 1920 x 1080 -> 640 x 640 | Host | 1.920 | 0.382 |
+| 1920 x 1080 -> 640 x 640 | CUDA | 1.554 | 0.045 |
+| 1920 x 1080 -> 1280 x 1280 | Host | 5.453 | 0.445 |
+| 1920 x 1080 -> 1280 x 1280 | CUDA | 4.750 | 0.106 |
+| 3840 x 2160 -> 640 x 640 | Host | 4.477 | 1.278 |
+| 3840 x 2160 -> 640 x 640 | CUDA | 2.609 | 0.046 |
+| 3840 x 2160 -> 1280 x 1280 | Host | 8.874 | 1.334 |
+| 3840 x 2160 -> 1280 x 1280 | CUDA | 6.581 | 0.106 |
+
+Six current size pairs (1080p, 2560 x 1440 and 4K, each to 640 x 640 / 1280 x 1280)
+for CUDA, Xeon CPU, M4 CPU and Metal are recorded in [benchmark.md](benchmark.md).
+The earlier fallback baseline has no 2560 x 1440 measurements. M4 timings were rerun,
+not interpreted as an optimization of the unchanged CPU/Metal implementations.
+
+**Validation.** A CUDA operator-counting regression checks that all four device stages
+execute, and that disabling each required stage preserves whole-call CPU fallback,
+for full/ROI normalization, padding and repeated calls. CUDA crop staging also passed.
+`ImageModelTest.KeepsCudaPreprocessorScratchAliveUntilStreamCompletes` passed 20
+consecutive runs on the selected GPU, followed by full CTest: 180 entries on Linux
+(6 hardware-dependent skips), 192 on macOS (8 hardware-dependent skips), no failures.
+macOS Metal geometry and NV12 fallback tests passed with GPU access enabled.
+The raw segmentation test expectation was updated for the current 640 x 480 YOLOv8
+fixture (three people, no tie), distinct from the 640 x 640 YOLO26 fixture (four people).
+
+**Other devices.** The check runs only for a non-CPU preprocessor without a fused path whose
+source or target lacks host access. CPU and Metal (fused only, unified host memory) never
+reach it. DVPP is fused only, so the check fails and the whole-call fallback is unchanged.
+RGA supports only fill and resize: float or planar targets still fall back, while
+uint8 interleaved targets without normalization may now stay on RGA. CUDA still falls back
+for InterRgba sources (CPU resizes them, NPP does not) and Gray to three-channel output.
+
+**Remaining.** NPP still launches multiple operations. For host input, PCIe upload is
+now the main cost. RKNN/RGA and DVPP hardware were not revalidated in this run; their
+SDK implementations and unsupported-stage fallback are retained. Local raw timing
+JSON and test logs remain under `assets/test/benchmark_results/` and are untracked.
+
 ## 2026-10-19: OCR line regions on the source device
 
 **Bottleneck.** `OcrModel` cropped every detected line on the host (`TextCropper`) before
