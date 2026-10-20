@@ -75,11 +75,8 @@ protected:
       candidates_.push_back(i);
     }
 
-    const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
-                              static_cast<float>(transform.src_roi.width),
-                              static_cast<float>(transform.src_roi.height)};
     for (auto k : nms_keep(rects_, scores_, param_.iou_threshold[0])) {
-      const auto box = core::intersect(to_source(rects_[k], transform), bounds);
+      const auto box = clip_to_source(rects_[k], transform);
       if (box.empty())
         continue;
       auto& object = result[0].emplace_back();

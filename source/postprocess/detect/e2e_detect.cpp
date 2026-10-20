@@ -52,9 +52,6 @@ protected:
     if (data == nullptr)
       return false;
     const auto count = static_cast<std::size_t>(outputs[0]->shape()[1]);
-    const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
-                              static_cast<float>(transform.src_roi.width),
-                              static_cast<float>(transform.src_roi.height)};
     for (std::size_t i = 0; i < count; ++i) {
       const auto* row = data + i * 6;
       const auto score = row[4];
@@ -65,8 +62,7 @@ protected:
       const auto cls = static_cast<std::size_t>(label);
       if (!(score > param_.confidence_threshold[cls]) || !(row[2] - row[0] > 0.0F && row[3] - row[1] > 0.0F))
         continue;
-      const auto rect =
-          core::intersect(to_source(core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]}), transform), bounds);
+      const auto rect = clip_to_source(core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]}), transform);
       if (!rect.empty())
         result[cls].push_back({rect, score, static_cast<std::int64_t>(cls)});
     }

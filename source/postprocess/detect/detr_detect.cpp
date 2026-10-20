@@ -75,9 +75,6 @@ protected:
     const auto count = static_cast<std::size_t>(output_shapes_[0][1]);
     const auto box_step = combined ? 4 + score_channels_ : 4;
     const auto score_step = combined ? box_step : score_channels_;
-    const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
-                              static_cast<float>(transform.src_roi.width),
-                              static_cast<float>(transform.src_roi.height)};
     for (std::size_t i = 0; i < count; ++i) {
       const auto* box = boxes + i * box_step;
       if (!std::isfinite(box[0]) || !std::isfinite(box[1]) || !std::isfinite(box[2]) || !std::isfinite(box[3]) ||
@@ -115,7 +112,7 @@ protected:
       const auto [l, t, r, b] =
           center_box(box[0] * static_cast<float>(input_size_.width), box[1] * static_cast<float>(input_size_.height),
                      box[2] * static_cast<float>(input_size_.width), box[3] * static_cast<float>(input_size_.height));
-      const auto rect = core::intersect(to_source(core::Rect2f::from_points({l, t}, {r, b}), transform), bounds);
+      const auto rect = clip_to_source(core::Rect2f::from_points({l, t}, {r, b}), transform);
       if (!rect.empty())
         result[cls].push_back({rect, score, static_cast<std::int64_t>(cls)});
     }

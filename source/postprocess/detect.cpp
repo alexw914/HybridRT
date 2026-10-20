@@ -54,12 +54,10 @@ auto create_detect_postprocessor(std::string_view type, const kitzoo::json::Json
 
 auto finish_detect(DetectResultMap& result, const Vector<float>& iou_threshold,
                    const preprocess::ImageTransform& transform) -> void {
-  const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
-                            static_cast<float>(transform.src_roi.width), static_cast<float>(transform.src_roi.height)};
   for (auto& [cls, boxes] : result) {
     nms(boxes, iou_threshold[cls]);
     for (auto& box : boxes)
-      box.rect = core::intersect(to_source(box.rect, transform), bounds);
+      box.rect = clip_to_source(box.rect, transform);
     std::erase_if(boxes, [](const ObjectBox& box) -> bool { return box.rect.empty(); });
   }
 }

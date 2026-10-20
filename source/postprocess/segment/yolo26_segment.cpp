@@ -82,13 +82,10 @@ protected:
       if (!ok)
         return false;
     }
-    const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
-                              static_cast<float>(transform.src_roi.width),
-                              static_cast<float>(transform.src_roi.height)};
     const auto masks = outputs_.masks;
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
       for (auto k : nms_keep(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
-        const auto box = core::intersect(to_source(rects_[cls][k], transform), bounds);
+        const auto box = clip_to_source(rects_[cls][k], transform);
         if (box.empty())
           continue;
         const auto* first = coefficients_[cls].data() + k * masks;

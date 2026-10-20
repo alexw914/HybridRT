@@ -270,6 +270,9 @@ auto to_source(const core::Rect2f& rect, const preprocess::ImageTransform& trans
 
 auto to_source(const core::Point2f& point, const preprocess::ImageTransform& transform) -> core::Point2f;
 
+// to_source() clipped to the source region; empty when the box leaves it.
+auto clip_to_source(const core::Rect2f& rect, const preprocess::ImageTransform& transform) -> core::Rect2f;
+
 // check_config of a decoder reading `Param` from the "postprocess" section.
 template <typename Param>
 auto check_section(const kitzoo::json::Json& config) -> Vector<String> {

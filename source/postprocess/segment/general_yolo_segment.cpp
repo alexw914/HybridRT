@@ -98,13 +98,10 @@ private:
       }
     }
 
-    const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
-                              static_cast<float>(transform.src_roi.width),
-                              static_cast<float>(transform.src_roi.height)};
     Vector<float> coefficients(static_cast<std::size_t>(prototypes.channels));
     for (std::size_t cls = 0; cls < classes; ++cls) {
       for (auto k : nms_keep(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
-        const auto box = core::intersect(to_source(rects_[cls][k], transform), bounds);
+        const auto box = clip_to_source(rects_[cls][k], transform);
         if (box.empty())
           continue;
         for (std::size_t j = 0; j < coefficients.size(); ++j)

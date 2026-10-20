@@ -190,6 +190,12 @@ auto to_source(const core::Point2f& point, const preprocess::ImageTransform& tra
   return {mapped.x, mapped.y};
 }
 
+auto clip_to_source(const core::Rect2f& rect, const preprocess::ImageTransform& transform) -> core::Rect2f {
+  const auto& src = transform.src_roi;
+  return core::intersect(to_source(rect, transform), {static_cast<float>(src.x), static_cast<float>(src.y),
+                                                      static_cast<float>(src.width), static_cast<float>(src.height)});
+}
+
 auto check_config(std::string_view type, const kitzoo::json::Json& config) -> Vector<String> {
   UniquePtr<PostprocessorBase> postprocessor = make_detect(type);
   if (postprocessor == nullptr)

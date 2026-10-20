@@ -64,9 +64,6 @@ protected:
       return false;
     const auto count = static_cast<std::size_t>(outputs[0]->shape()[1]);
     const auto columns = static_cast<std::size_t>(outputs[0]->shape()[2]);
-    const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
-                              static_cast<float>(transform.src_roi.width),
-                              static_cast<float>(transform.src_roi.height)};
     for (std::size_t i = 0; i < count; ++i) {
       const auto* row = data + i * columns;
       const auto label = row[5];
@@ -76,8 +73,7 @@ protected:
       const auto cls = static_cast<std::size_t>(label);
       if (!(row[4] > param_.confidence_threshold[cls]) || !(row[2] - row[0] > 0.0F && row[3] - row[1] > 0.0F))
         continue;
-      const auto box =
-          core::intersect(to_source(core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]}), transform), bounds);
+      const auto box = clip_to_source(core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]}), transform);
       if (box.empty())
         continue;
       auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();

@@ -67,9 +67,6 @@ protected:
     const auto& proto_shape = outputs[prototypes_]->shape();
     const MaskDecoder::Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
                                              static_cast<int>(proto_shape[3])};
-    const core::Rect2f bounds{static_cast<float>(transform.src_roi.x), static_cast<float>(transform.src_roi.y),
-                              static_cast<float>(transform.src_roi.width),
-                              static_cast<float>(transform.src_roi.height)};
     for (std::size_t i = 0; i < count; ++i) {
       const auto* row = det + i * columns;
       const auto label = row[5];
@@ -80,7 +77,7 @@ protected:
       if (!(row[4] > param_.confidence_threshold[cls]) || !(row[2] - row[0] > 0.0F && row[3] - row[1] > 0.0F))
         continue;
       const auto net_box = core::Rect2f::from_points({row[0], row[1]}, {row[2], row[3]});
-      const auto box = core::intersect(to_source(net_box, transform), bounds);
+      const auto box = clip_to_source(net_box, transform);
       if (box.empty())
         continue;
       coefficients_.assign(row + 6, row + columns);
