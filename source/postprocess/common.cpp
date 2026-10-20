@@ -10,7 +10,6 @@
 #include <kitzoo/log/logger.hpp>
 
 #include <algorithm>
-#include <cstring>
 #include <numeric>
 
 #include "include/postprocess/params.hpp"
@@ -241,21 +240,23 @@ auto keypoint_shape(std::int64_t channels, unsigned int count, std::optional<std
   return found;
 }
 
-namespace {
+auto make_scratch(const engine::Engine& engine) -> Vector<core::Buffer> {
+  Vector<core::Buffer> scratch;
+  for (const auto& output : engine.output_protos()) {
+    auto& buffer = scratch.emplace_back(core::MemoryType::Cpu, core::DataType::Float32);
+    if (output.data_type == core::DataType::Int8)
+      buffer.reshape(output.shape);
+  }
+  return scratch;
+}
 
-// Writes the output's volume() elements to `out` as packed float32,
-// dequantizing int8 and honoring strides.
-auto read_floats(const core::Buffer& output, float* out) -> void {
-  const auto int8 = output.data_type() == core::DataType::Int8;
+auto dequantize_buffer(const core::Buffer& output, core::Buffer& scratch) -> void {
   const auto* base = static_cast<const std::uint8_t*>(output.memory()->cpu());
+  auto* out = static_cast<float*>(scratch.memory()->mutable_cpu());
   const auto convert = [&](const std::uint8_t* in, std::size_t count) -> void {
-    if (int8) {
-      const auto* values = static_cast<const std::int8_t*>(static_cast<const void*>(in));
-      for (std::size_t i = 0; i < count; ++i)
-        out[i] = core::dequantize(values[i], output.scale, output.zero_point);
-    } else {
-      std::memcpy(out, in, count * sizeof(float));
-    }
+    const auto* values = static_cast<const std::int8_t*>(static_cast<const void*>(in));
+    for (std::size_t i = 0; i < count; ++i)
+      out[i] = core::dequantize(values[i], output.scale, output.zero_point);
     out += count;
   };
   const auto count = static_cast<std::size_t>(output.volume());
@@ -278,19 +279,6 @@ auto read_floats(const core::Buffer& output, float* out) -> void {
     }
     convert(base + offset, cols);
   }
-}
-
-} // namespace
-
-auto float_view(const SharedPtr<core::Buffer>& output, SharedPtr<core::Buffer>& scratch) -> SharedPtr<core::Buffer> {
-  if (output->data_type() == core::DataType::Float32 && output->is_contiguous())
-    return output;
-  if (scratch == nullptr)
-    scratch = std::make_shared<core::Buffer>(core::MemoryType::Cpu, core::DataType::Float32);
-  if (scratch->shape() != output->shape())
-    scratch->reshape(core::DataType::Float32, output->shape());
-  read_floats(*output, static_cast<float*>(scratch->memory()->mutable_cpu()));
-  return scratch;
 }
 
 auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)

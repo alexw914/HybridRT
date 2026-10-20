@@ -46,7 +46,7 @@ public:
     if (!is_float_outputs(engine, "general_classify"))
       return false;
     activation_ = config.get<GeneralClassifyParam>().classify_postprocess_type;
-    scratch_.assign(engine.output_protos().size(), nullptr);
+    scratch_ = make_scratch(engine);
     return true;
   }
 
@@ -54,7 +54,11 @@ protected:
   auto decode(ClassifyResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& /*transform*/)
       -> bool override {
     for (std::size_t i = 0; i < outputs.size(); ++i) {
-      const auto floats = float_view(outputs[i], scratch_[i]);
+      const core::Buffer* floats = outputs[i].get();
+      if (floats->data_type() != core::DataType::Float32) {
+        dequantize_buffer(*floats, scratch_[i]);
+        floats = &scratch_[i];
+      }
       const auto* data = static_cast<const float*>(floats->memory()->cpu());
       auto& scores = result.emplace_back(data, data + floats->volume());
       if (activation_ == ClassifyActivation::Sigmoid) {
@@ -75,7 +79,7 @@ protected:
 
 private:
   ClassifyActivation activation_ = ClassifyActivation::None;
-  core::Buffers scratch_;
+  Vector<core::Buffer> scratch_;
 };
 
 } // namespace

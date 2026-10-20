@@ -2,7 +2,7 @@
 // HybridRT | C++20 Model Inference Framework
 // File: source/include/postprocess/common.hpp
 // Description: Declares helpers shared by postprocessors: head grid views, output
-//              validation and float views of outputs.
+//              validation and float32 copies of outputs.
 // -----------------------------------------------------------------------------
 
 #ifndef HRT_POSTPROCESS_COMMON_HPP
@@ -28,7 +28,7 @@ namespace hrt::postprocess {
 auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* name) -> bool;
 
 // Whether every engine output is float32 or int8, the types HeadGridView and
-// float_view() read. Checked once in init, so decode() relies on it.
+// dequantize_buffer() read. Checked once in init, so decode() relies on it.
 auto is_float_outputs(const engine::Engine& engine, std::string_view name) -> bool;
 
 // Whether the engine has outputs and every one is 4-D, as HeadGridShape expects.
@@ -162,13 +162,14 @@ inline auto dfl(const HeadGridView& grid, std::int64_t y, std::int64_t x, std::s
   return weighted / sum;
 }
 
-// Contiguous float32 view of an output for decoders that read all of it:
-// the output itself when it is contiguous float32, otherwise `scratch`
-// holding a dequantized or packed copy, created on first use and resized only
-// when the output shape changes. The output must be float32 or int8, as
-// is_float_outputs() checks in init.
-// Decoders reading part of an output use HeadGridView instead.
-auto float_view(const SharedPtr<core::Buffer>& output, SharedPtr<core::Buffer>& scratch) -> SharedPtr<core::Buffer>;
+// Dequantizes an int8 output into `scratch`, a float32 host buffer of the
+// same shape, honoring strides. Decoders that read a whole output read
+// float32 outputs in place and call this for int8 ones; decoders reading part
+// of an output use HeadGridView instead.
+auto dequantize_buffer(const core::Buffer& output, core::Buffer& scratch) -> void;
+
+// One dequantize_buffer() buffer per engine output, shaped like the int8 ones.
+auto make_scratch(const engine::Engine& engine) -> Vector<core::Buffer>;
 
 auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
     -> Vector<std::size_t>;

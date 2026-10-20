@@ -95,6 +95,7 @@ public:
     const auto& outputs = engine.output_protos();
     KZ_CHECK_RETURN(outputs.size() == 1, false, "Ocr: expected one output");
     shape_ = outputs[0].shape;
+    scratch_ = make_scratch(engine);
     if (detection_) {
       det_ = config.get<DetectionParam>();
       KZ_CHECK_RETURN(engine.proto().output_layout == engine::DataLayout::Nchw && shape_.size() == 4 &&
@@ -125,7 +126,11 @@ public:
 protected:
   auto decode(OcrResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const auto floats = float_view(outputs[0], scratch_);
+    const core::Buffer* floats = outputs[0].get();
+    if (floats->data_type() != core::DataType::Float32) {
+      dequantize_buffer(*floats, scratch_[0]);
+      floats = &scratch_[0];
+    }
     const auto* data = static_cast<const float*>(floats->memory()->cpu());
     if (detection_)
       return detect(result, data, transform);
@@ -234,7 +239,7 @@ private:
   DetectionParam det_;
   core::Shape shape_;
   Vector<String> characters_;
-  SharedPtr<core::Buffer> scratch_;
+  Vector<core::Buffer> scratch_;
   cv::Mat bitmap_;
   cv::Mat mask_;
   Vector<Vector<cv::Point>> contours_;

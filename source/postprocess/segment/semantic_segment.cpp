@@ -40,6 +40,10 @@ public:
     const auto channels = outputs[0].shape.size() == 4 ? outputs[0].shape[1] : 1;
     KZ_CHECK_RETURN(type == core::DataType::Float32 || type == core::DataType::Int8 || (labels && channels == 1), false,
                     "semantic_segment: needs float32 or int8 scores, or int32 or int64 labels in one channel");
+    // Contiguous multi-channel int8 scores are ranked in place.
+    scratch_.assign(1, core::Buffer(core::MemoryType::Cpu, core::DataType::Float32));
+    if (type == core::DataType::Int8 && (channels == 1 || !outputs[0].stride.empty()))
+      scratch_[0].reshape(outputs[0].shape);
     return true;
   }
 
@@ -51,7 +55,7 @@ protected:
     const auto channels = shape.size() == 4 ? static_cast<int>(shape[1]) : 1;
     const auto height = static_cast<int>(shape[shape.size() - 2]);
     const auto width = static_cast<int>(shape.back());
-    if (!output_labels(outputs[0], channels, height, width))
+    if (!output_labels(output, channels, height, width))
       return false;
 
     // Source pixel center -> network coordinate -> output pixel.
@@ -84,8 +88,7 @@ protected:
   }
 
 private:
-  auto output_labels(const SharedPtr<core::Buffer>& buffer, int channels, int height, int width) -> bool {
-    const auto& output = *buffer;
+  auto output_labels(const core::Buffer& output, int channels, int height, int width) -> bool {
     labels_.create(height, width, CV_16U);
     const auto plane = static_cast<std::size_t>(height) * static_cast<std::size_t>(width);
     if (channels == 1 && (output.data_type() == core::DataType::Int32 || output.data_type() == core::DataType::Int64)) {
@@ -100,13 +103,17 @@ private:
       return true;
     }
     auto* out = labels_.ptr<std::uint16_t>();
-    // Quantized scores keep their order for a positive scale, so int8 maps
+    // Quantized scores keep their order (the scale is positive), so int8 maps
     // skip dequantization.
-    if (channels > 1 && output.data_type() == core::DataType::Int8 && output.is_contiguous() && output.scale > 0.0F) {
+    if (channels > 1 && output.data_type() == core::DataType::Int8 && output.is_contiguous()) {
       argmax_channels(static_cast<const std::int8_t*>(output.memory()->cpu()), channels, plane, out);
       return true;
     }
-    const auto floats = float_view(buffer, scratch_);
+    const core::Buffer* floats = &output;
+    if (floats->data_type() != core::DataType::Float32) {
+      dequantize_buffer(*floats, scratch_[0]);
+      floats = &scratch_[0];
+    }
     const auto* data = static_cast<const float*>(floats->memory()->cpu());
     if (channels == 1) {
       for (std::size_t i = 0; i < plane; ++i)
@@ -136,7 +143,7 @@ private:
     }
   }
 
-  SharedPtr<core::Buffer> scratch_;
+  Vector<core::Buffer> scratch_;
   Vector<float> best_;
   cv::Mat labels_;
   cv::Mat source_labels_;

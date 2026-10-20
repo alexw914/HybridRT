@@ -137,7 +137,7 @@ public:
     }
     KZ_CHECK_RETURN(type != KeypointOutput::PointWithVisible || outputs[2].shape[2] == 3, false,
                     "general_keypoint: visibility needs 3 states (unlabeled, invisible, visible)");
-    scratch_.assign(outputs.size(), nullptr);
+    scratch_ = make_scratch(engine);
     data_.resize(outputs.size());
     return true;
   }
@@ -146,7 +146,11 @@ protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
     for (std::size_t i = 0; i < outputs.size(); ++i) {
-      const auto floats = float_view(outputs[i], scratch_[i]);
+      const core::Buffer* floats = outputs[i].get();
+      if (floats->data_type() != core::DataType::Float32) {
+        dequantize_buffer(*floats, scratch_[i]);
+        floats = &scratch_[i];
+      }
       data_[i] = static_cast<const float*>(floats->memory()->cpu());
     }
     auto& objects = result[0];
@@ -329,7 +333,7 @@ private:
   }
 
   GeneralKeypointParam param_;
-  core::Buffers scratch_;
+  Vector<core::Buffer> scratch_;
   Vector<const float*> data_;
   cv::Mat blurred_;
 };

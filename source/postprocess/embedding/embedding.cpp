@@ -28,20 +28,25 @@ public:
       return false;
     KZ_CHECK_RETURN(engine.output_protos().size() == 1, false, "postprocess: Embedding needs one engine output, got {}",
                     engine.output_protos().size());
+    scratch_ = make_scratch(engine);
     return true;
   }
 
 protected:
   auto decode(EmbeddingResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& /*transform*/)
       -> bool override {
-    const auto floats = float_view(outputs.front(), scratch_);
+    const core::Buffer* floats = outputs.front().get();
+    if (floats->data_type() != core::DataType::Float32) {
+      dequantize_buffer(*floats, scratch_[0]);
+      floats = &scratch_[0];
+    }
     const auto* data = static_cast<const float*>(floats->memory()->cpu());
     result.assign(data, data + floats->volume());
     return true;
   }
 
 private:
-  SharedPtr<core::Buffer> scratch_;
+  Vector<core::Buffer> scratch_;
 };
 
 } // namespace
