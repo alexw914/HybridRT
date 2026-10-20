@@ -40,6 +40,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "yolov8_segment"))
+      return false;
     param_ = config.get<YoloV8SegmentParam>();
     KZ_CHECK_RETURN(!config.contains("reg_max") || param_.reg_max > 0, false, "reg_max must be positive when supplied");
     if (param_.class_num == 0 ||
@@ -67,7 +69,6 @@ protected:
   auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
     const HeadGrid prototypes(*outputs[outputs_.prototypes], layout_);
-    KZ_CHECK_RETURN(prototypes.valid(), false, "yolov8_segment: prototypes must be float32 or int8");
     rects_.resize(param_.class_num);
     scores_.resize(param_.class_num);
     coefficients_.resize(param_.class_num);
@@ -78,8 +79,6 @@ protected:
     }
     for (std::size_t k = 0; k < outputs_.heads.size(); ++k) {
       const HeadGrid grid(*outputs[outputs_.heads[k]], layout_);
-      if (!grid.valid())
-        return false;
       decode_head(grid, param_.strides[k]);
     }
     const auto masks = outputs_.masks;

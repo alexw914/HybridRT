@@ -25,6 +25,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "detr_detect"))
+      return false;
     param_ = config.get<DetrParam>();
     if (!config.contains("confidence_threshold"))
       param_.confidence_threshold = {0.25F};
@@ -40,8 +42,7 @@ public:
     const auto& outputs = engine.output_protos();
     const auto valid = [](const core::BufferProto& output, std::size_t channels) -> bool {
       return output.shape.size() == 3 && output.shape[0] == 1 && output.shape[1] > 0 &&
-             output.shape[2] == static_cast<std::int64_t>(channels) &&
-             (output.data_type == core::DataType::Float32 || output.data_type == core::DataType::Int8);
+             output.shape[2] == static_cast<std::int64_t>(channels);
     };
     if (param_.output_format == DetrOutputFormat::Combined) {
       KZ_CHECK_RETURN(outputs.size() == 1 && valid(outputs[0], 4 + score_channels_), false,
@@ -51,28 +52,21 @@ public:
                           outputs[0].shape[1] == outputs[1].shape[1],
                       false, "detr_detect: separate format needs output 0 [1, N, 4] boxes and output 1 [1, N, scores]");
     }
-    output_shapes_.clear();
-    for (const auto& output : outputs)
-      output_shapes_.push_back(output.shape);
+    count_ = static_cast<std::size_t>(outputs[0].shape[1]);
     return true;
   }
 
 protected:
   auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    KZ_CHECK_RETURN(outputs.size() == output_shapes_.size(), false, "detr_detect: output count changed");
-    for (std::size_t i = 0; i < outputs.size(); ++i)
-      KZ_CHECK_RETURN(outputs[i]->shape() == output_shapes_[i], false, "detr_detect: output shape changed");
     KZ_CHECK_RETURN(transform.dst_roi.width > 0 && transform.dst_roi.height > 0, false,
                     "detr_detect: destination region is empty");
     const bool combined = param_.output_format == DetrOutputFormat::Combined;
     const HeadGrid boxes(*outputs[0], std::nullopt);
     const HeadGrid scores(*outputs[combined ? 0 : 1], std::nullopt);
-    KZ_CHECK_RETURN(boxes.valid() && scores.valid(), false, "detr_detect: outputs must be float32 or int8");
     const std::int64_t score_first = combined ? 4 : 0;
-    const auto count = static_cast<std::size_t>(output_shapes_[0][1]);
     logits_.resize(score_channels_);
-    for (std::size_t i = 0; i < count; ++i) {
+    for (std::size_t i = 0; i < count_; ++i) {
       const Array<float, 4> box{boxes.at(i, 0), boxes.at(i, 1), boxes.at(i, 2), boxes.at(i, 3)};
       if (!std::isfinite(box[0]) || !std::isfinite(box[1]) || !std::isfinite(box[2]) || !std::isfinite(box[3]) ||
           box[2] <= 0.0F || box[3] <= 0.0F)
@@ -121,7 +115,7 @@ protected:
 private:
   DetrParam param_;
   core::Size input_size_;
-  Vector<core::Shape> output_shapes_;
+  std::size_t count_ = 0;
   std::size_t score_channels_ = 0;
   Vector<float> logits_;
 };

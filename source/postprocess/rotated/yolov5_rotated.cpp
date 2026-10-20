@@ -23,6 +23,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "yolov5_rotated"))
+      return false;
     param_ = config.get<YoloV5Param>();
     if (!check_yolov5(param_, engine, 1))
       return false;
@@ -36,12 +38,8 @@ public:
 protected:
   auto decode(RotatedResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    if (outputs.size() != param_.strides.size())
-      return false;
     for (std::size_t head = 0; head < outputs.size(); ++head) {
       const HeadGrid grid(*outputs[head], layout_);
-      if (!grid.valid())
-        return false;
       decode_head(result, grid, head);
     }
     return finish_rotated(result, param_.iou_threshold, transform);

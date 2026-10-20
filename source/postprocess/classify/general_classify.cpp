@@ -43,6 +43,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "general_classify"))
+      return false;
     activation_ = config.get<GeneralClassifyParam>().classify_postprocess_type;
     scratch_.assign(engine.output_protos().size(), nullptr);
     return true;
@@ -51,7 +53,6 @@ public:
 protected:
   auto decode(ClassifyResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& /*transform*/)
       -> bool override {
-    KZ_CHECK_RETURN(outputs.size() == scratch_.size(), false, "general_classify: output count changed");
     for (std::size_t i = 0; i < outputs.size(); ++i) {
       const auto floats = float_view(outputs[i], scratch_[i]);
       if (floats == nullptr)

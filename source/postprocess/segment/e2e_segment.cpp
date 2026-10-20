@@ -36,6 +36,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "e2e_segment"))
+      return false;
     param_ = config.get<E2ESegmentParam>();
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
@@ -59,9 +61,7 @@ protected:
   auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
     const HeadGrid det(*outputs[detections_], std::nullopt);
-    KZ_CHECK_RETURN(det.valid(), false, "e2e_segment: detections must be float32 or int8");
     const HeadGrid prototypes(*outputs[prototypes_], engine::DataLayout::Nchw);
-    KZ_CHECK_RETURN(prototypes.valid(), false, "e2e_segment: prototypes must be float32 or int8");
     const auto count = static_cast<std::size_t>(outputs[detections_]->shape()[1]);
     const auto columns = outputs[detections_]->shape()[2];
     for (std::size_t i = 0; i < count; ++i) {

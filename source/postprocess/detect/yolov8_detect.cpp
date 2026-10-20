@@ -22,6 +22,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "yolov8_detect"))
+      return false;
     param_ = config.get<YoloV8Param>();
     KZ_CHECK_RETURN(!config.contains("reg_max") || param_.reg_max > 0, false, "reg_max must be positive when supplied");
     if (!check_yolov8(param_, engine, 0))
@@ -37,12 +39,8 @@ public:
 protected:
   auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    if (outputs.size() != param_.strides.size())
-      return false;
     for (std::size_t head = 0; head < outputs.size(); ++head) {
       const HeadGrid grid(*outputs[head], layout_);
-      if (!grid.valid())
-        return false;
       decode_head(result, grid, param_.strides[head]);
     }
     finish_detect(result, param_.iou_threshold, transform);

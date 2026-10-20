@@ -57,6 +57,14 @@ auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* 
   return true;
 }
 
+auto float_outputs(const engine::Engine& engine, std::string_view name) -> bool {
+  for (const auto& output : engine.output_protos()) {
+    KZ_CHECK_RETURN(output.data_type == core::DataType::Float32 || output.data_type == core::DataType::Int8, false,
+                    "{}: outputs must be float32 or int8, got {}", name, to_string(output.data_type));
+  }
+  return true;
+}
+
 auto HeadShape::of(const core::BufferProto& proto, engine::DataLayout layout) -> std::optional<HeadShape> {
   const auto& shape = proto.shape;
   if (shape.size() != 4)

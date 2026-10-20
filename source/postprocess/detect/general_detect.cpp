@@ -26,6 +26,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "general_detect"))
+      return false;
     param_ = config.get<GeneralDetectParam>();
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
@@ -45,8 +47,6 @@ protected:
   auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
     const HeadGrid rows(*outputs[0], std::nullopt);
-    if (!rows.valid())
-      return false;
     decode_rows(result, rows);
     finish_detect(result, param_.iou_threshold, transform);
     return true;

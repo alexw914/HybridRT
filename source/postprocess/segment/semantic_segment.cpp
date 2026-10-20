@@ -35,6 +35,11 @@ public:
       KZ_LOG_ERROR("semantic_segment: needs one image input and one [1, C, H, W] or [1, H, W] output");
       return false;
     }
+    const auto type = outputs[0].data_type;
+    const auto labels = type == core::DataType::Int32 || type == core::DataType::Int64;
+    const auto channels = outputs[0].shape.size() == 4 ? outputs[0].shape[1] : 1;
+    KZ_CHECK_RETURN(type == core::DataType::Float32 || type == core::DataType::Int8 || (labels && channels == 1), false,
+                    "semantic_segment: needs float32 or int8 scores, or int32 or int64 labels in one channel");
     return true;
   }
 

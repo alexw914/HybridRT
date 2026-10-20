@@ -27,6 +27,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "general_rotated"))
+      return false;
     param_ = config.get<GeneralDetectParam>();
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
@@ -46,8 +48,6 @@ protected:
   auto decode(RotatedResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
     const HeadGrid rows(*outputs[0], std::nullopt);
-    if (!rows.valid())
-      return false;
     decode_rows(result, rows);
     return finish_rotated(result, param_.iou_threshold, transform);
   }

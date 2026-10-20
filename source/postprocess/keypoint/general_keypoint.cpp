@@ -89,6 +89,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "general_keypoint"))
+      return false;
     param_ = config.get<GeneralKeypointParam>();
     const auto type = param_.general_keypoint_type;
     if (engine.proto().output_layout != engine::DataLayout::Nchw) {
@@ -143,7 +145,6 @@ public:
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    KZ_CHECK_RETURN(outputs.size() == scratch_.size(), false, "general_keypoint: output count changed");
     for (std::size_t i = 0; i < outputs.size(); ++i) {
       const auto floats = float_view(outputs[i], scratch_[i]);
       if (floats == nullptr)

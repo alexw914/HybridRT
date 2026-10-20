@@ -80,10 +80,6 @@ TEST(DetrDetectTest, RejectsNonfiniteAndEmptyBoxesAndClearsResults) {
   hrt::postprocess::DetectResultMap result{{0, {{{0, 0, 1, 1}, 1.0F}}}};
   ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(40, 40)));
   EXPECT_TRUE(result.empty());
-  EXPECT_FALSE(decoder->process(result, {}, hrt::test::identity(40, 40)));
-  const auto wrong = proto(DataType::Float32, {1, 1, 5});
-  EXPECT_FALSE(decoder->process(result, {hrt::test::buffer_of<float>(wrong, {0.5F, 0.5F, 0.2F, 0.2F, 0.9F})},
-                                hrt::test::identity(40, 40)));
 }
 
 TEST(DetrDetectTest, ChecksConfigAndOutputContract) {

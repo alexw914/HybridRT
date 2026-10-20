@@ -43,6 +43,10 @@ inline auto dequantize(std::int8_t value, float scale, std::int32_t zero_point) 
 
 auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* name) -> bool;
 
+// Whether every engine output is float32 or int8, the types HeadGrid and
+// float_view() read. Checked once in init, so decode() relies on it.
+auto float_outputs(const engine::Engine& engine, std::string_view name) -> bool;
+
 // Batch, channels and grid of one 4-D head output.
 struct HeadShape {
   std::int64_t batch = 0;
@@ -74,12 +78,10 @@ auto keypoint_shape(std::int64_t channels, unsigned int count, std::optional<std
 // Element access into one detection head output, NCHW or NHWC, float32 or
 // quantized int8, honoring buffer strides. Without a layout, a decoded
 // [1, rows, N] output is one grid row of N cells whose channels are its rows.
-// Invalid for other data types.
+// Other data types are rejected in init by float_outputs().
 class HeadGrid {
 public:
   HeadGrid(const core::Buffer& buffer, std::optional<engine::DataLayout> layout);
-
-  KZ_NODISCARD auto valid() const -> bool { return data_ != nullptr; }
 
   KZ_NODISCARD auto int8() const -> bool { return int8_; }
 

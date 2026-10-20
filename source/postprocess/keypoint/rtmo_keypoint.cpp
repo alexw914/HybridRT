@@ -36,6 +36,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "rtmo_keypoint"))
+      return false;
     param_ = config.get<RtmoKeypointParam>();
     if (!expand_per_class(param_.confidence_threshold, 1, "confidence_threshold") ||
         !expand_per_class(param_.iou_threshold, 1, "iou_threshold"))
@@ -59,7 +61,6 @@ protected:
     // [1, M, K, 3] keypoints as an NHWC grid of M rows, K cells, 3 channels.
     const auto& points_output = *outputs[1 - boxes_index_];
     const HeadGrid points(points_output, engine::DataLayout::Nhwc);
-    KZ_CHECK_RETURN(boxes.valid() && points.valid(), false, "rtmo_keypoint: outputs must be float32 or int8");
     const auto count = static_cast<std::size_t>(outputs[boxes_index_]->shape()[1]);
     const auto keypoint_num = static_cast<std::size_t>(points_output.shape()[2]);
 

@@ -34,6 +34,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "e2e_detect"))
+      return false;
     param_ = config.get<E2EDetectParam>();
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
@@ -49,7 +51,6 @@ protected:
   auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
     const HeadGrid output(*outputs[0], std::nullopt);
-    KZ_CHECK_RETURN(output.valid(), false, "e2e_detect: output must be float32 or int8");
     const auto count = static_cast<std::size_t>(outputs[0]->shape()[1]);
     for (std::size_t i = 0; i < count; ++i) {
       const auto label = output.at(i, 5);

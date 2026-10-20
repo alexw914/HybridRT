@@ -89,6 +89,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "ocr"))
+      return false;
     detection_ = config["stage"] == "detection";
     const auto& outputs = engine.output_protos();
     KZ_CHECK_RETURN(engine.input_size() && outputs.size() == 1, false, "Ocr: expected one image input and one output");
@@ -123,7 +125,6 @@ public:
 protected:
   auto decode(OcrResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    KZ_CHECK_RETURN(outputs.size() == 1 && outputs[0]->shape() == shape_, false, "Ocr: output shape changed");
     const auto floats = float_view(outputs[0], scratch_);
     if (floats == nullptr)
       return false;

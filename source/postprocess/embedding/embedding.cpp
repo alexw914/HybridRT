@@ -24,6 +24,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& /*config*/, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "embedding"))
+      return false;
     KZ_CHECK_RETURN(engine.output_protos().size() == 1, false, "postprocess: Embedding needs one engine output, got {}",
                     engine.output_protos().size());
     return true;

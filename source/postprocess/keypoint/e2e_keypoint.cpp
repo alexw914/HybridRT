@@ -37,6 +37,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "e2e_keypoint"))
+      return false;
     param_ = config.get<E2EKeypointParam>();
     KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
                     "e2e_keypoint: keypoint_num must be positive");
@@ -60,7 +62,6 @@ protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
     const HeadGrid output(*outputs[0], std::nullopt);
-    KZ_CHECK_RETURN(output.valid(), false, "e2e_keypoint: output must be float32 or int8");
     const auto count = static_cast<std::size_t>(outputs[0]->shape()[1]);
     const auto columns = outputs[0]->shape()[2];
     const auto dims = static_cast<std::int64_t>(dims_);

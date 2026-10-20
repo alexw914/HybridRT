@@ -37,6 +37,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "general_yolo_pose"))
+      return false;
     param_ = config.get<GeneralYoloPoseParam>();
     KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
                     "general_yolo_pose: keypoint_num must be positive");
@@ -61,8 +63,6 @@ protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
     const HeadGrid rows(*outputs[0], std::nullopt);
-    if (!rows.valid())
-      return false;
     decode_rows(result, rows, transform);
     return true;
   }

@@ -49,6 +49,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "yolov8_keypoint"))
+      return false;
     KZ_CHECK_RETURN(has_shape_parameters(config), false,
                     "yolov8_keypoint: supply at least two of class_num, reg_max and keypoint_num");
     param_ = config.get<YoloV8KeypointParam>();
@@ -100,15 +102,11 @@ public:
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    if (outputs.size() != param_.strides.size())
-      return false;
     for (auto& per_class : candidates_)
       per_class.clear();
     candidates_.resize(param_.class_num);
     for (std::size_t head = 0; head < outputs.size(); ++head) {
       const HeadGrid grid(*outputs[head], layout_);
-      if (!grid.valid())
-        return false;
       decode_head(grid, param_.strides[head]);
     }
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {

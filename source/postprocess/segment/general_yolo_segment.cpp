@@ -35,6 +35,8 @@ public:
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
+    if (!float_outputs(engine, "general_yolo_segment"))
+      return false;
     param_ = config.get<GeneralYoloSegmentParam>();
     if (param_.class_num == 0 ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
@@ -63,8 +65,6 @@ protected:
       -> bool override {
     const HeadGrid prototypes(*outputs[prototypes_], engine::DataLayout::Nchw);
     const HeadGrid det(*outputs[detections_], std::nullopt);
-    if (!det.valid() || !prototypes.valid())
-      return false;
     decode_rows(result, det, transform, prototypes, static_cast<std::size_t>(outputs[prototypes_]->shape()[1]));
     return true;
   }
