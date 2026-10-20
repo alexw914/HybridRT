@@ -45,6 +45,26 @@ Inference is used only to prepare real output tensors and is excluded from postp
 | 3840 x 2160 | 640 x 640 | 0.680 | 0.779 |
 | 3840 x 2160 | 1280 x 1280 | 2.519 | 1.257 |
 
+### Apple M5 Pro: current measurements
+
+2026-10-20, MacBook Pro, Apple M5 Pro (15 CPU cores, 24 GB RAM), macOS 27.0.1,
+Apple Clang 21.0.0, OpenCV 4.10.0, ONNX Runtime 1.31.0, Release (`-O3`),
+source `9fece83`. Reconfigured and rebuilt before measurement. The same one-caller,
+one-OpenCV-thread protocol above applies: wall-clock median of 3 repetitions,
+minimum 0.5 seconds each, minimum 0.2 seconds warm-up and 20 explicit warm-up calls.
+Metal ran with GPU access; both source and result use host/shared memory.
+No CPU affinity or control of other system activity. The OpenCV version differs
+from the M4 run, so differences are not attributable to the chip alone.
+
+| Source | Target | CPU | Metal |
+| --- | --- | ---: | ---: |
+| 1920 x 1080 | 640 x 640 | 0.547 | 0.223 |
+| 1920 x 1080 | 1280 x 1280 | 1.871 | 0.455 |
+| 2560 x 1440 | 640 x 640 | 0.554 | 0.248 |
+| 2560 x 1440 | 1280 x 1280 | 1.424 | 0.480 |
+| 3840 x 2160 | 640 x 640 | 0.560 | 0.464 |
+| 3840 x 2160 | 1280 x 1280 | 2.253 | 0.722 |
+
 ### RTX 4090 server: current measurements
 
 2026-10-20, Linux x86_64, Intel Xeon Gold 6462C, physical GPU 1 / RTX 4090,
@@ -129,6 +149,30 @@ source image. All cases measure CPU postprocessing.
 | `Ocr` | `ppocrv6_tiny_det` | 640 x 640 | 0.303 |
 | `Ocr` | `ppocrv6_tiny_rec` | 320 x 48 | 0.134 |
 | `Ocr` | `ppocrv6_small_rec` | 320 x 48 | 0.363 |
+
+### Apple M5 Pro: partial current measurements
+
+Same M5 Pro environment and measurement protocol as the preprocessing table above,
+using source `9fece83`. Model hashes were checked against the template reference
+before measurement. Currently only `OcrDetection.onnx` matches the recorded collection;
+the other 26 benchmark cases have missing files or different local model hashes.
+They are not replaced with older fixtures in this table.
+
+| Type | Template algo | Model input (W x H) | Time |
+| --- | --- | --- | ---: |
+| `Ocr` | `ppocrv6_tiny_det` | 640 x 640 | 0.324 |
+
+The remaining 26 cases have not been measured on M5 Pro with the current fixture
+collection. Raw output: `assets/test/benchmark_results/record_m5pro_postprocess.json`
+(untracked). This measures detection postprocessing on the document image; it excludes
+preprocessing and model inference, as in the M4 record.
+
+**Correctness validation.** After rebuilding the latest source, all 188 non-benchmark
+Release CTest entries completed with no failures (25 skipped for missing fixtures
+or unavailable hardware). Both Metal geometry/stride tests and NV12 CPU fallback
+passed with GPU access enabled. Missing real-model tests are skips, not validation
+of the unavailable model paths. No preprocessing or postprocessing implementation
+was changed for this measurement.
 
 ### RK3588: historical measurements
 
@@ -215,3 +259,6 @@ the configured SDK library paths. Reproduce with the same timing flags as above 
 `--benchmark_filter='BM_Resolution/(1920/1080|2560/1440|3840/2160)/(640/640|1280/1280)/0/|BM_CudaResolution/(1920/1080|2560/1440|3840/2160)/(640/640|1280/1280)/(0|1)/'`.
 For `BM_CudaResolution`, device argument `0` means host source and `1` device source.
 Use `CUDA_VISIBLE_DEVICES=1` to reproduce this run's physical GPU selection.
+
+The M5 Pro raw preprocessing file is
+`assets/test/benchmark_results/record_m5pro_six_preprocess.json` (untracked).
