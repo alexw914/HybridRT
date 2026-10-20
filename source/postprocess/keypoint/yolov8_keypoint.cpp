@@ -95,7 +95,7 @@ public:
     // Scores are compared as logits so most cells skip the sigmoid.
     logit_threshold_.resize(param_.class_num);
     std::transform(param_.confidence_threshold.begin(), param_.confidence_threshold.end(), logit_threshold_.begin(),
-                   logit);
+                   core::logit);
     layout_ = engine.proto().output_layout;
     return true;
   }
@@ -152,13 +152,13 @@ private:
             core::Rect2f(
                 {(cx - dfl(grid, y, x, 0, bins)) * stride.x, (cy - dfl(grid, y, x, bins, bins)) * stride.y},
                 {(cx + dfl(grid, y, x, bins * 2, bins)) * stride.x, (cy + dfl(grid, y, x, bins * 3, bins)) * stride.y}),
-            sigmoid(score), static_cast<std::int64_t>(cls), -1};
+            core::sigmoid(score), static_cast<std::int64_t>(cls), -1};
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
           const auto channel = first_keypoint + j * dims_;
           const core::Point2f point{(grid.at(y, x, channel) * 2.0F + static_cast<float>(x)) * stride.x,
                                     (grid.at(y, x, channel + 1) * 2.0F + static_cast<float>(y)) * stride.y};
-          const auto visibility = dims_ == 3 ? sigmoid(grid.at(y, x, channel + 2)) : 1.0F;
+          const auto visibility = dims_ == 3 ? core::sigmoid(grid.at(y, x, channel + 2)) : 1.0F;
           object.keypoints.push_back(
               {point, visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
                visibility});

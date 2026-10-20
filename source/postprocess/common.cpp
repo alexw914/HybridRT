@@ -250,7 +250,7 @@ auto read_floats(const core::Buffer& output, float* out) -> void {
     if (int8) {
       const auto* values = static_cast<const std::int8_t*>(static_cast<const void*>(in));
       for (std::size_t i = 0; i < count; ++i)
-        out[i] = dequantize(values[i], output.scale, output.zero_point);
+        out[i] = core::dequantize(values[i], output.scale, output.zero_point);
     } else {
       std::memcpy(out, in, count * sizeof(float));
     }

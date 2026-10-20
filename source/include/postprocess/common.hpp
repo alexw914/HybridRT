@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/include/postprocess/common.hpp
-// Description: Declares helpers shared by postprocessors: activation and
-//              quantization math, head views and output validation.
+// Description: Declares helpers shared by postprocessors: head views, output
+//              validation and float views of outputs.
 // -----------------------------------------------------------------------------
 
 #ifndef HRT_POSTPROCESS_COMMON_HPP
@@ -21,20 +21,9 @@
 #include <type_traits>
 
 #include "include/core/config.hpp"
+#include "include/core/math.hpp"
 
 namespace hrt::postprocess {
-
-inline auto sigmoid(float x) -> float {
-  return 1.0F / (1.0F + std::exp(-x));
-}
-
-inline auto logit(float p) -> float {
-  return p < 1.0F ? std::log(p / (1.0F - p)) : std::numeric_limits<float>::max();
-}
-
-inline auto dequantize(std::int8_t value, float scale, std::int32_t zero_point) -> float {
-  return scale * (static_cast<float>(value) - static_cast<float>(zero_point));
-}
 
 auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* name) -> bool;
 
@@ -106,7 +95,7 @@ public:
 
   KZ_NODISCARD auto at(std::int64_t y, std::int64_t x, std::size_t channel) const -> float {
     const auto index = offset(y, x, channel);
-    return int8_ ? dequantize(static_cast<const std::int8_t*>(data_)[index], scale_, zero_point_)
+    return int8_ ? core::dequantize(static_cast<const std::int8_t*>(data_)[index], scale_, zero_point_)
                  : static_cast<const float*>(data_)[index];
   }
 

@@ -33,7 +33,7 @@ public:
     // Scores are compared as logits so most cells skip the sigmoid.
     logit_threshold_.resize(param_.class_num);
     std::transform(param_.confidence_threshold.begin(), param_.confidence_threshold.end(), logit_threshold_.begin(),
-                   logit);
+                   core::logit);
     layout_ = engine.proto().output_layout;
     return true;
   }
@@ -70,7 +70,7 @@ private:
                              {(cx + grid.at(y, x, 2)) * stride.x, (cy + grid.at(y, x, 3)) * stride.y});
           decoded = true;
         }
-        result[cls].push_back({box, sigmoid(score), static_cast<std::int64_t>(cls)});
+        result[cls].push_back({box, core::sigmoid(score), static_cast<std::int64_t>(cls)});
       }
     }
   }

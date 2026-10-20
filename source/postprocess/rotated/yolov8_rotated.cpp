@@ -32,7 +32,7 @@ public:
       return false;
     logit_threshold_.resize(param_.class_num);
     std::transform(param_.confidence_threshold.begin(), param_.confidence_threshold.end(), logit_threshold_.begin(),
-                   logit);
+                   core::logit);
     layout_ = engine.proto().output_layout;
     return true;
   }
@@ -63,7 +63,7 @@ private:
         if (score < logit_threshold_[cls])
           continue;
         if (!decoded) {
-          const auto theta = (sigmoid(grid.at(y, x, bins * 4)) - 0.25F) * 180.0F;
+          const auto theta = (core::sigmoid(grid.at(y, x, bins * 4)) - 0.25F) * 180.0F;
           const auto rad = theta / 180.0F * std::numbers::pi_v<float>;
           const auto cos = std::cos(rad);
           const auto sin = std::sin(rad);
@@ -79,7 +79,7 @@ private:
           rect.angle = theta;
           decoded = true;
         }
-        result[cls].push_back({rect, sigmoid(score), static_cast<std::int64_t>(cls)});
+        result[cls].push_back({rect, core::sigmoid(score), static_cast<std::int64_t>(cls)});
       }
     }
   }

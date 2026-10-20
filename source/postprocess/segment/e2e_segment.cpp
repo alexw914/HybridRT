@@ -52,7 +52,7 @@ public:
     KZ_CHECK_RETURN(det.size() == 3 && proto.size() == 4 && det[0] == 1 && proto[0] == 1 && det[1] > 0 &&
                         det[2] == 6 + proto[1],
                     false, "e2e_segment: outputs must be [1, N, 6 + masks] and [1, masks, h, w]");
-    mask_logit_ = logit(param_.mask_threshold);
+    mask_logit_ = core::logit(param_.mask_threshold);
     return true;
   }
 

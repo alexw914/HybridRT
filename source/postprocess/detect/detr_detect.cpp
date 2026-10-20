@@ -87,7 +87,7 @@ protected:
         if (!std::isfinite(value))
           continue;
         if (param_.score_activation == DetrScoreActivation::Sigmoid)
-          value = sigmoid(value);
+          value = core::sigmoid(value);
         else if (param_.score_activation == DetrScoreActivation::Softmax)
           value = std::exp(value - max_logit) / denominator;
         if (value > score) {

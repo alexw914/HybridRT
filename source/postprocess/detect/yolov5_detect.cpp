@@ -29,7 +29,7 @@ public:
       return false;
     const auto min_threshold =
         *std::min_element(param_.confidence_threshold.begin(), param_.confidence_threshold.end());
-    min_objectness_logit_ = logit(min_threshold);
+    min_objectness_logit_ = core::logit(min_threshold);
     layout_ = engine.proto().output_layout;
     return true;
   }
@@ -56,21 +56,21 @@ private:
       for (const auto cell : scan_.scan(grid, base + 4, 1, min_objectness)) {
         const std::int64_t y = cell / grid.cols();
         const std::int64_t x = cell % grid.cols();
-        const auto objectness = sigmoid(grid.at(y, x, base + 4));
+        const auto objectness = core::sigmoid(grid.at(y, x, base + 4));
         bool decoded = false;
         core::Rect2f box;
         for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
           const auto threshold = param_.confidence_threshold[cls];
           if (objectness < threshold)
             continue;
-          const auto score = sigmoid(grid.at(y, x, base + 5 + cls)) * objectness;
+          const auto score = core::sigmoid(grid.at(y, x, base + 5 + cls)) * objectness;
           if (score <= threshold)
             continue;
           if (!decoded) {
-            const auto cx = (sigmoid(grid.at(y, x, base)) * 2.0F - 0.5F + static_cast<float>(x)) * stride.x;
-            const auto cy = (sigmoid(grid.at(y, x, base + 1)) * 2.0F - 0.5F + static_cast<float>(y)) * stride.y;
-            const auto w = std::pow(sigmoid(grid.at(y, x, base + 2)) * 2.0F, 2.0F) * anchors[anchor * 2];
-            const auto h = std::pow(sigmoid(grid.at(y, x, base + 3)) * 2.0F, 2.0F) * anchors[anchor * 2 + 1];
+            const auto cx = (core::sigmoid(grid.at(y, x, base)) * 2.0F - 0.5F + static_cast<float>(x)) * stride.x;
+            const auto cy = (core::sigmoid(grid.at(y, x, base + 1)) * 2.0F - 0.5F + static_cast<float>(y)) * stride.y;
+            const auto w = std::pow(core::sigmoid(grid.at(y, x, base + 2)) * 2.0F, 2.0F) * anchors[anchor * 2];
+            const auto h = std::pow(core::sigmoid(grid.at(y, x, base + 3)) * 2.0F, 2.0F) * anchors[anchor * 2 + 1];
             box = {cx - w / 2.0F, cy - h / 2.0F, w, h};
             decoded = true;
           }

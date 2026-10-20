@@ -55,8 +55,8 @@ public:
     // Scores are compared as logits so most cells skip the sigmoid.
     logit_threshold_.resize(param_.class_num);
     std::transform(param_.confidence_threshold.begin(), param_.confidence_threshold.end(), logit_threshold_.begin(),
-                   logit);
-    mask_logit_ = logit(param_.mask_threshold);
+                   core::logit);
+    mask_logit_ = core::logit(param_.mask_threshold);
     layout_ = engine.proto().output_layout;
     return true;
   }
@@ -110,7 +110,7 @@ private:
         const auto cy = static_cast<float>(y) + 0.5F;
         rects_[cls].push_back(core::Rect2f({(cx - grid.at(y, x, 0)) * stride.x, (cy - grid.at(y, x, 1)) * stride.y},
                                            {(cx + grid.at(y, x, 2)) * stride.x, (cy + grid.at(y, x, 3)) * stride.y}));
-        scores_[cls].push_back(sigmoid(score));
+        scores_[cls].push_back(core::sigmoid(score));
         for (std::size_t j = 0; j < outputs_.masks; ++j)
           coefficients_[cls].push_back(grid.at(y, x, first_mask + j));
       }

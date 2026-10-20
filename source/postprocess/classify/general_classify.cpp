@@ -58,7 +58,7 @@ protected:
       const auto* data = static_cast<const float*>(floats->memory()->cpu());
       auto& scores = result.emplace_back(data, data + floats->volume());
       if (activation_ == ClassifyActivation::Sigmoid) {
-        std::transform(scores.begin(), scores.end(), scores.begin(), sigmoid);
+        std::transform(scores.begin(), scores.end(), scores.begin(), core::sigmoid);
       } else if (activation_ == ClassifyActivation::Softmax && !scores.empty()) {
         const auto max = *std::max_element(scores.begin(), scores.end());
         float sum = 0.0F;

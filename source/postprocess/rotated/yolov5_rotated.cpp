@@ -30,7 +30,7 @@ public:
       return false;
     const auto min_threshold =
         *std::min_element(param_.confidence_threshold.begin(), param_.confidence_threshold.end());
-    min_objectness_logit_ = logit(min_threshold);
+    min_objectness_logit_ = core::logit(min_threshold);
     layout_ = engine.proto().output_layout;
     return true;
   }
@@ -56,22 +56,22 @@ private:
       for (const auto cell : scan_.scan(grid, base + 5, 1, min_objectness)) {
         const std::int64_t y = cell / grid.cols();
         const std::int64_t x = cell % grid.cols();
-        const auto objectness = sigmoid(grid.at(y, x, base + 5));
+        const auto objectness = core::sigmoid(grid.at(y, x, base + 5));
         bool decoded = false;
         core::RotatedRect rect;
         for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
           const auto threshold = param_.confidence_threshold[cls];
           if (objectness < threshold)
             continue;
-          const auto score = sigmoid(grid.at(y, x, base + 6 + cls)) * objectness;
+          const auto score = core::sigmoid(grid.at(y, x, base + 6 + cls)) * objectness;
           if (score <= threshold)
             continue;
           if (!decoded) {
-            rect.center = {(sigmoid(grid.at(y, x, base)) * 2.0F - 0.5F + static_cast<float>(x)) * stride.x,
-                           (sigmoid(grid.at(y, x, base + 1)) * 2.0F - 0.5F + static_cast<float>(y)) * stride.y};
-            rect.size = {std::pow(sigmoid(grid.at(y, x, base + 2)) * 2.0F, 2.0F) * anchors[anchor * 2],
-                         std::pow(sigmoid(grid.at(y, x, base + 3)) * 2.0F, 2.0F) * anchors[anchor * 2 + 1]};
-            rect.angle = -(sigmoid(grid.at(y, x, base + 4)) - 0.5F) * 180.0F;
+            rect.center = {(core::sigmoid(grid.at(y, x, base)) * 2.0F - 0.5F + static_cast<float>(x)) * stride.x,
+                           (core::sigmoid(grid.at(y, x, base + 1)) * 2.0F - 0.5F + static_cast<float>(y)) * stride.y};
+            rect.size = {std::pow(core::sigmoid(grid.at(y, x, base + 2)) * 2.0F, 2.0F) * anchors[anchor * 2],
+                         std::pow(core::sigmoid(grid.at(y, x, base + 3)) * 2.0F, 2.0F) * anchors[anchor * 2 + 1]};
+            rect.angle = -(core::sigmoid(grid.at(y, x, base + 4)) - 0.5F) * 180.0F;
             decoded = true;
           }
           result[cls].push_back({rect, score, static_cast<std::int64_t>(cls)});

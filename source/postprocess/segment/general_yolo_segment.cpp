@@ -56,7 +56,7 @@ public:
       KZ_LOG_ERROR("general_yolo_segment: outputs must be [1, 4 + class_num + masks, N] and [1, masks, h, w]");
       return false;
     }
-    mask_logit_ = logit(param_.mask_threshold);
+    mask_logit_ = core::logit(param_.mask_threshold);
     return true;
   }
 

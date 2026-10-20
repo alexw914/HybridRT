@@ -190,7 +190,7 @@ protected:
         if (!scored)
           continue;
         if (param_.score_activation == KeypointScoreActivation::Sigmoid)
-          keypoint.score = sigmoid(keypoint.score);
+          keypoint.score = core::sigmoid(keypoint.score);
         keypoint.visible =
             keypoint.score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible;
       }

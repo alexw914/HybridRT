@@ -34,7 +34,7 @@ public:
       return false;
     logit_threshold_.resize(param_.class_num);
     std::transform(param_.confidence_threshold.begin(), param_.confidence_threshold.end(), logit_threshold_.begin(),
-                   logit);
+                   core::logit);
     layout_ = engine.proto().output_layout;
     return true;
   }
@@ -79,7 +79,7 @@ private:
           rect.angle = rad * 180.0F / std::numbers::pi_v<float>;
           decoded = true;
         }
-        result[cls].push_back({rect, sigmoid(score), static_cast<std::int64_t>(cls)});
+        result[cls].push_back({rect, core::sigmoid(score), static_cast<std::int64_t>(cls)});
       }
     }
   }
