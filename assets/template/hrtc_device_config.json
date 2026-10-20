@@ -126,7 +126,7 @@
                   "RequireStaticInputShapes": "1"
                 }
               },
-              "data": "assets/test/onnx/PP-OCRv6_tiny_det.onnx"
+              "data": "assets/test/onnx/OcrDetection.onnx"
             }
           ]
         },

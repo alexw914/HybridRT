@@ -1,8 +1,9 @@
 # Manifest reference
 
-`hrtc_template.json` contains one representative model for each postprocessor type. The image-task and OCR
-algos use ONNX Runtime and `assets/test/onnx/<type>.onnx`, relative to the repository
-root. The first algo shows every preprocess key. Engine-specific `config` keys are
+`hrtc_template.json` contains a representative model for each postprocessor type. The
+algos use ONNX Runtime and model paths under `assets/test/onnx/`, relative to the repository
+root. Image-task files use `<type>.onnx`; OCR files add their stage and optional variant.
+The first algo shows every preprocess key. Engine-specific `config` keys are
 collected in `hrtc_device_config.json`, using the same raw YOLOv8 detector as an example;
 `hrtc_template.json` omits them and uses engine defaults. Tests and benchmarks load these same algos. Model files
 and images stay local and untracked; only this directory and `assets/PERF.md` are committed.
@@ -350,55 +351,62 @@ backend in `hrtc_device_config.json` therefore uses `NeuralNetwork`.
 
 ## Test models
 
-Template model files live in `assets/test/onnx/`, with one `<type>.onnx` per
-postprocessor and positive, fixed input/output dimensions. Models and test resources are not committed.
-The original collection was deleted. The local binding test collection now contains five official
-Ultralytics exports: `GeneralDetect`, `GeneralYoloPose`, `GeneralRotated`, `GeneralClassify`
-and `E2ESegment`. `images/` contains `bus.jpg`, `airport.jpg` and `zidane.jpg`;
-`weights/` holds source `.pt` files and `scripts/` holds local export/validation scripts.
-Other entries below describe the previous collection and are not locally available.
+Template model files live in `assets/test/onnx/`, named after their postprocessor.
+All external input/output dimensions are positive, fixed integers; batch is 1. `Ocr` has
+separate `OcrDetection.onnx`, `OcrRecognition.onnx` (tiny) and `OcrRecognitionSmall.onnx`
+files because detection and recognition need different networks. `Embedding.onnx` is a
+copy of the classifier and returns its 1000 class scores as an example vector.
+Models, source weights, scripts and validation results stay local and untracked.
 
-The previous 23 files passed ONNX checker, ONNX Runtime zero/random-input runs and `hrt-validate`
-(45 image runs, no pipeline errors). This verifies shape compatibility and runnable
-postprocessing, not detection accuracy. The user-provided `YoloV5Rotated` model has 2 classes;
-its anchors, normalization and angle convention remain unconfirmed. Template anchors and
-preprocessing allow pipeline checks only, as requested.
+The current collection contains 27 files covering all 25 postprocessor types.
+`YoloV5Rotated` uses the user-provided `v0013_obbczs_detection_0808int8.onnx`.
+Its anchors, normalization and angle convention remain unconfirmed; its template
+configuration supports pipeline checks rather than an accuracy reference.
+
+On macOS arm64 (Apple M4), Python 3.10.17, ONNX 1.23.2 and ONNX Runtime 1.23.2 CPU,
+all 27 files passed ONNX checker, zero/random-input inference and output-shape
+checks. Saving inferred static shape annotations preserved random-input results within
+`rtol=1e-5, atol=1e-5`. After rebuilding HybridRT, all 24 image-task algos and
+both OCR recognition cascades passed the CLI on the six local test images. These checks
+establish runnable pipelines, not model accuracy or other-backend compatibility.
+Local `assets/test/onnx_validation.json` records shapes and hashes;
+`assets/test/pipeline_validation/` contains CLI logs and results.
 
 | Algo | ONNX file in `assets/test/onnx/` | Input NCHW | SHA256 |
 | --- | --- | --- | --- |
-| `yolov8_detect` | `YoloV8Detect.onnx` | `1 x 3 x 640 x 640` | `e2a57b77d38a136a3ac07ddd17b81930c4680e0d464ee615488c3a47bfdef303` |
-| `yolo26n_detect_raw` | `Yolo26Detect.onnx` | `1 x 3 x 640 x 640` | `2089cfdd67660be0efec7477bbf2f6cabc2261c84bbd82c6a7e895b51bd8c49a` |
-| `yolov5_detect` | `YoloV5Detect.onnx` | `1 x 3 x 640 x 640` | `797416533eed5eb4c82098ec221bbe55368ad3c062f9d0217db87f129a78f172` |
-| `rtdetr_l_detect` | `DetrDetect.onnx` | `1 x 3 x 640 x 640` | `599b9b7484cb831312f585d4ec4885a95ae10d1e84dada14833f5c570828c9b9` |
-| `yolo26n_e2e_detect` | `E2EDetect.onnx` | `1 x 3 x 640 x 640` | `08727943f090f5e8472cae3c08bcbb7b93c927820d3104ef7792f1d31277ec77` |
-| `yolov8n_detect` | `GeneralDetect.onnx` | `1 x 3 x 640 x 640` | `c8ed00825b62420ebf5c834bcd1ae802035e70a398af7ec656348c569d38967d` |
-| `yolo26n_e2e_obb` | `E2ERotated.onnx` | `1 x 3 x 1024 x 1024` | `0dc04234b1d82d87b8aebe5c364b4c298de0e2380ce61b74f9b117478e690e41` |
-| `yolov8n_obb_raw` | `YoloV8Rotated.onnx` | `1 x 3 x 1024 x 1024` | `2a5de440d72ecb80cc4fbce50c59f6293e4bc89cb1fe8aaee8ca7d9ed3b89566` |
-| `yolo26n_obb_raw` | `Yolo26Rotated.onnx` | `1 x 3 x 1024 x 1024` | `003dc108ae1be9b94f7bbf3f154d871385224da96ca15fa0bc07bccb0bc2148f` |
-| `yolov5_rotated` | `YoloV5Rotated.onnx` | `1 x 3 x 1280 x 1280` | `afffc7a2813e15e9137648bc7655155827b1cdace2a0999b1919d1196be57dfb` |
-| `yolov8n_obb` | `GeneralRotated.onnx` | `1 x 3 x 1024 x 1024` | `c207d49b65f8173265f2e2ff66f59bfef54b0b6d6da578a31c223b190e13dd60` |
-| `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 224 x 224` | `b3b8c37ac7d6bfe052fcc17e4d018bd79a68f354bee845e9073f080b3705ce95` |
-| `yolov8n_classify_embedding` | `GeneralClassify.onnx` | `1 x 3 x 224 x 224` | same file; `Embedding` returns its 1000 class scores as the vector, an example only |
-| `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 640 x 640` | `09ecef03a3b398c2d40a6435acb2fe94bfc5185306605b7e6ad65b0b2f2ef14d` |
-| `yolov8n_face` | `YoloV8Keypoint.onnx` | `1 x 3 x 640 x 640` | `af09683be4937ebe23e9da0346cbf46cd937b73ed5fac986e6205e6c7cdd2c25` |
-| `yolo26n_pose_raw` | `Yolo26Keypoint.onnx` | `1 x 3 x 640 x 640` | `513e12cd94482f799e2d1ad66fcb9603d7c3eb41ad38863e7ae566374e0eddc8` |
-| `yolo26n_e2e_pose` | `E2EKeypoint.onnx` | `1 x 3 x 640 x 640` | `ecd85eb31cf6889ab62600164d27698b881fcb27bd27c548b2dd4a67fb52c814` |
-| `rtmo_s_pose` | `RtmoKeypoint.onnx` | `1 x 3 x 640 x 640` | `91d97d8251f7624d4da9cead6b2a8bd6ea36850cfe329122eebeb89b41f108d2` |
+| `yolov8_detect` | `YoloV8Detect.onnx` | `1 x 3 x 480 x 640` | `f529061cd7158d11fb1f4e8219fb3a9f0160f62462b636987a65e67765f9ec9a` |
+| `yolo26n_detect_raw` | `Yolo26Detect.onnx` | `1 x 3 x 640 x 640` | `0f1056d9967faeb222934b8115e8bae8f1e42bab96c66c228a079e13d73afc55` |
+| `yolov5_detect` | `YoloV5Detect.onnx` | `1 x 3 x 640 x 640` | `b7c5e937a4d281d8f1fd374f0fe6042a49a6c2e30f75cfd7f043d34002927fc9` |
+| `rtdetr_l_detect` | `DetrDetect.onnx` | `1 x 3 x 640 x 640` | `9bf0a63f627d21140bacbfc88afdaa4af96db0da3ff77009b00b802a3ebb9dc1` |
+| `yolo26n_e2e_detect` | `E2EDetect.onnx` | `1 x 3 x 640 x 640` | `e09d9572b38edb79ccdf70117442075033d7bfae23e5ab90edceadf4e32f6f67` |
+| `yolov8n_detect` | `GeneralDetect.onnx` | `1 x 3 x 480 x 640` | `fa2c856b0effedce4f49fffd121f438247a64c8f633bf0e6d5e5960e869ccc5a` |
+| `yolo26n_e2e_obb` | `E2ERotated.onnx` | `1 x 3 x 640 x 640` | `1d733fb9a4d6231dae2613a9b1a0506f082f9b2d826e5cbcfa79cf642e4783ff` |
+| `yolov8n_obb_raw` | `YoloV8Rotated.onnx` | `1 x 3 x 480 x 640` | `8a43341fb4202a8be6bd1b1366abe92837254abe622b9ee5faabbd8a88ec0a28` |
+| `yolo26n_obb_raw` | `Yolo26Rotated.onnx` | `1 x 3 x 640 x 640` | `374b9c7032b497d48a322225d8d0d7c390d2783799166aeacaee20476685a559` |
+| `yolov5_rotated` | `YoloV5Rotated.onnx` | `1 x 3 x 1280 x 1280` | `95ab2a61648fc11172ce4f3e125a7335861c049ec1274947316c20acd0ccbe10` |
+| `yolov8n_obb` | `GeneralRotated.onnx` | `1 x 3 x 480 x 640` | `d87f86b2e475deccfd57410fdcb6d2de3886fcab4f6395888ddca4c35a2c12ee` |
+| `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 480 x 640` | `29e1963b77c3d1e38d3c8772ecbce294e48aa3287c3f703c39bc4e8d0b1a0f1c` |
+| `yolov8n_classify_embedding` | `Embedding.onnx` | `1 x 3 x 480 x 640` | `29e1963b77c3d1e38d3c8772ecbce294e48aa3287c3f703c39bc4e8d0b1a0f1c` |
+| `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 480 x 640` | `6fc546ff26e38b25e29c047fcacd71d3607705c0b5a590f0bd97492aed459f94` |
+| `yolov8n_face` | `YoloV8Keypoint.onnx` | `1 x 3 x 640 x 640` | `83d161574f3e4512b231f16e055e432830dd8c52815f1bd65799aef66b932d68` |
+| `yolo26n_pose_raw` | `Yolo26Keypoint.onnx` | `1 x 3 x 640 x 640` | `306840fe064ddc2f5f856949ead54b1d5d8f5e6eb214f8962267e853903ac020` |
+| `yolo26n_e2e_pose` | `E2EKeypoint.onnx` | `1 x 3 x 640 x 640` | `6ec8ed21fd5f272fe306034355c6f20dcd1121dd89f22d55091bfe750d52d4cd` |
+| `rtmo_s_pose` | `RtmoKeypoint.onnx` | `1 x 3 x 640 x 640` | `d7a8a929435f57b0be7d01741c94d19a615872051110441d0a4bffe6b59bd229` |
 | `rtmpose_m_pose` | `GeneralKeypoint.onnx` | `1 x 3 x 256 x 192` | `81e1025f9c938450d2ef88c0fba274fb57b0f9b49711dc7a52fef99c7ea3548d` |
 | `yolov8n_segment` | `GeneralYoloSegment.onnx` | `1 x 3 x 480 x 640` | `9373c971598d799b54e6911e5a665b99653eb0be611471c28ae9dc3676a6a995` |
-| `yolov8n_segment_raw` | `YoloV8Segment.onnx` | `1 x 3 x 640 x 640` | `a21888dd7bc2e6d478ceb438a2ec520c60e5aa03ab898b1bc65fb3598d2afd83` |
-| `yolo26n_segment_raw` | `Yolo26Segment.onnx` | `1 x 3 x 640 x 640` | `85e5ec69cb0a06f82e6a27b4cdb6be36d91e041b3829d75887183f6506b18221` |
-| `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `78cb9fff568e1a006523a54ae96c1f43ea6b376e93dd637e10eede16128335f4` |
-| `lraspp_voc_segment` | `SemanticSegment.onnx` | `1 x 3 x 512 x 512` | `e610481d6dfedf62285bf7de02c1a67a786dc3abb342a5e5db108b67c89daf6b` |
+| `yolov8n_segment_raw` | `YoloV8Segment.onnx` | `1 x 3 x 480 x 640` | `63931b2aa9235aac902377ad4fff6fbe5ade0ce9e121bd4b4b660a1945a3949f` |
+| `yolo26n_segment_raw` | `Yolo26Segment.onnx` | `1 x 3 x 640 x 640` | `90bc20790a0a9e41daff059520bdc5999caacefc562b969e6255dccf206cf908` |
+| `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `de3040482eea191d3bcbd1106db7c5b15e53635d8836913a21c895f66557af6d` |
+| `lraspp_voc_segment` | `SemanticSegment.onnx` | `1 x 3 x 512 x 512` | `dedd7d1af0abb9fd2d7c2a465ed0ab9b0418d516c09d61b11264ec543c696478` |
 
 Additional OCR fixtures use official PaddlePaddle ONNX weights. The `ppocrv6_tiny_det`,
 `ppocrv6_tiny_rec` and `ppocrv6_small_rec` template algos run through `OcrModel`.
 
 | ONNX file in `assets/test/onnx/` | Input NCHW | Output | SHA256 |
 | --- | --- | --- | --- |
-| `PP-OCRv6_tiny_det.onnx` | `1 x 3 x 640 x 640` | `1 x 1 x 640 x 640` | `7373329bed2ea0b66c173278112a6dab68a5f9f244723a302e4b1a674f9435c9` |
-| `PP-OCRv6_tiny_rec.onnx` | `1 x 3 x 48 x 320` | `1 x 40 x 6906` | `71b480e58fa36017c5e542b1157f659cc58da1233d64c716b7a26240ed2c1f31` |
-| `PP-OCRv6_small_rec.onnx` | `1 x 3 x 48 x 320` | `1 x 40 x 18710` | `e01ba7ec62993bd6328fd737bc7bf39873d3c8d6f146b6752a0b651bc9929920` |
+| `OcrDetection.onnx` | `1 x 3 x 640 x 640` | `1 x 1 x 640 x 640` | `7373329bed2ea0b66c173278112a6dab68a5f9f244723a302e4b1a674f9435c9` |
+| `OcrRecognition.onnx` | `1 x 3 x 48 x 320` | `1 x 40 x 6906` | `c72a128c71b2634ad5a105aff1de5894cdc9ecea5a592a06638f0f8b42764cd9` |
+| `OcrRecognitionSmall.onnx` | `1 x 3 x 48 x 320` | `1 x 40 x 18710` | `84a812d8fcec20e9d871043bcb44302f3b6174d60d3014c8ed09ccaa89ea9d4a` |
 
 Sources: [tiny detection](https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_det_onnx),
 [tiny recognition](https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_rec_onnx),
@@ -429,9 +437,34 @@ sub-pixel crops. PaddleOCR widens recognition input beyond 320 for long lines; t
 fixes that line but loses spaces on short lines, so 320 is kept. At PaddleOCR's default
 detection resolution (native size, multiple of 32), 24 of 33 lines match with tiny.
 
-Sources and export steps for the existing image tasks:
+Sources and export steps for the current collection:
 
-- The current binding fixtures use official [YOLOv8 weights](https://github.com/ultralytics/assets/releases/tag/v8.3.0)
+- Decoded YOLOv8 models reuse the existing local exports (480 x 640). Raw `YoloV8Detect`,
+  `YoloV8Rotated` and `YoloV8Segment` expose their pre-decoding convolution tensors,
+  concatenate channels in the decoder's order and prune unused graph nodes. They keep
+  the same 480 x 640 input. `DetrDetect` exposes RT-DETR's normalized query boxes and
+  sigmoid class scores as `[1, 300, 84]`, before the source graph's end-to-end TopK.
+- Official [YOLO26 nano weights](https://github.com/ultralytics/assets/releases/tag/v8.4.0)
+  are exported with Ultralytics 8.4.183 and PyTorch 2.14.1, CPU, FP32, opset 17,
+  batch 1, 640 x 640, `dynamic=False`, `simplify=False`, `nms=False`.
+  End-to-end exports retain 300 rows. Raw exports expose the one-to-many branch,
+  with box distances, class logits and task-specific channels; rotated heads place
+  the angle logit before class logits, and segmentation includes mask prototypes.
+- `YoloV5Detect` exposes the three official YOLOv5n v7.0 raw convolution heads,
+  promoting FP16 tensors to FP32. `YoloV8Keypoint` uses the clibdev face export below.
+- RTMO and RTMPose use the official OpenMMLab SDK downloads linked below.
+  RTMO replaces selection after NMS with the 300 highest-scoring candidates before
+  NMS, keeping the original box/keypoint decoding. HybridRT performs NMS on the host.
+  RTMPose fixes batch 1 and its 256 x 192 input; both outputs have 17 keypoints.
+- `SemanticSegment` uses torchvision 0.29.1 LR-ASPP MobileNetV3 official pretrained
+  COCO-with-VOC-labels weights, exported FP32 at 512 x 512, opset 17.
+- Local `prepare_cases.py`, `prepare_other_cases.py` and `validate_cases.py` under
+  `assets/test/scripts/` reproduce graph preparation and static-interface validation.
+
+Historical exports and accuracy comparisons (their versions and hashes differ from
+the current collection unless explicitly matched above):
+
+- The previous binding fixtures used official [YOLOv8 weights](https://github.com/ultralytics/assets/releases/tag/v8.3.0)
   (`yolov8n.pt`, `yolov8n-pose.pt`, `yolov8n-obb.pt`, `yolov8n-cls.pt`) and
   [YOLO26 weights](https://github.com/ultralytics/assets/releases/tag/v8.4.0) (`yolo26n-seg.pt`).
   Local `assets/test/scripts/export_binding_models.py` exports with Ultralytics 8.4.182,
