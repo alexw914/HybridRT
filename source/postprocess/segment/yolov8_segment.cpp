@@ -81,8 +81,8 @@ protected:
       coefficients_[cls].clear();
     }
     for (std::size_t k = 0; k < outputs_.heads.size(); ++k) {
-      const auto ok = visit_head(*outputs[outputs_.heads[k]], layout_,
-                                 [&](const auto& grid) -> void { decode_head(grid, param_.strides[k]); });
+      const auto ok = HeadGrid<>::visit(*outputs[outputs_.heads[k]], layout_,
+                                        [&](const auto& grid) -> void { decode_head(grid, param_.strides[k]); });
       if (!ok)
         return false;
     }
@@ -108,7 +108,7 @@ private:
     const auto bins = param_.reg_max;
     const auto first_mask = bins * 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
-    for (const auto cell : scan_cells(grid, bins * 4, param_.class_num, min_score, scan_)) {
+    for (const auto cell : scan_.scan(grid, bins * 4, param_.class_num, min_score)) {
       const std::int64_t y = cell / grid.cols();
       const std::int64_t x = cell % grid.cols();
       for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
@@ -131,7 +131,7 @@ private:
 
   YoloV8SegmentParam param_;
   RawSegmentOutputs outputs_;
-  CellScan scan_;
+  CellScanner scan_;
   Vector<float> logit_threshold_;
   float mask_logit_ = 0.0F;
   engine::DataLayout layout_ = engine::DataLayout::Nchw;

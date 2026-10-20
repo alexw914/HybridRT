@@ -14,6 +14,7 @@
 #include <kitzoo/core/macro.hpp>
 #include <kitzoo/json/reader.hpp>
 
+#include <optional>
 #include <string_view>
 
 namespace hrt::engine {
@@ -75,6 +76,10 @@ public:
   KZ_NODISCARD auto input_protos() const -> const Vector<core::BufferProto>& { return input_protos_; }
 
   KZ_NODISCARD auto output_protos() const -> const Vector<core::BufferProto>& { return output_protos_; }
+
+  // Width x height of the single 4-D batch-1 input under proto().input_layout;
+  // nullopt, logged, for any other inputs.
+  KZ_NODISCARD auto input_size() const -> std::optional<core::Size>;
 
   KZ_NODISCARD auto inputs() const -> const core::Buffers& { return inputs_; }
 

@@ -30,7 +30,7 @@ public:
 
   auto init(const kitzoo::json::Json& /*config*/, const engine::Engine& engine) -> bool override {
     const auto& outputs = engine.output_protos();
-    if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 1 || !engine_input_size(engine) ||
+    if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 1 || !engine.input_size() ||
         (outputs[0].shape.size() != 3 && outputs[0].shape.size() != 4) || outputs[0].shape[0] != 1) {
       KZ_LOG_ERROR("semantic_segment: needs one image input and one [1, C, H, W] or [1, H, W] output");
       return false;

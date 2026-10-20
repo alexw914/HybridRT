@@ -45,7 +45,7 @@ public:
 protected:
   auto decode(RotatedResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    if (!visit_head(*outputs[0], std::nullopt, [&](const auto& rows) -> void { decode_rows(result, rows); }))
+    if (!HeadGrid<>::visit(*outputs[0], std::nullopt, [&](const auto& rows) -> void { decode_rows(result, rows); }))
       return false;
     return finish_rotated(result, param_.iou_threshold, transform);
   }
@@ -56,9 +56,7 @@ private:
     const auto at = [&](std::size_t row, std::uint32_t i) -> float { return rows.at(0, i, row); };
     const auto angle_row = param_.class_num + 4;
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
-      candidates_.clear();
-      cells_above(rows, 4 + cls, param_.confidence_threshold[cls], candidates_);
-      for (const auto i : candidates_) {
+      for (const auto i : scan_.above(rows, 4 + cls, param_.confidence_threshold[cls])) {
         const core::RotatedRect rect{
             {at(0, i), at(1, i)}, {at(2, i), at(3, i)}, at(angle_row, i) * 180.0F / std::numbers::pi_v<float>};
         // Also skips NaN boxes.
@@ -70,7 +68,7 @@ private:
   }
 
   GeneralDetectParam param_;
-  Vector<std::uint32_t> candidates_;
+  CellScanner scan_;
 };
 
 } // namespace

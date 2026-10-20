@@ -42,7 +42,7 @@ public:
       return false;
     const auto& outputs = engine.output_protos();
     KZ_CHECK_RETURN(engine.proto().output_layout == engine::DataLayout::Nchw && outputs.size() == 2 &&
-                        engine_input_size(engine),
+                        engine.input_size(),
                     false, "e2e_segment: needs one image input and two NCHW outputs");
     detections_ = outputs[0].shape.size() == 3 ? 0 : 1;
     prototypes_ = 1 - detections_;

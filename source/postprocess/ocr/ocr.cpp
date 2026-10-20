@@ -91,8 +91,7 @@ public:
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     detection_ = config["stage"] == "detection";
     const auto& outputs = engine.output_protos();
-    KZ_CHECK_RETURN(engine_input_size(engine) && outputs.size() == 1, false,
-                    "Ocr: expected one image input and one output");
+    KZ_CHECK_RETURN(engine.input_size() && outputs.size() == 1, false, "Ocr: expected one image input and one output");
     shape_ = outputs[0].shape;
     if (detection_) {
       det_ = config.get<DetectionParam>();

@@ -60,8 +60,8 @@ public:
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    return visit_head(*outputs[0], std::nullopt,
-                      [&](const auto& rows) -> void { decode_rows(result, rows, transform); });
+    return HeadGrid<>::visit(*outputs[0], std::nullopt,
+                             [&](const auto& rows) -> void { decode_rows(result, rows, transform); });
   }
 
 private:
@@ -79,9 +79,7 @@ private:
       rects_[cls].clear();
       scores_[cls].clear();
       anchors_[cls].clear();
-      candidates_.clear();
-      cells_above(rows, 4 + cls, param_.confidence_threshold[cls], candidates_);
-      for (const auto i : candidates_) {
+      for (const auto i : scan_.above(rows, 4 + cls, param_.confidence_threshold[cls])) {
         const auto [l, t, r, b] = center_box(at(0, i), at(1, i), at(2, i), at(3, i));
         // Also skips NaN boxes.
         if (!(r - l > 0.0F && b - t > 0.0F))
@@ -116,7 +114,7 @@ private:
 
   GeneralYoloPoseParam param_;
   std::size_t dims_ = 3;
-  Vector<std::uint32_t> candidates_;
+  CellScanner scan_;
   Vector<Vector<core::Rect2f>> rects_;
   Vector<Vector<float>> scores_;
   Vector<Vector<std::uint32_t>> anchors_;

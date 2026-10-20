@@ -56,34 +56,20 @@ auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* 
   return true;
 }
 
-auto engine_input_size(const engine::Engine& engine) -> std::optional<core::Size> {
-  const auto& inputs = engine.input_protos();
-  if (inputs.size() != 1 || inputs[0].shape.size() != 4 || inputs[0].shape[0] != 1) {
-    KZ_LOG_ERROR("postprocess: expected one 4-D batch-1 input");
-    return std::nullopt;
-  }
-  const auto& shape = inputs[0].shape;
-  if (engine.proto().input_layout == engine::DataLayout::Nchw)
-    return core::Size{static_cast<int>(shape[3]), static_cast<int>(shape[2])};
-  return core::Size{static_cast<int>(shape[2]), static_cast<int>(shape[1])};
-}
-
-auto head_shape(const core::BufferProto& proto, engine::DataLayout layout) -> std::optional<HeadShape> {
+auto HeadShape::of(const core::BufferProto& proto, engine::DataLayout layout) -> std::optional<HeadShape> {
   const auto& shape = proto.shape;
   if (shape.size() != 4)
     return std::nullopt;
   if (layout == engine::DataLayout::Nchw)
-    return HeadShape{shape[1], shape[2], shape[3]};
-  return HeadShape{shape[3], shape[1], shape[2]};
+    return HeadShape{shape[0], shape[1], shape[2], shape[3]};
+  return HeadShape{shape[0], shape[3], shape[1], shape[2]};
 }
 
-auto head_stride(core::Size input, const core::BufferProto& proto, engine::DataLayout layout) -> std::optional<float> {
-  const auto head = head_shape(proto, layout);
-  if (!head || proto.shape[0] != 1 || input.width <= 0 || input.height <= 0 || head->rows <= 0 || head->cols <= 0 ||
-      head->channels <= 0)
+auto HeadShape::stride(core::Size input) const -> std::optional<float> {
+  if (batch != 1 || input.width <= 0 || input.height <= 0 || rows <= 0 || cols <= 0 || channels <= 0)
     return std::nullopt;
-  const auto x = static_cast<double>(input.width) / static_cast<double>(head->cols);
-  const auto y = static_cast<double>(input.height) / static_cast<double>(head->rows);
+  const auto x = static_cast<double>(input.width) / static_cast<double>(cols);
+  const auto y = static_cast<double>(input.height) / static_cast<double>(rows);
   if (x != y)
     return std::nullopt;
   return static_cast<float>(x);

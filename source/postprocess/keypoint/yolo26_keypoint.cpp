@@ -45,7 +45,7 @@ public:
     KZ_CHECK_RETURN(!config.contains("keypoint_num") || param_.keypoint_num > 0, false,
                     "yolo26_keypoint: keypoint_num must be positive");
     const auto& outputs = engine.output_protos();
-    const auto head = outputs.empty() ? std::nullopt : head_shape(outputs[0], engine.proto().output_layout);
+    const auto head = outputs.empty() ? std::nullopt : HeadShape::of(outputs[0], engine.proto().output_layout);
     KZ_CHECK_RETURN(head.has_value(), false, "yolo26_keypoint: needs one [1, channels, h, w] output per stride");
     const auto extra = head->channels - static_cast<std::int64_t>(4 + param_.class_num);
     const auto shape = keypoint_shape(extra, param_.keypoint_num);
@@ -76,8 +76,8 @@ protected:
       per_class.clear();
     candidates_.resize(param_.class_num);
     for (std::size_t head = 0; head < outputs.size(); ++head) {
-      const auto ok = visit_head(*outputs[head], layout_,
-                                 [&](const auto& grid) -> void { decode_head(grid, param_.strides[head]); });
+      const auto ok = HeadGrid<>::visit(*outputs[head], layout_,
+                                        [&](const auto& grid) -> void { decode_head(grid, param_.strides[head]); });
       if (!ok)
         return false;
     }
@@ -107,7 +107,7 @@ private:
   auto decode_head(const Grid& grid, float stride) -> void {
     const auto first_keypoint = 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
-    for (const auto cell : scan_cells(grid, 4, param_.class_num, min_score, scan_)) {
+    for (const auto cell : scan_.scan(grid, 4, param_.class_num, min_score)) {
       const std::int64_t y = cell / grid.cols();
       const std::int64_t x = cell % grid.cols();
       for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
@@ -136,7 +136,7 @@ private:
   }
 
   Yolo26KeypointParam param_;
-  CellScan scan_;
+  CellScanner scan_;
   std::size_t dims_ = 3;
   Vector<float> logit_threshold_;
   engine::DataLayout layout_ = engine::DataLayout::Nchw;

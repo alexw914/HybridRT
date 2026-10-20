@@ -66,7 +66,7 @@ auto check_yolov5(YoloV5Param& param, const engine::Engine& engine, std::size_t 
   if (param.class_num == 0 || !expand_per_class(param.confidence_threshold, param.class_num, "confidence_threshold") ||
       !expand_per_class(param.iou_threshold, param.class_num, "iou_threshold"))
     return false;
-  const auto input = engine_input_size(engine);
+  const auto input = engine.input_size();
   const auto& outputs = engine.output_protos();
   if (!input || outputs.empty() || outputs.size() != param.anchors.size()) {
     KZ_LOG_ERROR("yolov5: needs nonempty outputs and one anchor list per head, got {} outputs", outputs.size());
@@ -74,9 +74,9 @@ auto check_yolov5(YoloV5Param& param, const engine::Engine& engine, std::size_t 
   }
   Vector<float> inferred;
   for (std::size_t i = 0; i < outputs.size(); ++i) {
-    const auto head = head_shape(outputs[i], engine.proto().output_layout);
+    const auto head = HeadShape::of(outputs[i], engine.proto().output_layout);
     const auto anchors = param.anchors[i].size() / 2;
-    const auto stride = head_stride(*input, outputs[i], engine.proto().output_layout);
+    const auto stride = head ? head->stride(*input) : std::nullopt;
     if (!head || !stride || anchors == 0 || param.anchors[i].size() % 2 != 0 ||
         static_cast<std::size_t>(head->channels) != (param.class_num + 5 + extra_channels) * anchors) {
       KZ_LOG_ERROR("yolov5: output {} does not match the anchors, strides or class_num", i);
@@ -91,13 +91,13 @@ auto check_yolov8(YoloV8Param& param, const engine::Engine& engine, std::size_t 
   if (param.class_num == 0 || !expand_per_class(param.confidence_threshold, param.class_num, "confidence_threshold") ||
       !expand_per_class(param.iou_threshold, param.class_num, "iou_threshold"))
     return false;
-  const auto input = engine_input_size(engine);
+  const auto input = engine.input_size();
   const auto& outputs = engine.output_protos();
   if (!input || outputs.empty()) {
     KZ_LOG_ERROR("yolov8: needs a valid input and nonempty outputs, got {} outputs", outputs.size());
     return false;
   }
-  const auto first = head_shape(outputs.front(), engine.proto().output_layout);
+  const auto first = HeadShape::of(outputs.front(), engine.proto().output_layout);
   const auto channels =
       first ? first->channels - static_cast<std::int64_t>(param.class_num) - static_cast<std::int64_t>(extra_channels)
             : 0;
@@ -108,8 +108,8 @@ auto check_yolov8(YoloV8Param& param, const engine::Engine& engine, std::size_t 
   param.reg_max = inferred_bins;
   Vector<float> inferred;
   for (std::size_t i = 0; i < outputs.size(); ++i) {
-    const auto head = head_shape(outputs[i], engine.proto().output_layout);
-    const auto stride = head_stride(*input, outputs[i], engine.proto().output_layout);
+    const auto head = HeadShape::of(outputs[i], engine.proto().output_layout);
+    const auto stride = head ? head->stride(*input) : std::nullopt;
     if (!head || !stride ||
         static_cast<std::size_t>(head->channels) != param.reg_max * 4 + param.class_num + extra_channels) {
       KZ_LOG_ERROR("yolov8: output {} does not match the strides, reg_max or class_num", i);

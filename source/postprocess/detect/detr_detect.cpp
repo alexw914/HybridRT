@@ -32,7 +32,7 @@ public:
         static_cast<std::int64_t>(param_.background_class) > static_cast<std::int64_t>(param_.class_num) ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
       return false;
-    const auto input = engine_input_size(engine);
+    const auto input = engine.input_size();
     if (!input || input->width <= 0 || input->height <= 0)
       return false;
     input_size_ = *input;

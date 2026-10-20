@@ -43,18 +43,19 @@ inline auto dequantize(std::int8_t value, float scale, std::int32_t zero_point) 
 
 auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* name) -> bool;
 
-auto engine_input_size(const engine::Engine& engine) -> std::optional<core::Size>;
-
+// Batch, channels and grid of one 4-D head output.
 struct HeadShape {
+  std::int64_t batch = 0;
   std::int64_t channels = 0;
   std::int64_t rows = 0;
   std::int64_t cols = 0;
+
+  // Nullopt unless `proto` is 4-D.
+  static auto of(const core::BufferProto& proto, engine::DataLayout layout) -> std::optional<HeadShape>;
+
+  // Uniform input-to-head scale of a positive batch-1 grid.
+  KZ_NODISCARD auto stride(core::Size input) const -> std::optional<float>;
 };
-
-auto head_shape(const core::BufferProto& proto, engine::DataLayout layout) -> std::optional<HeadShape>;
-
-// Returns the uniform input-to-head scale for a positive batch-1 grid.
-auto head_stride(core::Size input, const core::BufferProto& proto, engine::DataLayout layout) -> std::optional<float>;
 
 // Validates an optional configured list and stores the inferred strides.
 auto resolve_strides(Vector<float>& strides, const Vector<float>& inferred) -> bool;
@@ -73,9 +74,27 @@ auto keypoint_shape(std::int64_t channels, unsigned int count, std::optional<std
 // Element access into one detection head output, NCHW or NHWC, float32 or
 // quantized int8, honoring buffer strides. Without a layout, a decoded
 // [1, rows, N] output is one grid row of N cells whose channels are its rows.
-template <typename T>
+template <typename T = float>
 class HeadGrid {
 public:
+  // Calls `decode(grid)` with a HeadGrid of the buffer's element type; false
+  // for types other than float32 and int8. Call as HeadGrid<>::visit().
+  template <typename Fn>
+  static auto visit(const core::Buffer& buffer, std::optional<engine::DataLayout> layout, Fn&& decode) -> bool {
+    switch (buffer.data_type()) {
+    case core::DataType::Float32: {
+      HeadGrid<float> grid(buffer, layout);
+      return grid.valid() && (decode(grid), true);
+    }
+    case core::DataType::Int8: {
+      HeadGrid<std::int8_t> grid(buffer, layout);
+      return grid.valid() && (decode(grid), true);
+    }
+    default:
+      return false;
+    }
+  }
+
   HeadGrid(const core::Buffer& buffer, std::optional<engine::DataLayout> layout)
       : data_(static_cast<const T*>(buffer.memory()->cpu())), scale_(buffer.scale), zero_point_(buffer.zero_point) {
     const auto& shape = buffer.shape();
@@ -155,92 +174,79 @@ private:
   std::size_t channel_step_ = 0;
 };
 
-// Reusable buffers of scan_cells().
-struct CellScan {
-  Vector<float> float_best;
-  Vector<std::int8_t> int8_best;
-  Vector<std::int32_t> cells;
+// Cells of a head whose scores pass a threshold, collected into buffers
+// reused across calls. Each call overwrites the previous result.
+class CellScanner {
+public:
+  // Cells (y * cols + x) whose largest raw score over channels [first, first +
+  // count) is at least `bound`, in row-major order. With NCHW heads the class
+  // planes are read one after another into a running maximum, a sequential
+  // pass the compiler vectorizes, instead of striding every plane for every
+  // cell; int8 scores are compared without dequantizing.
+  template <typename T, typename Bound>
+  auto scan(const HeadGrid<T>& grid, std::size_t first, std::size_t count, Bound bound)
+      -> const Vector<std::uint32_t>& {
+    const auto rows = grid.rows();
+    const auto cols = grid.cols();
+    auto& best = this->best<T>();
+    best.assign(static_cast<std::size_t>(rows * cols), std::numeric_limits<T>::lowest());
+    if (grid.col_step() == 1) {
+      for (std::size_t c = first; c < first + count; ++c) {
+        for (std::int64_t y = 0; y < rows; ++y) {
+          const auto* in = grid.row(y, c);
+          auto* out = best.data() + y * cols;
+          for (std::int64_t x = 0; x < cols; ++x)
+            out[x] = std::max(out[x], in[x]);
+        }
+      }
+    } else {
+      for (std::int64_t y = 0; y < rows; ++y) {
+        for (std::int64_t x = 0; x < cols; ++x) {
+          auto value = std::numeric_limits<T>::lowest();
+          for (std::size_t c = first; c < first + count; ++c)
+            value = std::max(value, grid.raw(y, x, c));
+          best[static_cast<std::size_t>(y * cols + x)] = value;
+        }
+      }
+    }
+    cells_.clear();
+    for (std::size_t i = 0; i < best.size(); ++i) {
+      if (best[i] >= bound)
+        cells_.push_back(static_cast<std::uint32_t>(i));
+    }
+    return cells_;
+  }
 
+  // Cells x of row 0, in order, whose `channel` value exceeds `threshold`.
+  // int8 values are compared as integers against the bound and dequantized
+  // only when they reach it.
+  template <typename T>
+  auto above(const HeadGrid<T>& grid, std::size_t channel, float threshold) -> const Vector<std::uint32_t>& {
+    const auto* values = grid.row(0, channel);
+    const auto step = grid.col_step();
+    const auto bound = grid.raw_bound(threshold);
+    cells_.clear();
+    for (std::int64_t x = 0; x < grid.cols(); ++x) {
+      const auto value = values[static_cast<std::size_t>(x) * step];
+      if (value >= bound && grid.at(0, x, channel) > threshold)
+        cells_.push_back(static_cast<std::uint32_t>(x));
+    }
+    return cells_;
+  }
+
+private:
   template <typename T>
   auto best() -> Vector<T>& {
     if constexpr (std::is_same_v<T, float>)
-      return float_best;
+      return float_best_;
     else
-      return int8_best;
+      return int8_best_;
   }
+
+  Vector<float> float_best_;
+  Vector<std::int8_t> int8_best_;
+  Vector<std::uint32_t> cells_;
 };
-
-// Cells (y * cols + x) whose largest raw score over channels [first, first +
-// count) is at least `bound`, in row-major order. With NCHW heads the class
-// planes are read one after another into a running maximum, a sequential
-// pass the compiler vectorizes, instead of striding every plane for every
-// cell; int8 scores are compared without dequantizing.
-template <typename T, typename Bound>
-auto scan_cells(const HeadGrid<T>& grid, std::size_t first, std::size_t count, Bound bound, CellScan& scan)
-    -> const Vector<std::int32_t>& {
-  const auto rows = grid.rows();
-  const auto cols = grid.cols();
-  auto& best = scan.best<T>();
-  best.assign(static_cast<std::size_t>(rows * cols), std::numeric_limits<T>::lowest());
-  if (grid.col_step() == 1) {
-    for (std::size_t c = first; c < first + count; ++c) {
-      for (std::int64_t y = 0; y < rows; ++y) {
-        const auto* in = grid.row(y, c);
-        auto* out = best.data() + y * cols;
-        for (std::int64_t x = 0; x < cols; ++x)
-          out[x] = std::max(out[x], in[x]);
-      }
-    }
-  } else {
-    for (std::int64_t y = 0; y < rows; ++y) {
-      for (std::int64_t x = 0; x < cols; ++x) {
-        auto value = std::numeric_limits<T>::lowest();
-        for (std::size_t c = first; c < first + count; ++c)
-          value = std::max(value, grid.raw(y, x, c));
-        best[static_cast<std::size_t>(y * cols + x)] = value;
-      }
-    }
-  }
-  scan.cells.clear();
-  for (std::size_t i = 0; i < best.size(); ++i) {
-    if (best[i] >= bound)
-      scan.cells.push_back(static_cast<std::int32_t>(i));
-  }
-  return scan.cells;
-}
-
-// Appends, in order, the cells x of row 0 whose `channel` value exceeds
-// `threshold`. int8 values are compared as integers against the bound and
-// dequantized only when they reach it.
-template <typename T>
-auto cells_above(const HeadGrid<T>& grid, std::size_t channel, float threshold, Vector<std::uint32_t>& out) -> void {
-  const auto* values = grid.row(0, channel);
-  const auto step = grid.col_step();
-  const auto bound = grid.raw_bound(threshold);
-  for (std::int64_t x = 0; x < grid.cols(); ++x) {
-    const auto value = values[static_cast<std::size_t>(x) * step];
-    if (value >= bound && grid.at(0, x, channel) > threshold)
-      out.push_back(static_cast<std::uint32_t>(x));
-  }
-}
-
-// Calls `decode(grid)` with a HeadGrid of the buffer's element type; false for
-// types other than float32 and int8.
-template <typename Fn>
-auto visit_head(const core::Buffer& buffer, std::optional<engine::DataLayout> layout, Fn&& decode) -> bool {
-  switch (buffer.data_type()) {
-  case core::DataType::Float32: {
-    HeadGrid<float> grid(buffer, layout);
-    return grid.valid() && (decode(grid), true);
-  }
-  case core::DataType::Int8: {
-    HeadGrid<std::int8_t> grid(buffer, layout);
-    return grid.valid() && (decode(grid), true);
-  }
-  default:
-    return false;
-  }
-}
 
 // Expected value of the softmax over `bins` consecutive channels starting at
 // `first` (YOLOv8 distribution focal loss decoding).

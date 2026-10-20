@@ -41,7 +41,7 @@ public:
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
       return false;
     const auto& outputs = engine.output_protos();
-    if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 2 || !engine_input_size(engine)) {
+    if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 2 || !engine.input_size()) {
       KZ_LOG_ERROR("general_yolo_segment: needs one image input and two NCHW outputs");
       return false;
     }
@@ -67,8 +67,8 @@ protected:
     const auto& proto_shape = outputs[prototypes_]->shape();
     const MaskDecoder::Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
                                              static_cast<int>(proto_shape[3])};
-    return visit_head(*outputs[detections_], std::nullopt,
-                      [&](const auto& det) -> void { decode_rows(result, det, transform, prototypes); });
+    return HeadGrid<>::visit(*outputs[detections_], std::nullopt,
+                             [&](const auto& det) -> void { decode_rows(result, det, transform, prototypes); });
   }
 
 private:
@@ -86,9 +86,7 @@ private:
       rects_[cls].clear();
       scores_[cls].clear();
       anchors_[cls].clear();
-      candidates_.clear();
-      cells_above(det, 4 + cls, param_.confidence_threshold[cls], candidates_);
-      for (const auto i : candidates_) {
+      for (const auto i : scan_.above(det, 4 + cls, param_.confidence_threshold[cls])) {
         const auto [l, t, r, b] = center_box(at(0, i), at(1, i), at(2, i), at(3, i));
         if (!(r - l > 0.0F && b - t > 0.0F))
           continue;
@@ -114,7 +112,7 @@ private:
   }
 
   GeneralYoloSegmentParam param_;
-  Vector<std::uint32_t> candidates_;
+  CellScanner scan_;
   Vector<Vector<core::Rect2f>> rects_;
   Vector<Vector<float>> scores_;
   Vector<Vector<std::uint32_t>> anchors_;

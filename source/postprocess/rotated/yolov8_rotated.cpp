@@ -41,8 +41,8 @@ protected:
     if (outputs.size() != param_.strides.size())
       return false;
     for (std::size_t head = 0; head < outputs.size(); ++head) {
-      const auto ok = visit_head(*outputs[head], layout_,
-                                 [&](const auto& grid) -> void { decode_head(result, grid, param_.strides[head]); });
+      const auto ok = HeadGrid<>::visit(
+          *outputs[head], layout_, [&](const auto& grid) -> void { decode_head(result, grid, param_.strides[head]); });
       if (!ok)
         return false;
     }
@@ -54,7 +54,7 @@ private:
   auto decode_head(RotatedResultMap& result, const Grid& grid, float stride) -> void {
     const auto bins = param_.reg_max;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
-    for (const auto cell : scan_cells(grid, bins * 4 + 1, param_.class_num, min_score, scan_)) {
+    for (const auto cell : scan_.scan(grid, bins * 4 + 1, param_.class_num, min_score)) {
       const std::int64_t y = cell / grid.cols();
       const std::int64_t x = cell % grid.cols();
       bool decoded = false;
@@ -88,7 +88,7 @@ private:
   }
 
   YoloV8Param param_;
-  CellScan scan_;
+  CellScanner scan_;
   Vector<float> logit_threshold_;
   engine::DataLayout layout_ = engine::DataLayout::Nchw;
 };

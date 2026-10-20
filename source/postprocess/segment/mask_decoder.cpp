@@ -105,13 +105,13 @@ auto raw_segment_outputs(const engine::Engine& engine, Vector<float>& strides, s
                          std::size_t classes, const char* name) -> std::optional<RawSegmentOutputs> {
   const auto& outputs = engine.output_protos();
   const auto layout = engine.proto().output_layout;
-  const auto input = engine_input_size(engine);
+  const auto input = engine.input_size();
   KZ_CHECK_RETURN(input && outputs.size() >= 2, std::nullopt, "{}: needs raw heads plus the prototypes", name);
   std::optional<RawSegmentOutputs> selected;
   Vector<float> inferred;
   std::size_t selected_channels = 0;
   for (std::size_t candidate = 0; candidate < outputs.size(); ++candidate) {
-    const auto proto = head_shape(outputs[candidate], layout);
+    const auto proto = HeadShape::of(outputs[candidate], layout);
     if (!proto || outputs[candidate].shape[0] != 1 || proto->channels <= 0 || proto->rows <= 0 || proto->cols <= 0)
       continue;
     RawSegmentOutputs found{{}, candidate, static_cast<std::size_t>(proto->channels)};
@@ -121,8 +121,8 @@ auto raw_segment_outputs(const engine::Engine& engine, Vector<float>& strides, s
     for (std::size_t i = 0; i < outputs.size() && fits; ++i) {
       if (i == candidate)
         continue;
-      const auto head = head_shape(outputs[i], layout);
-      const auto stride = head_stride(*input, outputs[i], layout);
+      const auto head = HeadShape::of(outputs[i], layout);
+      const auto stride = head ? head->stride(*input) : std::nullopt;
       const auto channels =
           head ? head->channels - static_cast<std::int64_t>(classes) - static_cast<std::int64_t>(found.masks) : 0;
       fits = head && stride && channels > 0 && channels % 4 == 0;

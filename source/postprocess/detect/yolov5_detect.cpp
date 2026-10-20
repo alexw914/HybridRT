@@ -38,8 +38,8 @@ protected:
     if (outputs.size() != param_.strides.size())
       return false;
     for (std::size_t head = 0; head < outputs.size(); ++head) {
-      const auto ok =
-          visit_head(*outputs[head], layout_, [&](const auto& grid) -> void { decode_head(result, grid, head); });
+      const auto ok = HeadGrid<>::visit(*outputs[head], layout_,
+                                        [&](const auto& grid) -> void { decode_head(result, grid, head); });
       if (!ok)
         return false;
     }

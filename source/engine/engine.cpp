@@ -139,6 +139,17 @@ auto Engine::release() -> void {
   proto_ = {};
 }
 
+auto Engine::input_size() const -> std::optional<core::Size> {
+  if (input_protos_.size() != 1 || input_protos_[0].shape.size() != 4 || input_protos_[0].shape[0] != 1) {
+    KZ_LOG_ERROR("Engine: expected one 4-D batch-1 input");
+    return std::nullopt;
+  }
+  const auto& shape = input_protos_[0].shape;
+  if (proto_.input_layout == DataLayout::Nchw)
+    return core::Size{static_cast<int>(shape[3]), static_cast<int>(shape[2])};
+  return core::Size{static_cast<int>(shape[2]), static_cast<int>(shape[1])};
+}
+
 auto Engine::create_host_memory() const -> SharedPtr<core::Memory> {
   return nullptr;
 }
