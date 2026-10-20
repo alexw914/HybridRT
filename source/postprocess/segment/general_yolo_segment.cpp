@@ -61,14 +61,21 @@ public:
 protected:
   auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const RowView det(*outputs[detections_], scratch_[0]);
-    const auto* proto = float_data(*outputs[prototypes_], scratch_[1]);
-    if (!det.valid() || proto == nullptr)
+    const auto* proto = float_data(*outputs[prototypes_], scratch_);
+    if (proto == nullptr)
       return false;
     const auto& proto_shape = outputs[prototypes_]->shape();
     const MaskDecoder::Prototypes prototypes{proto, static_cast<int>(proto_shape[1]), static_cast<int>(proto_shape[2]),
                                              static_cast<int>(proto_shape[3])};
+    return visit_head(*outputs[detections_], std::nullopt,
+                      [&](const auto& det) -> void { decode_rows(result, det, transform, prototypes); });
+  }
 
+private:
+  template <typename Grid>
+  auto decode_rows(SegmentResultMap& result, const Grid& det, const preprocess::ImageTransform& transform,
+                   const MaskDecoder::Prototypes& prototypes) -> void {
+    const auto at = [&](std::size_t row, std::uint32_t i) -> float { return det.at(0, i, row); };
     const auto classes = param_.class_num;
     rects_.resize(classes);
     scores_.resize(classes);
@@ -80,13 +87,13 @@ protected:
       scores_[cls].clear();
       anchors_[cls].clear();
       candidates_.clear();
-      det.above(4 + cls, param_.confidence_threshold[cls], candidates_);
+      cells_above(det, 4 + cls, param_.confidence_threshold[cls], candidates_);
       for (const auto i : candidates_) {
-        const auto [l, t, r, b] = center_box(det.at(0, i), det.at(1, i), det.at(2, i), det.at(3, i));
+        const auto [l, t, r, b] = center_box(at(0, i), at(1, i), at(2, i), at(3, i));
         if (!(r - l > 0.0F && b - t > 0.0F))
           continue;
         rects_[cls].push_back(core::Rect2f::from_points({l, t}, {r, b}));
-        scores_[cls].push_back(det.at(4 + cls, i));
+        scores_[cls].push_back(at(4 + cls, i));
         anchors_[cls].push_back(i);
       }
     }
@@ -101,16 +108,14 @@ protected:
         if (box.empty())
           continue;
         for (std::size_t j = 0; j < coefficients.size(); ++j)
-          coefficients[j] = det.at(4 + classes + j, anchors_[cls][k]);
+          coefficients[j] = at(4 + classes + j, anchors_[cls][k]);
         auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
         object.box = {box, scores_[cls][k], static_cast<std::int64_t>(cls), -1};
         object.mask = masks_.make(prototypes, coefficients, rects_[cls][k], box, transform, mask_logit_);
       }
     }
-    return true;
   }
 
-private:
   GeneralYoloSegmentParam param_;
   Vector<std::uint32_t> candidates_;
   Vector<Vector<core::Rect2f>> rects_;
@@ -119,8 +124,7 @@ private:
   std::size_t detections_ = 0;
   std::size_t prototypes_ = 1;
   float mask_logit_ = 0.0F;
-  Array<core::Buffer, 2> scratch_{core::Buffer(core::MemoryType::Cpu, core::DataType::Float32),
-                                  core::Buffer(core::MemoryType::Cpu, core::DataType::Float32)};
+  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
   MaskDecoder masks_;
 };
 

@@ -60,9 +60,14 @@ public:
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const RowView rows(*outputs[0], scratch_);
-    if (!rows.valid())
-      return false;
+    return visit_head(*outputs[0], std::nullopt,
+                      [&](const auto& rows) -> void { decode_rows(result, rows, transform); });
+  }
+
+private:
+  template <typename Grid>
+  auto decode_rows(KeypointResultMap& result, const Grid& rows, const preprocess::ImageTransform& transform) -> void {
+    const auto at = [&](std::size_t row, std::uint32_t i) -> float { return rows.at(0, i, row); };
     const auto classes = param_.class_num;
 
     // Candidates per class in network coordinates, one class row at a time
@@ -75,14 +80,14 @@ protected:
       scores_[cls].clear();
       anchors_[cls].clear();
       candidates_.clear();
-      rows.above(4 + cls, param_.confidence_threshold[cls], candidates_);
+      cells_above(rows, 4 + cls, param_.confidence_threshold[cls], candidates_);
       for (const auto i : candidates_) {
-        const auto [l, t, r, b] = center_box(rows.at(0, i), rows.at(1, i), rows.at(2, i), rows.at(3, i));
+        const auto [l, t, r, b] = center_box(at(0, i), at(1, i), at(2, i), at(3, i));
         // Also skips NaN boxes.
         if (!(r - l > 0.0F && b - t > 0.0F))
           continue;
         rects_[cls].push_back(core::Rect2f::from_points({l, t}, {r, b}));
-        scores_[cls].push_back(rows.at(4 + cls, i));
+        scores_[cls].push_back(at(4 + cls, i));
         anchors_[cls].push_back(i);
       }
     }
@@ -102,25 +107,22 @@ protected:
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
           const auto row = first_row + j * dims_;
-          const core::Point2f point{rows.at(row, anchor), rows.at(row + 1, anchor)};
-          const auto score = dims_ == 3 ? rows.at(row + 2, anchor) : 1.0F;
+          const core::Point2f point{at(row, anchor), at(row + 1, anchor)};
+          const auto score = dims_ == 3 ? at(row + 2, anchor) : 1.0F;
           object.keypoints.push_back(
               {to_source(point, transform),
                score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
         }
       }
     }
-    return true;
   }
 
-private:
   GeneralYoloPoseParam param_;
   std::size_t dims_ = 3;
   Vector<std::uint32_t> candidates_;
   Vector<Vector<core::Rect2f>> rects_;
   Vector<Vector<float>> scores_;
   Vector<Vector<std::uint32_t>> anchors_;
-  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
 };
 
 } // namespace

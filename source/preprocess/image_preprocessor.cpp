@@ -298,34 +298,57 @@ auto ImagePreprocessor::run(core::Image& dst, const core::Image& src, const Imag
   if (supports_fused(dst, src, param))
     return fused(dst, transform, src, param, stream);
 
+  const bool normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
+  if (normalize && dst.data_type() != core::DataType::Float32) {
+    KZ_LOG_ERROR("image_preprocessor: normalization needs a float32 input");
+    return false;
+  }
   auto* fallback = cpu();
-  auto supports_stages = [&]() -> bool {
-    const bool normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
-    if (normalize && !supports(ImageOperation::Normalize, dst, dst))
-      return false;
-    const core::Image* source = &src;
-    const auto resizable = supports(ImageOperation::Resize, src, src) ||
-                           (fallback != nullptr && fallback->supports(ImageOperation::Resize, src, src));
-    if (!resizable) {
-      source = scratch(converted_, memory_type(), dst.format(), src.data_type(), src.size());
-      if (source == nullptr || !supports(ImageOperation::Convert, *source, src))
-        return false;
-    }
-    core::Image* resized = &dst;
-    if (source->data_type() != dst.data_type() || !same_layout(dst.format(), source->format())) {
-      const auto format = same_layout(dst.format(), source->format()) ? dst.format() : source->format();
-      resized = scratch(resized_, memory_type(), format, source->data_type(), dst.size());
-      if (resized == nullptr)
-        return false;
-    }
-    return (transform.dst_roi == dst.rect() || supports(ImageOperation::Fill, *resized, *resized)) &&
-           supports(ImageOperation::Resize, *resized, *source) &&
-           (resized == &dst || supports(ImageOperation::Convert, dst, *resized));
+  // The device operator for a step when it has one, else the CPU operator.
+  auto pick = [&](ImageOperation op, const core::Image& to, const core::Image& from) -> ImagePreprocessor* {
+    if (supports(op, to, from))
+      return this;
+    if (fallback != nullptr && fallback->supports(op, to, from))
+      return fallback;
+    return nullptr;
   };
-  // Non-fused device operators may run together only when every required stage is supported.
-  // Otherwise keep the whole-call host fallback so CPU operators never address device memory.
+
+  // Formats resize cannot handle (YUV, RGBA) are converted first, at source
+  // size and in the source data type.
+  const core::Image* source = &src;
+  core::Image* converted = nullptr;
+  if (pick(ImageOperation::Resize, src, src) == nullptr) {
+    converted = scratch(converted_, memory_type(), dst.format(), src.data_type(), src.size());
+    if (converted == nullptr)
+      return false;
+    source = converted;
+  }
+  // Resize in the source data type, then convert, unless resize can produce
+  // the input format directly.
+  core::Image* resized = &dst;
+  if (source->data_type() != dst.data_type() || !same_layout(dst.format(), source->format())) {
+    const auto format = same_layout(dst.format(), source->format()) ? dst.format() : source->format();
+    resized = scratch(resized_, memory_type(), format, source->data_type(), dst.size());
+    if (resized == nullptr)
+      return false;
+  }
+  const bool pad = transform.dst_roi != dst.rect();
+  // Steps that are not needed count as run by this preprocessor.
+  const Array<ImageOperation, 5> ops{ImageOperation::Convert, ImageOperation::Fill, ImageOperation::Resize,
+                                     ImageOperation::Convert, ImageOperation::Normalize};
+  const Array<ImagePreprocessor*, 5> steps{
+      converted != nullptr ? pick(ImageOperation::Convert, *converted, src) : this,
+      pad ? pick(ImageOperation::Fill, *resized, *resized) : this,
+      pick(ImageOperation::Resize, *resized, *source),
+      resized != &dst ? pick(ImageOperation::Convert, dst, *resized) : this,
+      normalize ? pick(ImageOperation::Normalize, dst, dst) : this,
+  };
+
+  // CPU operators only address host memory: unless the device runs every step, a device-only
+  // buffer sends the whole call through the CPU, downloading the source and uploading the result.
+  const auto on_device = std::all_of(steps.begin(), steps.end(), [this](auto* step) -> bool { return step == this; });
   if (fallback != nullptr && type() != ImagePreprocessorType::Cpu &&
-      !(dst.memory()->have_cpu() && src.memory()->have_cpu()) && !supports_stages()) {
+      !(dst.memory()->have_cpu() && src.memory()->have_cpu()) && !on_device) {
     const core::Image* host_src = &src;
     if (!src.memory()->have_cpu()) {
       auto* staged = scratch(host_src_, core::MemoryType::Cpu, src.format(), src.data_type(), src.size());
@@ -347,72 +370,29 @@ auto ImagePreprocessor::run(core::Image& dst, const core::Image& src, const Imag
     return host_dst == &dst ||
            core::Buffer::copy(*dst.buffer(), *host_dst->buffer(), core::CopyPolicy::DirectCopy, stream);
   }
-
-  auto pick = [&](ImageOperation op, const core::Image& to, const core::Image& from) -> ImagePreprocessor* {
-    if (supports(op, to, from))
-      return this;
-    if (fallback != nullptr && fallback->supports(op, to, from))
-      return fallback;
-    KZ_LOG_ERROR("image_preprocessor: no operator for step {} ({} <- {})", static_cast<int>(op),
-                 kitzoo::json::Json(to.format()).dump(), kitzoo::json::Json(from.format()).dump());
-    return nullptr;
-  };
-
-  // Formats resize cannot handle (YUV, RGBA) are converted first, at source
-  // size and in the source data type.
-  const core::Image* source = &src;
-  const auto resizable = [&](const core::Image& image) -> bool {
-    return supports(ImageOperation::Resize, image, image) ||
-           (fallback != nullptr && fallback->supports(ImageOperation::Resize, image, image));
-  };
-  if (!resizable(src)) {
-    auto* converted = scratch(converted_, memory_type(), dst.format(), src.data_type(), src.size());
-    if (converted == nullptr)
+  for (std::size_t i = 0; i < steps.size(); ++i) {
+    if (steps[i] == nullptr) {
+      KZ_LOG_ERROR("image_preprocessor: no operator for step {} ({} <- {})", static_cast<int>(ops[i]),
+                   kitzoo::json::Json(dst.format()).dump(), kitzoo::json::Json(src.format()).dump());
       return false;
-    auto* op = pick(ImageOperation::Convert, *converted, src);
-    if (op == nullptr || !op->convert(*converted, src, stream))
-      return false;
-    source = converted;
+    }
   }
 
-  // Resize in the source data type, then convert, unless resize can produce
-  // the input format directly.
-  core::Image* resized = &dst;
-  if (source->data_type() != dst.data_type() || !same_layout(dst.format(), source->format())) {
-    const auto format = same_layout(dst.format(), source->format()) ? dst.format() : source->format();
-    resized = scratch(resized_, memory_type(), format, source->data_type(), dst.size());
-    if (resized == nullptr)
-      return false;
-  }
-  if (transform.dst_roi != dst.rect()) {
-    auto* op = pick(ImageOperation::Fill, *resized, *resized);
-    if (op == nullptr || !op->fill(*resized, resized->rect(), param.default_color, stream))
-      return false;
-  }
-  auto* op = pick(ImageOperation::Resize, *resized, *source);
-  if (op == nullptr ||
-      !op->resize(*resized, transform.dst_roi, *source, transform.src_roi, param.interpolation_mode, stream))
+  const auto& [to_convert, to_fill, to_resize, to_cast, to_normalize] = steps;
+  if (converted != nullptr && !to_convert->convert(*converted, src, stream))
     return false;
-  const bool normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
+  if (pad && !to_fill->fill(*resized, resized->rect(), param.default_color, stream))
+    return false;
+  if (!to_resize->resize(*resized, transform.dst_roi, *source, transform.src_roi, param.interpolation_mode, stream))
+    return false;
   const auto roi = param.normalize_type == NormalizeType::Roi ? transform.dst_roi : dst.rect();
   if (resized != &dst) {
-    op = pick(ImageOperation::Convert, dst, *resized);
-    if (op == nullptr)
-      return false;
-    if (normalize && dst.data_type() == core::DataType::Float32 && op->supports(ImageOperation::Normalize, dst, dst))
-      return op->convert_normalize(dst, *resized, roi, param.mean, param.std, stream);
-    if (!op->convert(dst, *resized, stream))
+    if (normalize && to_cast->supports(ImageOperation::Normalize, dst, dst))
+      return to_cast->convert_normalize(dst, *resized, roi, param.mean, param.std, stream);
+    if (!to_cast->convert(dst, *resized, stream))
       return false;
   }
-
-  if (!normalize)
-    return true;
-  if (dst.data_type() != core::DataType::Float32) {
-    KZ_LOG_ERROR("image_preprocessor: normalization needs a float32 input");
-    return false;
-  }
-  op = pick(ImageOperation::Normalize, dst, dst);
-  return op != nullptr && op->normalize(dst, roi, param.mean, param.std, stream);
+  return !normalize || to_normalize->normalize(dst, roi, param.mean, param.std, stream);
 }
 
 } // namespace hrt::preprocess

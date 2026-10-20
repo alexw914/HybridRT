@@ -45,30 +45,32 @@ public:
 protected:
   auto decode(RotatedResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const RowView rows(*outputs[0], scratch_);
-    if (!rows.valid())
+    if (!visit_head(*outputs[0], std::nullopt, [&](const auto& rows) -> void { decode_rows(result, rows); }))
       return false;
-    const auto angle_row = param_.class_num + 4;
-    for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
-      candidates_.clear();
-      rows.above(4 + cls, param_.confidence_threshold[cls], candidates_);
-      for (const auto i : candidates_) {
-        const core::RotatedRect rect{{rows.at(0, i), rows.at(1, i)},
-                                     {rows.at(2, i), rows.at(3, i)},
-                                     rows.at(angle_row, i) * 180.0F / std::numbers::pi_v<float>};
-        // Also skips NaN boxes.
-        if (!(rect.size.width > 0.0F && rect.size.height > 0.0F) || std::isnan(rect.angle))
-          continue;
-        result[cls].push_back({rect, rows.at(4 + cls, i), static_cast<std::int64_t>(cls)});
-      }
-    }
     return finish_rotated(result, param_.iou_threshold, transform);
   }
 
 private:
+  template <typename Grid>
+  auto decode_rows(RotatedResultMap& result, const Grid& rows) -> void {
+    const auto at = [&](std::size_t row, std::uint32_t i) -> float { return rows.at(0, i, row); };
+    const auto angle_row = param_.class_num + 4;
+    for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
+      candidates_.clear();
+      cells_above(rows, 4 + cls, param_.confidence_threshold[cls], candidates_);
+      for (const auto i : candidates_) {
+        const core::RotatedRect rect{
+            {at(0, i), at(1, i)}, {at(2, i), at(3, i)}, at(angle_row, i) * 180.0F / std::numbers::pi_v<float>};
+        // Also skips NaN boxes.
+        if (!(rect.size.width > 0.0F && rect.size.height > 0.0F) || std::isnan(rect.angle))
+          continue;
+        result[cls].push_back({rect, at(4 + cls, i), static_cast<std::int64_t>(cls)});
+      }
+    }
+  }
+
   GeneralDetectParam param_;
   Vector<std::uint32_t> candidates_;
-  core::Buffer scratch_{core::MemoryType::Cpu, core::DataType::Float32};
 };
 
 } // namespace

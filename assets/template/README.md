@@ -379,10 +379,8 @@ Local `assets/test/onnx_validation.json` records shapes and hashes;
 `assets/test/pipeline_validation/` contains CLI logs and results.
 
 `hybridrt_bench_postprocess` measures postprocessing on real model outputs, excluding
-preprocessing and inference. `BM_Task` covers decoded YOLO outputs; `BM_RawDetect/0`
-and `/1` cover `YoloV5Detect` and `YoloV8Detect`, and `BM_RawSegment` covers `YoloV8Segment`.
-All raw-head cases use `bus.jpg` and the corresponding template algo's actual input size.
-`BM_Type` covers every template algo, including all postprocessor types and OCR variants.
+preprocessing and inference. `BM_Type/<index>` covers every template algo in order, with its
+actual input size, including all postprocessor types and OCR variants.
 Single-thread timing results and reproduction commands are in [benchmark.md](../benchmark.md).
 
 | Algo | ONNX file in `assets/test/onnx/` | Input NCHW | SHA256 |

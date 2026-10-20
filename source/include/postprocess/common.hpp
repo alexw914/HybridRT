@@ -71,17 +71,27 @@ auto keypoint_shape(std::int64_t channels, unsigned int count, std::optional<std
     -> std::optional<KeypointShape>;
 
 // Element access into one detection head output, NCHW or NHWC, float32 or
-// quantized int8, honoring buffer strides.
+// quantized int8, honoring buffer strides. Without a layout, a decoded
+// [1, rows, N] output is one grid row of N cells whose channels are its rows.
 template <typename T>
 class HeadGrid {
 public:
-  HeadGrid(const core::Buffer& buffer, engine::DataLayout layout)
+  HeadGrid(const core::Buffer& buffer, std::optional<engine::DataLayout> layout)
       : data_(static_cast<const T*>(buffer.memory()->cpu())), scale_(buffer.scale), zero_point_(buffer.zero_point) {
     const auto& shape = buffer.shape();
     const auto& stride = buffer.stride();
     const auto dims = shape.size();
     const auto item = sizeof(T);
-    if (layout == engine::DataLayout::Nchw) {
+    if (!layout) {
+      if (dims < 2) {
+        data_ = nullptr;
+        return;
+      }
+      rows_ = 1;
+      cols_ = shape[dims - 1];
+      col_step_ = 1;
+      channel_step_ = stride[dims - 1] / item;
+    } else if (*layout == engine::DataLayout::Nchw) {
       rows_ = shape[dims - 2];
       cols_ = shape[dims - 1];
       row_step_ = stride[dims - 1] / item;
@@ -199,10 +209,25 @@ auto scan_cells(const HeadGrid<T>& grid, std::size_t first, std::size_t count, B
   return scan.cells;
 }
 
+// Appends, in order, the cells x of row 0 whose `channel` value exceeds
+// `threshold`. int8 values are compared as integers against the bound and
+// dequantized only when they reach it.
+template <typename T>
+auto cells_above(const HeadGrid<T>& grid, std::size_t channel, float threshold, Vector<std::uint32_t>& out) -> void {
+  const auto* values = grid.row(0, channel);
+  const auto step = grid.col_step();
+  const auto bound = grid.raw_bound(threshold);
+  for (std::int64_t x = 0; x < grid.cols(); ++x) {
+    const auto value = values[static_cast<std::size_t>(x) * step];
+    if (value >= bound && grid.at(0, x, channel) > threshold)
+      out.push_back(static_cast<std::uint32_t>(x));
+  }
+}
+
 // Calls `decode(grid)` with a HeadGrid of the buffer's element type; false for
 // types other than float32 and int8.
 template <typename Fn>
-auto visit_head(const core::Buffer& buffer, engine::DataLayout layout, Fn&& decode) -> bool {
+auto visit_head(const core::Buffer& buffer, std::optional<engine::DataLayout> layout, Fn&& decode) -> bool {
   switch (buffer.data_type()) {
   case core::DataType::Float32: {
     HeadGrid<float> grid(buffer, layout);
@@ -237,36 +262,6 @@ auto dfl(const Grid& grid, std::int64_t y, std::int64_t x, std::size_t first, st
 // Contiguous float32 view of an output: the output itself, or `scratch`
 // holding a dequantized or packed copy. Null for other data types.
 auto float_data(const core::Buffer& output, core::Buffer& scratch) -> const float*;
-
-// Rows of a decoded [1, rows, N] output read where they are needed: int8
-// values are dequantized one at a time, as float_data() would, so scanning a
-// score row compares integers and never converts the whole tensor.
-class RowView {
-public:
-  // Contiguous float32 or int8 outputs are read in place; others are packed
-  // or converted into `scratch` through float_data(). Invalid on failure.
-  RowView(const core::Buffer& output, core::Buffer& scratch);
-
-  KZ_NODISCARD auto valid() const -> bool { return data_ != nullptr; }
-
-  KZ_NODISCARD auto count() const -> std::size_t { return count_; }
-
-  KZ_NODISCARD auto at(std::size_t row, std::size_t i) const -> float {
-    const auto index = row * count_ + i;
-    return int8_ ? dequantize(static_cast<const std::int8_t*>(data_)[index], scale_, zero_point_)
-                 : static_cast<const float*>(data_)[index];
-  }
-
-  // Appends, in order, the indexes whose value in `row` exceeds `threshold`.
-  auto above(std::size_t row, float threshold, Vector<std::uint32_t>& out) const -> void;
-
-private:
-  const void* data_ = nullptr;
-  bool int8_ = false;
-  float scale_ = 1.0F;
-  std::int32_t zero_point_ = 0;
-  std::size_t count_ = 0;
-};
 
 auto nms_keep(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
     -> Vector<std::size_t>;

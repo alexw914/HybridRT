@@ -72,29 +72,6 @@ auto prepare(benchmark::State& state, const kitzoo::json::Json& entry, const std
   return prepared;
 }
 
-// Decoding, NMS and mapping back to the source image; the model runs once
-// beforehand and is not timed.
-auto BM_Task(benchmark::State& state) -> void {
-  cv::setNumThreads(1);
-  const auto task = static_cast<std::size_t>(state.range(0));
-  state.SetLabel(hrt::bench::kTasks.at(task));
-  const auto bgr = hrt::bench::task_image(task);
-  auto prepared = prepare(state, hrt::bench::algo_entry(task), hrt::bench::wrap_bgr(bgr));
-  if (!prepared)
-    return;
-  hrt::bench::with_result(task, [&]<typename Result>() -> void {
-    auto postprocessor = create_postprocessor<Result>(prepared->config["postprocess"], *prepared->engine);
-    Result result;
-    for (auto _ : state) {
-      if (!postprocessor->process(result, prepared->outputs, prepared->transform)) {
-        state.SkipWithError("Postprocessing failed");
-        break;
-      }
-      benchmark::DoNotOptimize(result);
-    }
-  });
-}
-
 template <typename Result>
 auto measure_postprocessor(benchmark::State& state, Prepared& prepared) -> void {
   auto postprocessor = create_postprocessor<Result>(prepared.config["postprocess"], *prepared.engine);
@@ -110,17 +87,6 @@ auto measure_postprocessor(benchmark::State& state, Prepared& prepared) -> void 
     }
     benchmark::DoNotOptimize(result);
   }
-}
-
-template <typename Result>
-auto benchmark_raw(benchmark::State& state, std::string_view name) -> void {
-  cv::setNumThreads(1);
-  const auto entry = hrt::bench::template_entry(name);
-  auto prepared = prepare(state, entry, hrt::bench::wrap_bgr(hrt::bench::read_image("bus.jpg")));
-  if (!prepared)
-    return;
-  state.SetLabel(prepared->config["postprocess"]["type"].get<hrt::String>());
-  measure_postprocessor<Result>(state, *prepared);
 }
 
 auto BM_Type(benchmark::State& state) -> void {
@@ -173,40 +139,6 @@ auto type_cases(benchmark::Benchmark* bench) -> void {
     bench->Arg(static_cast<std::int64_t>(i));
 }
 
-auto BM_RawDetect(benchmark::State& state) -> void {
-  benchmark_raw<hrt::postprocess::DetectResultMap>(state, state.range(0) == 0 ? "yolov5_detect" : "yolov8_detect");
-}
-
-auto BM_RawSegment(benchmark::State& state) -> void {
-  benchmark_raw<hrt::postprocess::SegmentResultMap>(state, "yolov8n_segment_raw");
-}
-
-// OCR on the document image: 0 DB detection, 1 CTC recognition of a 241x50 text line.
-auto BM_Ocr(benchmark::State& state) -> void {
-  cv::setNumThreads(1);
-  const auto stage = static_cast<std::size_t>(state.range(0));
-  state.SetLabel(stage == 0 ? "detection" : "recognition");
-  const auto bgr = hrt::bench::read_image(hrt::bench::kOcrImage);
-  const auto line = bgr.empty() ? bgr : bgr(cv::Rect(419, 16, 241, 50)).clone();
-  auto prepared = prepare(state, hrt::bench::template_entry(hrt::bench::kOcrAlgos.at(stage)),
-                          hrt::bench::wrap_bgr(stage == 0 ? bgr : line));
-  if (!prepared)
-    return;
-  auto postprocessor = hrt::postprocess::create_ocr_postprocessor(prepared->config["postprocess"], *prepared->engine);
-  hrt::postprocess::OcrResult result;
-  for (auto _ : state) {
-    if (!postprocessor->process(result, prepared->outputs, prepared->transform)) {
-      state.SkipWithError("Postprocessing failed");
-      break;
-    }
-    benchmark::DoNotOptimize(result);
-  }
-}
-
 } // namespace
 
-BENCHMARK(BM_Task)->DenseRange(0, 4)->Unit(benchmark::kMillisecond)->UseRealTime();
 BENCHMARK(BM_Type)->Apply(type_cases)->Unit(benchmark::kMillisecond)->UseRealTime();
-BENCHMARK(BM_RawDetect)->DenseRange(0, 1)->Unit(benchmark::kMillisecond)->UseRealTime();
-BENCHMARK(BM_RawSegment)->Unit(benchmark::kMillisecond)->UseRealTime();
-BENCHMARK(BM_Ocr)->DenseRange(0, 1)->Unit(benchmark::kMillisecond)->UseRealTime();
