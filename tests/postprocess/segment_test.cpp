@@ -9,6 +9,7 @@
 #include <hrt/postprocess/segment.hpp>
 
 #include <gtest/gtest.h>
+#include <limits>
 
 #include "fake_engine.hpp"
 
@@ -287,6 +288,44 @@ TEST(SegmentTest, DecodesSemanticLabels) {
     for (std::size_t i = 0; i < expected.size(); ++i)
       EXPECT_EQ(object.mask.data[i], expected[i] == cls ? 1 : 0);
   }
+}
+
+// 35 pixels cover two 16-pixel vector steps and a scalar tail; ties go to the
+// lower class and NaN never wins, as in a plain strictly-greater argmax.
+TEST(SegmentTest, MatchesScalarArgmaxAcrossVectorStepsAndTail) {
+  constexpr int kChannels = 4;
+  constexpr int kHeight = 5;
+  constexpr int kWidth = 7;
+  constexpr std::size_t kPlane = kHeight * kWidth;
+  const auto output = proto(DataType::Float32, {1, kChannels, kHeight, kWidth});
+  FakeEngine engine({proto(DataType::Float32, {1, 3, kHeight, kWidth})}, {output});
+  auto postprocessor = hrt::postprocess::create_segment_postprocessor("SemanticSegment", Json::object(), engine);
+  ASSERT_NE(postprocessor, nullptr);
+
+  hrt::Vector<float> scores(kChannels * kPlane);
+  for (std::size_t i = 0; i < scores.size(); ++i)
+    scores[i] = static_cast<float>((i * 37) % 11);
+  scores[1 * kPlane + 3] = std::numeric_limits<float>::quiet_NaN();
+  scores[0 * kPlane + 20] = std::numeric_limits<float>::quiet_NaN();
+  hrt::Vector<std::uint16_t> expected(kPlane);
+  for (std::size_t i = 0; i < kPlane; ++i) {
+    auto best = scores[i];
+    for (std::size_t c = 1; c < kChannels; ++c) {
+      if (scores[c * kPlane + i] > best) {
+        best = scores[c * kPlane + i];
+        expected[i] = static_cast<std::uint16_t>(c);
+      }
+    }
+  }
+
+  hrt::postprocess::SegmentResultMap result;
+  ASSERT_TRUE(
+      postprocessor->process(result, {hrt::test::buffer_of(output, scores)}, hrt::test::identity(kWidth, kHeight)));
+  for (std::size_t i = 0; i < kPlane; ++i) {
+    for (const auto& [cls, objects] : result)
+      EXPECT_EQ(objects[0].mask.data[i], expected[i] == cls ? 1 : 0) << "pixel " << i << ", class " << cls;
+  }
+  EXPECT_EQ(result.at(0)[0].mask.data[20], 1) << "a NaN maximum keeps label 0";
 }
 
 TEST(SegmentTest, DecodesInt8SemanticScoresWithoutDequantizing) {

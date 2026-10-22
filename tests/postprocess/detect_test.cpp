@@ -7,6 +7,7 @@
 #include <hrt/model/image_model.hpp>
 #include <hrt/postprocess/detect.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <limits>
@@ -302,6 +303,64 @@ TEST(DetectGeneralTest, SkipsNanCentersAndNonpositiveSizes) {
   ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(40, 40)));
   ASSERT_EQ(result.at(0).size(), 1U);
   EXPECT_FLOAT_EQ(result.at(0)[0].rect.x, 15.0F);
+}
+
+// 37 anchors cover two 16-value blocks the score scan may skip and a tail;
+// hits sit at block edges, and a score equal to the threshold is rejected.
+TEST(DetectGeneralTest, ScansScoreRowsAcrossBlocksAndTail) {
+  constexpr std::size_t kAnchors = 37;
+  const hrt::Vector<std::size_t> hits{0, 15, 16, 31, 33, 36};
+  const auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
+  // Box i has left edge first + i * step.
+  const auto expect_hits = [&](const hrt::postprocess::DetectResultMap& result, float first, float step) -> void {
+    ASSERT_EQ(result.at(0).size(), hits.size());
+    hrt::Vector<float> xs;
+    for (const auto& box : result.at(0))
+      xs.push_back(box.rect.x);
+    std::sort(xs.begin(), xs.end());
+    for (std::size_t i = 0; i < hits.size(); ++i)
+      EXPECT_FLOAT_EQ(xs[i], first + static_cast<float>(hits[i]) * step) << i;
+  };
+  // Rows cx, cy, w, h, score; the boxes do not overlap, so NMS keeps all.
+  const auto rows = [&](auto box, auto at_threshold, auto passing) -> hrt::Vector<decltype(at_threshold)> {
+    hrt::Vector<decltype(at_threshold)> values(5 * kAnchors, at_threshold);
+    for (std::size_t i = 0; i < kAnchors; ++i) {
+      values[i] = box(static_cast<std::int64_t>(i));
+      values[kAnchors + i] = box(0);
+      values[2 * kAnchors + i] = box(-1);
+      values[3 * kAnchors + i] = box(-1);
+    }
+    for (const auto i : hits)
+      values[4 * kAnchors + i] = passing;
+    return values;
+  };
+
+  {
+    const auto output = proto(DataType::Float32, {1, 5, kAnchors});
+    FakeEngine engine({proto(DataType::Float32, {1, 3, 80, 80})}, {output});
+    auto postprocessor = hrt::postprocess::create_detect_postprocessor("GeneralDetect", config, engine);
+    ASSERT_NE(postprocessor, nullptr);
+    // box(i): center 2i + 0.5, size 1; box(0) and box(-1) give cy 0.5 and size 1.
+    const auto box = [](std::int64_t i) -> float { return i < 0 ? 1.0F : static_cast<float>(2 * i) + 0.5F; };
+    hrt::postprocess::DetectResultMap result;
+    ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, rows(box, 0.5F, 0.9F))},
+                                       hrt::test::identity(80, 80)));
+    expect_hits(result, 0.0F, 2.0F);
+  }
+  {
+    const auto output = proto(DataType::Int8, {1, 5, kAnchors});
+    FakeEngine engine({proto(DataType::Float32, {1, 3, 80, 80})}, {output});
+    auto postprocessor = hrt::postprocess::create_detect_postprocessor("GeneralDetect", config, engine);
+    ASSERT_NE(postprocessor, nullptr);
+    // real = 0.5 * q: centers i + 0.5 and size 0.5; score q = 1 is exactly the
+    // threshold and q = 2 passes.
+    const auto box = [](std::int64_t i) -> std::int8_t { return static_cast<std::int8_t>(i < 0 ? 1 : 2 * i + 1); };
+    auto buffer = hrt::test::buffer_of<std::int8_t>(output, rows(box, std::int8_t{1}, std::int8_t{2}));
+    buffer->scale = 0.5F;
+    hrt::postprocess::DetectResultMap result;
+    ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(80, 80)));
+    expect_hits(result, 0.25F, 1.0F);
+  }
 }
 
 TEST(DetectGeneralTest, DecodesInt8) {

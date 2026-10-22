@@ -7,8 +7,16 @@
 #include <kitzoo/core/macro.hpp>
 #include <kitzoo/log/logger.hpp>
 
+#include <algorithm>
 #include <bitset>
 #include <opencv2/imgproc.hpp>
+#include <type_traits>
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#elif defined(__SSE2__) || defined(_M_X64)
+#include <emmintrin.h>
+#endif
 
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/params.hpp"
@@ -16,6 +24,92 @@
 namespace hrt::postprocess {
 
 namespace {
+
+// Float argmax over 16 pixels per step with NEON or SSE2, the running maxima
+// and labels kept in registers across all channels; returns the pixels done.
+// Selection matches the scalar loop: a later channel wins only when strictly
+// greater, so NaN never replaces the maximum.
+auto argmax_vector(const float* data, int channels, std::size_t plane, std::uint16_t* out) -> std::size_t {
+  std::size_t i = 0;
+#if defined(__ARM_NEON) && defined(__aarch64__)
+  for (; i + 16 <= plane; i += 16) {
+    Array<float32x4_t, 4> best{vld1q_f32(data + i), vld1q_f32(data + i + 4), vld1q_f32(data + i + 8),
+                               vld1q_f32(data + i + 12)};
+    Array<uint16x8_t, 2> labels{vdupq_n_u16(0), vdupq_n_u16(0)};
+    for (int c = 1; c < channels; ++c) {
+      const auto* channel = data + static_cast<std::size_t>(c) * plane + i;
+      const auto label = vdupq_n_u16(static_cast<std::uint16_t>(c));
+      Array<uint32x4_t, 4> greater{};
+      for (std::size_t k = 0; k < 4; ++k) {
+        const auto value = vld1q_f32(channel + k * 4);
+        greater[k] = vcgtq_f32(value, best[k]);
+        best[k] = vbslq_f32(greater[k], value, best[k]);
+      }
+      for (std::size_t k = 0; k < 2; ++k)
+        labels[k] = vbslq_u16(vcombine_u16(vmovn_u32(greater[k * 2]), vmovn_u32(greater[k * 2 + 1])), label, labels[k]);
+    }
+    vst1q_u16(out + i, labels[0]);
+    vst1q_u16(out + i + 8, labels[1]);
+  }
+#elif defined(__SSE2__) || defined(_M_X64)
+  for (; i + 16 <= plane; i += 16) {
+    Array<__m128, 4> best{_mm_loadu_ps(data + i), _mm_loadu_ps(data + i + 4), _mm_loadu_ps(data + i + 8),
+                          _mm_loadu_ps(data + i + 12)};
+    Array<__m128i, 2> labels{_mm_setzero_si128(), _mm_setzero_si128()};
+    for (int c = 1; c < channels; ++c) {
+      const auto* channel = data + static_cast<std::size_t>(c) * plane + i;
+      const auto label = _mm_set1_epi16(static_cast<short>(c));
+      Array<__m128, 4> greater{};
+      for (std::size_t k = 0; k < 4; ++k) {
+        const auto value = _mm_loadu_ps(channel + k * 4);
+        greater[k] = _mm_cmpgt_ps(value, best[k]);
+        best[k] = _mm_or_ps(_mm_and_ps(greater[k], value), _mm_andnot_ps(greater[k], best[k]));
+      }
+      for (std::size_t k = 0; k < 2; ++k) {
+        // All-ones and zero lanes stay so when packed to 16 bits.
+        const auto mask = _mm_packs_epi32(_mm_castps_si128(greater[k * 2]), _mm_castps_si128(greater[k * 2 + 1]));
+        labels[k] = _mm_or_si128(_mm_and_si128(mask, label), _mm_andnot_si128(mask, labels[k]));
+      }
+    }
+    _mm_storeu_si128(static_cast<__m128i*>(static_cast<void*>(out + i)), labels[0]);
+    _mm_storeu_si128(static_cast<__m128i*>(static_cast<void*>(out + i + 8)), labels[1]);
+  }
+#else
+  static_cast<void>(data);
+  static_cast<void>(channels);
+  static_cast<void>(plane);
+  static_cast<void>(out);
+#endif
+  return i;
+}
+
+// Channel argmax of [C, plane] scores: blocks of pixels against every channel,
+// so the running maxima stay in cache instead of a pass over the whole map
+// per channel. Float scores take argmax_vector() first.
+template <typename T>
+auto argmax_channels(const T* data, int channels, std::size_t plane, std::uint16_t* out) -> void {
+  constexpr std::size_t kBlock = 64;
+  std::size_t first = 0;
+  if constexpr (std::is_same_v<T, float>)
+    first = argmax_vector(data, channels, plane, out);
+  Array<T, kBlock> best{};
+  Array<std::uint16_t, kBlock> labels{};
+  for (auto start = first; start < plane; start += kBlock) {
+    const auto count = std::min(kBlock, plane - start);
+    std::copy_n(data + start, count, best.begin());
+    std::fill_n(labels.begin(), count, std::uint16_t{0});
+    for (int c = 1; c < channels; ++c) {
+      const auto* channel = data + static_cast<std::size_t>(c) * plane + start;
+      const auto label = static_cast<std::uint16_t>(c);
+      for (std::size_t k = 0; k < count; ++k) {
+        const auto greater = channel[k] > best[k];
+        best[k] = greater ? channel[k] : best[k];
+        labels[k] = greater ? label : labels[k];
+      }
+    }
+    std::copy_n(labels.begin(), count, out + start);
+  }
+}
 
 // One output: class scores [1, C, H, W] (argmax) or class indexes
 // [1, 1, H, W] / [1, H, W], at any resolution covering the network input.
@@ -124,27 +218,7 @@ private:
     return true;
   }
 
-  // Channel-major argmax: each pass reads one channel plane in order against
-  // the running maximum, instead of striding a plane per channel per pixel.
-  template <typename T>
-  auto argmax_channels(const T* data, int channels, std::size_t plane, std::uint16_t* out) -> void {
-    best_.assign(data, data + plane);
-    std::fill(out, out + plane, std::uint16_t{0});
-    auto* best = best_.data();
-    for (int c = 1; c < channels; ++c) {
-      const auto* channel = data + static_cast<std::size_t>(c) * plane;
-      const auto label = static_cast<std::uint16_t>(c);
-      for (std::size_t i = 0; i < plane; ++i) {
-        const auto value = static_cast<float>(channel[i]);
-        const auto greater = value > best[i];
-        best[i] = greater ? value : best[i];
-        out[i] = greater ? label : out[i];
-      }
-    }
-  }
-
   Vector<core::Buffer> scratch_;
-  Vector<float> best_;
   cv::Mat labels_;
   cv::Mat source_labels_;
 };

@@ -53,6 +53,29 @@ TEST(EmbeddingTest, DequantizesStridedRowsInOrder) {
   EXPECT_EQ(result, (hrt::Vector<float>{0.5F, 1.0F, 1.5F, 2.0F, 2.5F, 3.0F}));
 }
 
+// Every int8 value plus a tail shorter than one 16-value vector step must
+// match the scalar formula exactly on the vector path of the target.
+TEST(EmbeddingTest, DequantizesEveryInt8ValueLikeTheScalarFormula) {
+  constexpr std::int64_t kCount = 256 + 5;
+  const auto output = proto(DataType::Int8, {1, kCount});
+  hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {output});
+  auto postprocessor =
+      hrt::postprocess::create_embedding_postprocessor("Embedding", kitzoo::json::Json::object(), engine);
+  ASSERT_NE(postprocessor, nullptr);
+
+  hrt::Vector<std::int8_t> values(kCount);
+  for (std::size_t i = 0; i < values.size(); ++i)
+    values[i] = static_cast<std::int8_t>(static_cast<int>(i % 256) - 128);
+  auto buffer = hrt::test::buffer_of<std::int8_t>(output, values);
+  buffer->scale = 0.037F;
+  buffer->zero_point = -5;
+  hrt::postprocess::EmbeddingResult result;
+  ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(8, 8)));
+  ASSERT_EQ(result.size(), values.size());
+  for (std::size_t i = 0; i < values.size(); ++i)
+    EXPECT_EQ(result[i], 0.037F * (static_cast<float>(values[i]) - -5.0F)) << i;
+}
+
 TEST(EmbeddingTest, NeedsOneOutput) {
   const auto output = proto(DataType::Float32, {1, 3});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {output, output});

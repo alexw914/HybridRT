@@ -4,6 +4,89 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-22: skip score blocks below the threshold and argmax semantic maps in pixel blocks
+
+**Bottleneck.** Profiling `hybridrt_bench_postprocess` with `sample` showed two hot loops.
+`CellScanner::scan_channel()`, which `GeneralDetect`, `GeneralRotated`, `GeneralYoloSegment` and
+`GeneralYoloPose` run over each class row of their `[1, 4 + classes, N]` output, checked every
+anchor with a branch, although almost no score reaches the threshold (80 x 8400 checks per
+`yolov8n_detect` run). `SemanticSegment` took the channel argmax as one pass over the whole map
+per channel, reading and writing the running maxima and labels 21 times for `lraspp_voc_segment`;
+clang did not vectorize that loop (mixed float and uint16 stores, possible aliasing).
+
+**Change.** `scan_channel()` first asks `any_at_least()` whether any of 16 contiguous scores
+reaches the bound (NEON `vcgeq` + `vmaxvq`, SSE2 `cmpge` + `movemask`, int8 compared as int8,
+a branch-free loop elsewhere) and skips the block if none does; rows with a column step take the
+scalar loop as before. `argmax_channels()` now walks blocks of pixels against every channel: float
+scores take 16 pixels per step with NEON or SSE2, maxima and labels in registers, and the rest
+(int8 scores, the tail, other targets) a blocked scalar loop of 64 pixels. Both keep the scalar
+results: a later channel wins only when strictly greater, so ties go to the lower class and NaN
+never wins.
+
+**Measurement.** Apple M5 Pro, macOS, Release, ONNX Runtime 1.31.0 CPU, `hybridrt_bench_postprocess`
+`BM_Type`, 3 repetitions of at least 0.3 s, median; the previous build and this change were run
+interleaved over 3 rounds and the median of rounds is shown. The other template algos stayed
+within noise (+/-1 us).
+
+| Type (algo) | Before | After |
+| --- | ---: | ---: |
+| `GeneralDetect` (`yolov8n_detect`) | 0.159 ms | 0.024 ms |
+| `GeneralRotated` (`yolov8n_obb`) | 0.138 ms | 0.074 ms |
+| `GeneralYoloSegment` (`yolov8n_segment`) | 0.218 ms | 0.116 ms |
+| `GeneralYoloPose` (`yolov8n_pose`) | 0.002 ms | 0.001 ms |
+| `SemanticSegment` (`lraspp_voc_segment`) | 2.84 ms | 1.63 ms |
+
+In a standalone driver, the 21 x 512 x 512 argmax alone took 1.73 ms before, 0.75 ms with the
+blocked scalar loop and 0.59 ms with NEON on smooth scores (6.0 ms before on random scores, where
+the old loop mispredicted). `hrt-validate` on `assets/test/images` gives byte-identical JSON before
+and after for `yolov8n_detect`, `yolov8n_obb`, `yolov8n_segment`, `yolov8n_pose` and
+`lraspp_voc_segment`. The SSE2 paths were checked for identical results on x86_64 under Rosetta
+only, not timed.
+
+**Remaining.** `SemanticSegment` still spends most of its time in `cv::warpAffine` (nearest) to
+source size and in per-class mask building. OCR detection is dominated by OpenCV contour search.
+OCR recognition takes a scalar `std::max_element` per step in `Ocr::decode`; in a standalone
+driver a NEON vector maximum followed by a search for its first index took 31 us instead of
+116 us on 40 x 6625 rows, not applied here because `vmaxq` propagates NaN where
+`std::max_element` skips it, which changes the CTC probability check. The YOLOv8/YOLO26 raw heads
+already use `scan_max_score()`, which the compiler vectorizes. RK3588 and x86_64 hardware were
+not measured.
+
+## 2026-10-22: vector int8 dequantization in dequantize_buffer
+
+**Bottleneck.** `dequantize_buffer()` turns whole int8 outputs (classify, embedding, general
+keypoint, OCR, semantic segment) into float32 with a scalar loop, so whether it is vectorized
+depends on the compiler and flags. Clang -O3 on AArch64 vectorizes it (a `tbl` that puts each
+byte in the top of a 32-bit lane, then `scvtf #24`), but per strided row it pays the vector
+entry checks and a 4-wide plus scalar tail.
+
+**Change.** `dequantize_values()` converts 16 values per step with AArch64 NEON (the same
+`tbl` + fixed-point convert) or SSE2 (unpack and arithmetic shifts, as SSE2 lacks sign
+extension), then the scalar loop takes the tail. Both subtract the zero point and then multiply
+without fusing, so results are bit-identical to `core::dequantize()`. The path follows the
+compiler's target macros (`__ARM_NEON` with `__aarch64__`, `__SSE2__` or `_M_X64`); other
+targets keep the scalar loop. A first NEON version that widened with `vmovl` (two widening steps per four values)
+was 12% slower than the compiler's loop on contiguous outputs and was dropped.
+
+**Measurement.** Apple M5 Pro, macOS, Release (-O3, Apple clang), one thread; an ad-hoc driver
+linking `libhybridrt.a` times `dequantize_buffer()` on random int8 data, 15 rounds, median;
+the previous commit, this change and this change with the vector paths compiled out were run
+interleaved over 3 rounds, all medians agreeing within 1% except where noted.
+
+| Output (int8 to float32) | Before | After | After, scalar loop |
+| --- | ---: | ---: | ---: |
+| 1 x 1000 (classify) | 0.059 us | 0.059 us | 0.059 us |
+| 1 x 40 x 6625 (OCR recognition) | 15.6 us | 15.5 us | 15.6 us |
+| 1 x 21 x 512 x 512 (semantic segment) | 325 us | 323 us | 324 us |
+| 1 x 40 x 6625, rows padded to 6640 bytes | 18.2 us | 15.6 us | 18.2 us |
+
+The SSE2 path was checked for exact results on x86_64 under Rosetta only, not timed.
+
+**Remaining.** Contiguous outputs gain nothing on Apple clang, which already emits the same
+loop; the gain there is expected only from compilers or flags that leave the loop scalar, such
+as GCC at -O2, which was not available to measure. RK3588, x86_64 hardware and 32-bit ARM (which
+takes the scalar loop) were not measured.
+
 ## 2026-10-20: accumulate mask prototypes in place over the box region
 
 **Bottleneck.** Instance segmentation decoders turned the whole prototype output into float32
