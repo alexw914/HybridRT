@@ -159,7 +159,8 @@ auto dequantize_buffer(const core::Buffer& output, core::Buffer& scratch) -> voi
 auto create_scratch(const engine::Engine& engine) -> Vector<core::Buffer>;
 
 // Indices of the rects kept by greedy NMS, highest score first.
-auto nms(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold) -> Vector<std::size_t>;
+auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
+    -> Vector<std::size_t>;
 
 // Checks and initializes a postprocessor made for `type`. Aborts on an unknown
 // type, a config check_config rejects, an engine without one image input, or

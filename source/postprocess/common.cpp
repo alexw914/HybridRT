@@ -251,7 +251,8 @@ auto dequantize_buffer(const core::Buffer& output, core::Buffer& scratch) -> voi
   }
 }
 
-auto nms(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold) -> Vector<std::size_t> {
+auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
+    -> Vector<std::size_t> {
   Vector<std::size_t> order(rects.size());
   std::iota(order.begin(), order.end(), std::size_t{0});
   std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) -> bool { return scores[a] > scores[b]; });

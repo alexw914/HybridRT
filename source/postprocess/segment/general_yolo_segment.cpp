@@ -96,7 +96,7 @@ private:
 
     Vector<float> coefficients(masks);
     for (std::size_t cls = 0; cls < classes; ++cls) {
-      for (auto k : nms(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
+      for (auto k : nms_indices(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
         const auto box = transform.clip_to_source(rects_[cls][k]);
         if (box.empty())
           continue;

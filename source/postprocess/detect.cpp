@@ -26,7 +26,7 @@ auto nms(DetectResult& boxes, float iou_threshold) -> void {
     scores.push_back(box.score);
   }
   DetectResult kept;
-  for (auto index : nms(rects, scores, iou_threshold))
+  for (auto index : nms_indices(rects, scores, iou_threshold))
     kept.push_back(boxes[index]);
   boxes = std::move(kept);
 }
