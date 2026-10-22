@@ -29,7 +29,7 @@ auto create_segment(std::string_view type) -> UniquePtr<SegmentPostprocessor> {
 
 auto create_segment_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
     -> UniquePtr<SegmentPostprocessor> {
-  return check_init_postprocess(create_segment(type), type, config, engine);
+  return check_init(create_segment(type), type, config, engine);
 }
 
 } // namespace hrt::postprocess

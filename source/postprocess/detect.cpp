@@ -49,7 +49,7 @@ auto create_detect(std::string_view type) -> UniquePtr<DetectPostprocessor> {
 
 auto create_detect_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
     -> UniquePtr<DetectPostprocessor> {
-  return check_init_postprocess(create_detect(type), type, config, engine);
+  return check_init(create_detect(type), type, config, engine);
 }
 
 auto nms_to_source(DetectResultMap& result, const Vector<float>& iou_threshold,

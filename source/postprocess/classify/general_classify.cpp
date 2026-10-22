@@ -94,7 +94,7 @@ auto create_classify(std::string_view type) -> UniquePtr<ClassifyPostprocessor> 
 
 auto create_classify_postprocessor(std::string_view type, const kitzoo::json::Json& config,
                                    const engine::Engine& engine) -> UniquePtr<ClassifyPostprocessor> {
-  return check_init_postprocess(create_classify(type), type, config, engine);
+  return check_init(create_classify(type), type, config, engine);
 }
 
 } // namespace hrt::postprocess

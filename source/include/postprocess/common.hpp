@@ -174,9 +174,8 @@ auto check_section(const kitzoo::json::Json& config) -> Vector<String> {
 // engine outputs init() rejects. init() may therefore dereference
 // engine.input_size().
 template <typename Postprocessor>
-auto check_init_postprocess(UniquePtr<Postprocessor> postprocessor, std::string_view type,
-                            const kitzoo::json::Json& config, const engine::Engine& engine)
-    -> UniquePtr<Postprocessor> {
+auto check_init(UniquePtr<Postprocessor> postprocessor, std::string_view type, const kitzoo::json::Json& config,
+                const engine::Engine& engine) -> UniquePtr<Postprocessor> {
   KZ_CHECK_MSG(postprocessor != nullptr, "postprocess: unknown type \"{}\"", type);
   const auto problems = postprocessor->check_config(config);
   KZ_CHECK_MSG(problems.empty(), "postprocess: invalid {} config: {}", type, core::join(problems));

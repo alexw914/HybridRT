@@ -73,7 +73,7 @@ auto create_rotated(std::string_view type) -> UniquePtr<RotatedPostprocessor> {
 
 auto create_rotated_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
     -> UniquePtr<RotatedPostprocessor> {
-  return check_init_postprocess(create_rotated(type), type, config, engine);
+  return check_init(create_rotated(type), type, config, engine);
 }
 
 auto rotated_to_source(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool {

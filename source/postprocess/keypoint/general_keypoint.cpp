@@ -362,7 +362,7 @@ auto create_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor> 
 
 auto create_keypoint_postprocessor(std::string_view type, const kitzoo::json::Json& config,
                                    const engine::Engine& engine) -> UniquePtr<KeypointPostprocessor> {
-  return check_init_postprocess(create_keypoint(type), type, config, engine);
+  return check_init(create_keypoint(type), type, config, engine);
 }
 
 } // namespace hrt::postprocess

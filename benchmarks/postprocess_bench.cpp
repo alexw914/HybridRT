@@ -12,7 +12,7 @@
 namespace {
 
 template <typename Result>
-auto check_init_postprocess(const kitzoo::json::Json& config, const hrt::engine::Engine& engine)
+auto check_init(const kitzoo::json::Json& config, const hrt::engine::Engine& engine)
     -> hrt::UniquePtr<hrt::postprocess::Postprocessor<Result>> {
   const auto& type = config["type"].get_ref<const hrt::String&>();
   if constexpr (std::is_same_v<Result, hrt::postprocess::DetectResultMap>)
@@ -74,7 +74,7 @@ auto prepare(benchmark::State& state, const kitzoo::json::Json& entry, const std
 
 template <typename Result>
 auto measure_postprocessor(benchmark::State& state, Prepared& prepared) -> void {
-  auto postprocessor = check_init_postprocess<Result>(prepared.config["postprocess"], *prepared.engine);
+  auto postprocessor = check_init<Result>(prepared.config["postprocess"], *prepared.engine);
   if (!postprocessor) {
     state.SkipWithError("Postprocessor initialization failed");
     return;

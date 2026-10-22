@@ -253,7 +253,7 @@ auto create_ocr(std::string_view type) -> UniquePtr<OcrPostprocessor> {
 
 auto create_ocr_postprocessor(const kitzoo::json::Json& config, const engine::Engine& engine)
     -> UniquePtr<OcrPostprocessor> {
-  return check_init_postprocess(create_ocr("Ocr"), "Ocr", config, engine);
+  return check_init(create_ocr("Ocr"), "Ocr", config, engine);
 }
 
 } // namespace hrt::postprocess

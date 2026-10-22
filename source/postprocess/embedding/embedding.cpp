@@ -57,7 +57,7 @@ auto create_embedding(std::string_view type) -> UniquePtr<EmbeddingPostprocessor
 
 auto create_embedding_postprocessor(std::string_view type, const kitzoo::json::Json& config,
                                     const engine::Engine& engine) -> UniquePtr<EmbeddingPostprocessor> {
-  return check_init_postprocess(create_embedding(type), type, config, engine);
+  return check_init(create_embedding(type), type, config, engine);
 }
 
 } // namespace hrt::postprocess
