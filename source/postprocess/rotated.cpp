@@ -57,23 +57,23 @@ auto nms_rotated(RotatedResult& boxes, float iou_threshold) -> void {
   boxes = std::move(kept);
 }
 
-auto make_rotated(std::string_view type) -> UniquePtr<RotatedPostprocessor> {
+auto create_rotated(std::string_view type) -> UniquePtr<RotatedPostprocessor> {
   if (type == "YoloV8Rotated")
-    return make_yolov8_rotated();
+    return create_yolov8_rotated();
   if (type == "Yolo26Rotated")
-    return make_yolo26_rotated();
+    return create_yolo26_rotated();
   if (type == "YoloV5Rotated")
-    return make_yolov5_rotated();
+    return create_yolov5_rotated();
   if (type == "GeneralRotated")
-    return make_general_rotated();
+    return create_general_rotated();
   if (type == "E2ERotated")
-    return make_e2e_rotated();
+    return create_e2e_rotated();
   return nullptr;
 }
 
 auto create_rotated_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
     -> UniquePtr<RotatedPostprocessor> {
-  return init_or_abort(make_rotated(type), type, config, engine);
+  return check_init_postprocess(create_rotated(type), type, config, engine);
 }
 
 auto rotated_to_source(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool {

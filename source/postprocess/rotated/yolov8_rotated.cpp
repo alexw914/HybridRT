@@ -92,7 +92,7 @@ private:
 
 } // namespace
 
-auto make_yolov8_rotated() -> UniquePtr<RotatedPostprocessor> {
+auto create_yolov8_rotated() -> UniquePtr<RotatedPostprocessor> {
   return std::make_unique<YoloV8Rotated>();
 }
 

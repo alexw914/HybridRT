@@ -96,65 +96,65 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(DetrParam, class_num, confidence
                                                 score_activation, background_class)
 
 // Built-in postprocessor of `type` for each task, or nullptr.
-auto make_detect(std::string_view type) -> UniquePtr<DetectPostprocessor>;
+auto create_detect(std::string_view type) -> UniquePtr<DetectPostprocessor>;
 
-auto make_rotated(std::string_view type) -> UniquePtr<RotatedPostprocessor>;
+auto create_rotated(std::string_view type) -> UniquePtr<RotatedPostprocessor>;
 
-auto make_classify(std::string_view type) -> UniquePtr<ClassifyPostprocessor>;
+auto create_classify(std::string_view type) -> UniquePtr<ClassifyPostprocessor>;
 
-auto make_embedding(std::string_view type) -> UniquePtr<EmbeddingPostprocessor>;
+auto create_embedding(std::string_view type) -> UniquePtr<EmbeddingPostprocessor>;
 
-auto make_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor>;
+auto create_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor>;
 
-auto make_segment(std::string_view type) -> UniquePtr<SegmentPostprocessor>;
+auto create_segment(std::string_view type) -> UniquePtr<SegmentPostprocessor>;
 
-auto make_ocr(std::string_view type) -> UniquePtr<OcrPostprocessor>;
+auto create_ocr(std::string_view type) -> UniquePtr<OcrPostprocessor>;
 
-auto make_yolov5_detect() -> UniquePtr<DetectPostprocessor>;
+auto create_yolov5_detect() -> UniquePtr<DetectPostprocessor>;
 
-auto make_yolov8_detect() -> UniquePtr<DetectPostprocessor>;
+auto create_yolov8_detect() -> UniquePtr<DetectPostprocessor>;
 
-auto make_yolo26_detect() -> UniquePtr<DetectPostprocessor>;
+auto create_yolo26_detect() -> UniquePtr<DetectPostprocessor>;
 
-auto make_general_detect() -> UniquePtr<DetectPostprocessor>;
+auto create_general_detect() -> UniquePtr<DetectPostprocessor>;
 
-auto make_detr_detect() -> UniquePtr<DetectPostprocessor>;
+auto create_detr_detect() -> UniquePtr<DetectPostprocessor>;
 
-auto make_e2e_detect() -> UniquePtr<DetectPostprocessor>;
+auto create_e2e_detect() -> UniquePtr<DetectPostprocessor>;
 
-auto make_yolov5_rotated() -> UniquePtr<RotatedPostprocessor>;
+auto create_yolov5_rotated() -> UniquePtr<RotatedPostprocessor>;
 
-auto make_yolov8_rotated() -> UniquePtr<RotatedPostprocessor>;
+auto create_yolov8_rotated() -> UniquePtr<RotatedPostprocessor>;
 
-auto make_yolo26_rotated() -> UniquePtr<RotatedPostprocessor>;
+auto create_yolo26_rotated() -> UniquePtr<RotatedPostprocessor>;
 
-auto make_general_rotated() -> UniquePtr<RotatedPostprocessor>;
+auto create_general_rotated() -> UniquePtr<RotatedPostprocessor>;
 
-auto make_e2e_rotated() -> UniquePtr<RotatedPostprocessor>;
+auto create_e2e_rotated() -> UniquePtr<RotatedPostprocessor>;
 
-auto make_general_classify() -> UniquePtr<ClassifyPostprocessor>;
+auto create_general_classify() -> UniquePtr<ClassifyPostprocessor>;
 
-auto make_general_keypoint() -> UniquePtr<KeypointPostprocessor>;
+auto create_general_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
-auto make_general_yolo_pose() -> UniquePtr<KeypointPostprocessor>;
+auto create_general_yolo_pose() -> UniquePtr<KeypointPostprocessor>;
 
-auto make_yolov8_keypoint() -> UniquePtr<KeypointPostprocessor>;
+auto create_yolov8_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
-auto make_yolo26_keypoint() -> UniquePtr<KeypointPostprocessor>;
+auto create_yolo26_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
-auto make_rtmo_keypoint() -> UniquePtr<KeypointPostprocessor>;
+auto create_rtmo_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
-auto make_e2e_keypoint() -> UniquePtr<KeypointPostprocessor>;
+auto create_e2e_keypoint() -> UniquePtr<KeypointPostprocessor>;
 
-auto make_general_yolo_segment() -> UniquePtr<SegmentPostprocessor>;
+auto create_general_yolo_segment() -> UniquePtr<SegmentPostprocessor>;
 
-auto make_yolov8_segment() -> UniquePtr<SegmentPostprocessor>;
+auto create_yolov8_segment() -> UniquePtr<SegmentPostprocessor>;
 
-auto make_yolo26_segment() -> UniquePtr<SegmentPostprocessor>;
+auto create_yolo26_segment() -> UniquePtr<SegmentPostprocessor>;
 
-auto make_e2e_segment() -> UniquePtr<SegmentPostprocessor>;
+auto create_e2e_segment() -> UniquePtr<SegmentPostprocessor>;
 
-auto make_semantic_segment() -> UniquePtr<SegmentPostprocessor>;
+auto create_semantic_segment() -> UniquePtr<SegmentPostprocessor>;
 
 auto nms_to_source(DetectResultMap& result, const Vector<float>& iou_threshold,
                    const preprocess::ImageTransform& transform) -> void;

@@ -38,8 +38,7 @@ public:
     if (!is_float_outputs(engine, "general_yolo_segment"))
       return false;
     param_ = config.get<GeneralYoloSegmentParam>();
-    if (param_.class_num == 0 ||
-        !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
+    if (!expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
       return false;
     const auto& outputs = engine.output_protos();
@@ -121,7 +120,7 @@ private:
 
 } // namespace
 
-auto make_general_yolo_segment() -> UniquePtr<SegmentPostprocessor> {
+auto create_general_yolo_segment() -> UniquePtr<SegmentPostprocessor> {
   return std::make_unique<GeneralYoloSegment>();
 }
 

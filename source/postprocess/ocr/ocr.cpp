@@ -95,7 +95,7 @@ public:
     const auto& outputs = engine.output_protos();
     KZ_CHECK_RETURN(outputs.size() == 1, false, "Ocr: expected one output");
     shape_ = outputs[0].shape;
-    scratch_ = make_scratch(engine);
+    scratch_ = create_scratch(engine);
     if (detection_) {
       det_ = config.get<DetectionParam>();
       KZ_CHECK_RETURN(engine.proto().output_layout == engine::DataLayout::Nchw && shape_.size() == 4 &&
@@ -247,13 +247,13 @@ private:
 
 } // namespace
 
-auto make_ocr(std::string_view type) -> UniquePtr<OcrPostprocessor> {
+auto create_ocr(std::string_view type) -> UniquePtr<OcrPostprocessor> {
   return type == "Ocr" ? std::make_unique<Ocr>() : nullptr;
 }
 
 auto create_ocr_postprocessor(const kitzoo::json::Json& config, const engine::Engine& engine)
     -> UniquePtr<OcrPostprocessor> {
-  return init_or_abort(make_ocr("Ocr"), "Ocr", config, engine);
+  return check_init_postprocess(create_ocr("Ocr"), "Ocr", config, engine);
 }
 
 } // namespace hrt::postprocess

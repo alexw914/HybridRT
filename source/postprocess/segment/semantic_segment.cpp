@@ -151,7 +151,7 @@ private:
 
 } // namespace
 
-auto make_semantic_segment() -> UniquePtr<SegmentPostprocessor> {
+auto create_semantic_segment() -> UniquePtr<SegmentPostprocessor> {
   return std::make_unique<SemanticSegment>();
 }
 

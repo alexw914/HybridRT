@@ -43,8 +43,7 @@ public:
     if (!is_float_outputs(engine, "yolo26_segment"))
       return false;
     param_ = config.get<Yolo26SegmentParam>();
-    if (param_.class_num == 0 ||
-        !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
+    if (!expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
       return false;
     std::size_t box_channels = 4;
@@ -133,7 +132,7 @@ private:
 
 } // namespace
 
-auto make_yolo26_segment() -> UniquePtr<SegmentPostprocessor> {
+auto create_yolo26_segment() -> UniquePtr<SegmentPostprocessor> {
   return std::make_unique<Yolo26Segment>();
 }
 

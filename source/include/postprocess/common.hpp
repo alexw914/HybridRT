@@ -28,28 +28,23 @@ namespace hrt::postprocess {
 // Values per pose keypoint: x, y and visibility.
 inline constexpr std::size_t kKeypointValues = 3;
 
+// Broadcasts one value to `class_num` and checks each is in [0, 1]; fails on
+// a zero class_num.
 auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* name) -> bool;
 
 // Whether every engine output is float32 or int8, the types HeadGridView and
 // dequantize_buffer() read. Checked once in init, so decode() relies on it.
 auto is_float_outputs(const engine::Engine& engine, std::string_view name) -> bool;
 
-// Whether the engine has outputs and every one is 4-D, as HeadGridShape expects.
+// Whether the engine has outputs and every one is 4-D, as head_channels() and
+// head_stride() expect.
 auto is_4d_outputs(const engine::Engine& engine, std::string_view name) -> bool;
 
-// Batch, channels, rows and cols of one 4-D output under the engine layout.
-struct HeadGridShape {
-  std::int64_t batch = 0;
-  std::int64_t channels = 0;
-  std::int64_t rows = 0;
-  std::int64_t cols = 0;
+// Channels of a 4-D head output under the engine layout; see is_4d_outputs().
+auto head_channels(const core::BufferProto& proto, engine::DataLayout layout) -> std::int64_t;
 
-  // `proto` must be 4-D; see is_4d_outputs().
-  static auto from_proto(const core::BufferProto& proto, engine::DataLayout layout) -> HeadGridShape;
-
-  // Input-to-head scale along x and y.
-  KZ_NODISCARD auto stride(core::Size input) const -> core::Point2f;
-};
+// Input-to-head scale along x and y of a 4-D head output.
+auto head_stride(const core::BufferProto& proto, engine::DataLayout layout, core::Size input) -> core::Point2f;
 
 // Element access into one engine output as a grid of rows x cols cells with
 // channels, NCHW or NHWC, float32 or quantized int8, honoring buffer strides. Without a layout, a decoded
@@ -161,7 +156,7 @@ inline auto dfl(const HeadGridView& grid, std::int64_t y, std::int64_t x, std::s
 auto dequantize_buffer(const core::Buffer& output, core::Buffer& scratch) -> void;
 
 // One dequantize_buffer() buffer per engine output, shaped like the int8 ones.
-auto make_scratch(const engine::Engine& engine) -> Vector<core::Buffer>;
+auto create_scratch(const engine::Engine& engine) -> Vector<core::Buffer>;
 
 // Indices of the rects kept by greedy NMS, highest score first.
 auto nms(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold) -> Vector<std::size_t>;
@@ -174,12 +169,14 @@ auto check_section(const kitzoo::json::Json& config) -> Vector<String> {
   return problems;
 }
 
-// Aborts on an unknown type, a config check_config rejects, an engine without
-// one image input, or engine outputs init() rejects. init() may therefore
-// dereference engine.input_size().
+// Checks and initializes a postprocessor made for `type`. Aborts on an unknown
+// type, a config check_config rejects, an engine without one image input, or
+// engine outputs init() rejects. init() may therefore dereference
+// engine.input_size().
 template <typename Postprocessor>
-auto init_or_abort(UniquePtr<Postprocessor> postprocessor, std::string_view type, const kitzoo::json::Json& config,
-                   const engine::Engine& engine) -> UniquePtr<Postprocessor> {
+auto check_init_postprocess(UniquePtr<Postprocessor> postprocessor, std::string_view type,
+                            const kitzoo::json::Json& config, const engine::Engine& engine)
+    -> UniquePtr<Postprocessor> {
   KZ_CHECK_MSG(postprocessor != nullptr, "postprocess: unknown type \"{}\"", type);
   const auto problems = postprocessor->check_config(config);
   KZ_CHECK_MSG(problems.empty(), "postprocess: invalid {} config: {}", type, core::join(problems));

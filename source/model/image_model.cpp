@@ -199,17 +199,17 @@ auto read_algo(const kitzoo::json::Json& algo) -> hrtc::AlgoParam {
 } // namespace
 
 auto task_of(std::string_view postprocess_type) -> std::optional<Task> {
-  if (postprocess::make_detect(postprocess_type) != nullptr)
+  if (postprocess::create_detect(postprocess_type) != nullptr)
     return Task::Detect;
-  if (postprocess::make_rotated(postprocess_type) != nullptr)
+  if (postprocess::create_rotated(postprocess_type) != nullptr)
     return Task::Rotated;
-  if (postprocess::make_embedding(postprocess_type) != nullptr)
+  if (postprocess::create_embedding(postprocess_type) != nullptr)
     return Task::Embedding;
-  if (postprocess::make_classify(postprocess_type) != nullptr)
+  if (postprocess::create_classify(postprocess_type) != nullptr)
     return Task::Classify;
-  if (postprocess::make_keypoint(postprocess_type) != nullptr)
+  if (postprocess::create_keypoint(postprocess_type) != nullptr)
     return Task::Keypoint;
-  if (postprocess::make_segment(postprocess_type) != nullptr)
+  if (postprocess::create_segment(postprocess_type) != nullptr)
     return Task::Segment;
   return std::nullopt;
 }

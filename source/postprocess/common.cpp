@@ -43,6 +43,7 @@ auto PostprocessorBase::to_host(const core::Buffers& outputs, core::Stream* stre
 }
 
 auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* name) -> bool {
+  KZ_CHECK_RETURN(class_num > 0, false, "postprocess: class_num must be positive");
   if (values.size() == 1 && class_num > 1)
     values.resize(class_num, values.front());
   if (values.size() != class_num) {
@@ -73,14 +74,13 @@ auto is_4d_outputs(const engine::Engine& engine, std::string_view name) -> bool 
   return true;
 }
 
-auto HeadGridShape::from_proto(const core::BufferProto& proto, engine::DataLayout layout) -> HeadGridShape {
-  const auto& shape = proto.shape;
-  if (layout == engine::DataLayout::Nchw)
-    return HeadGridShape{shape[0], shape[1], shape[2], shape[3]};
-  return HeadGridShape{shape[0], shape[3], shape[1], shape[2]};
+auto head_channels(const core::BufferProto& proto, engine::DataLayout layout) -> std::int64_t {
+  return proto.shape[layout == engine::DataLayout::Nchw ? 1 : 3];
 }
 
-auto HeadGridShape::stride(core::Size input) const -> core::Point2f {
+auto head_stride(const core::BufferProto& proto, engine::DataLayout layout, core::Size input) -> core::Point2f {
+  const auto rows = proto.shape[layout == engine::DataLayout::Nchw ? 2 : 1];
+  const auto cols = proto.shape[layout == engine::DataLayout::Nchw ? 3 : 2];
   return {static_cast<float>(static_cast<double>(input.width) / static_cast<double>(cols)),
           static_cast<float>(static_cast<double>(input.height) / static_cast<double>(rows))};
 }
@@ -210,7 +210,7 @@ auto CellScanner::scan_channel(const HeadGridView& grid, std::size_t channel, fl
   return cells_;
 }
 
-auto make_scratch(const engine::Engine& engine) -> Vector<core::Buffer> {
+auto create_scratch(const engine::Engine& engine) -> Vector<core::Buffer> {
   Vector<core::Buffer> scratch;
   for (const auto& output : engine.output_protos()) {
     auto& buffer = scratch.emplace_back(core::MemoryType::Cpu, core::DataType::Float32);
@@ -268,19 +268,19 @@ auto nms(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float i
 }
 
 auto check_config(std::string_view type, const kitzoo::json::Json& config) -> Vector<String> {
-  UniquePtr<PostprocessorBase> postprocessor = make_detect(type);
+  UniquePtr<PostprocessorBase> postprocessor = create_detect(type);
   if (postprocessor == nullptr)
-    postprocessor = make_rotated(type);
+    postprocessor = create_rotated(type);
   if (postprocessor == nullptr)
-    postprocessor = make_classify(type);
+    postprocessor = create_classify(type);
   if (postprocessor == nullptr)
-    postprocessor = make_embedding(type);
+    postprocessor = create_embedding(type);
   if (postprocessor == nullptr)
-    postprocessor = make_keypoint(type);
+    postprocessor = create_keypoint(type);
   if (postprocessor == nullptr)
-    postprocessor = make_segment(type);
+    postprocessor = create_segment(type);
   if (postprocessor == nullptr)
-    postprocessor = make_ocr(type);
+    postprocessor = create_ocr(type);
   if (postprocessor == nullptr)
     return {"postprocess.type: unknown \"" + String(type) + "\""};
   return postprocessor->check_config(config);

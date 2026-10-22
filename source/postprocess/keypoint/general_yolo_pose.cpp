@@ -41,8 +41,7 @@ public:
       return false;
     param_ = config.get<GeneralYoloPoseParam>();
     KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "general_yolo_pose: keypoint_num must be positive");
-    if (param_.class_num == 0 ||
-        !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
+    if (!expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
       return false;
     const auto& outputs = engine.output_protos();
@@ -119,7 +118,7 @@ private:
 
 } // namespace
 
-auto make_general_yolo_pose() -> UniquePtr<KeypointPostprocessor> {
+auto create_general_yolo_pose() -> UniquePtr<KeypointPostprocessor> {
   return std::make_unique<GeneralYoloPose>();
 }
 

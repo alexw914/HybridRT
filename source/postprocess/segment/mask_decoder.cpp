@@ -10,6 +10,7 @@
 #include <kitzoo/core/macro.hpp>
 #include <kitzoo/log/logger.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <opencv2/imgproc.hpp>
 
@@ -146,25 +147,25 @@ auto find_raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f
   Vector<core::Point2f> inferred;
   std::size_t selected_channels = 0;
   for (std::size_t candidate = 0; candidate < outputs.size(); ++candidate) {
-    const auto proto = HeadGridShape::from_proto(outputs[candidate], layout);
-    if (proto.batch != 1 || proto.channels <= 0 || proto.rows <= 0 || proto.cols <= 0)
+    const auto& shape = outputs[candidate].shape;
+    if (shape[0] != 1 || std::any_of(shape.begin(), shape.end(), [](std::int64_t dim) -> bool { return dim <= 0; }))
       continue;
-    RawSegmentOutputs found{{}, candidate, static_cast<std::size_t>(proto.channels)};
+    RawSegmentOutputs found{{}, candidate, static_cast<std::size_t>(head_channels(outputs[candidate], layout))};
     Vector<core::Point2f> candidate_strides;
     bool fits = true;
     auto candidate_channels = box_channels;
     for (std::size_t i = 0; i < outputs.size() && fits; ++i) {
       if (i == candidate)
         continue;
-      const auto head = HeadGridShape::from_proto(outputs[i], layout);
-      const auto channels = head.channels - static_cast<std::int64_t>(classes) - static_cast<std::int64_t>(found.masks);
+      const auto channels = head_channels(outputs[i], layout) - static_cast<std::int64_t>(classes) -
+                            static_cast<std::int64_t>(found.masks);
       fits = channels > 0 && channels % 4 == 0;
       if (fits && candidate_channels == 0)
         candidate_channels = static_cast<std::size_t>(channels);
       fits = fits && static_cast<std::size_t>(channels) == candidate_channels;
       if (fits) {
         found.heads.push_back(i);
-        candidate_strides.push_back(head.stride(input));
+        candidate_strides.push_back(head_stride(outputs[i], layout, input));
       }
     }
     if (!fits)

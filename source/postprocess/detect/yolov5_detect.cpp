@@ -88,7 +88,7 @@ private:
 
 } // namespace
 
-auto make_yolov5_detect() -> UniquePtr<DetectPostprocessor> {
+auto create_yolov5_detect() -> UniquePtr<DetectPostprocessor> {
   return std::make_unique<YoloV5Detect>();
 }
 

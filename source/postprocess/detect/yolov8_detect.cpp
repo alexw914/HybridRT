@@ -83,7 +83,7 @@ private:
 
 } // namespace
 
-auto make_yolov8_detect() -> UniquePtr<DetectPostprocessor> {
+auto create_yolov8_detect() -> UniquePtr<DetectPostprocessor> {
   return std::make_unique<YoloV8Detect>();
 }
 

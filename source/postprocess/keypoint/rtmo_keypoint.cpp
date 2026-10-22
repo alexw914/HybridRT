@@ -109,7 +109,7 @@ private:
 
 } // namespace
 
-auto make_rtmo_keypoint() -> UniquePtr<KeypointPostprocessor> {
+auto create_rtmo_keypoint() -> UniquePtr<KeypointPostprocessor> {
   return std::make_unique<RtmoKeypoint>();
 }
 

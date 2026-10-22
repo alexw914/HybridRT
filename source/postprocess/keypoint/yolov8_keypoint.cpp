@@ -139,7 +139,7 @@ private:
 
 } // namespace
 
-auto make_yolov8_keypoint() -> UniquePtr<KeypointPostprocessor> {
+auto create_yolov8_keypoint() -> UniquePtr<KeypointPostprocessor> {
   return std::make_unique<YoloV8Keypoint>();
 }
 

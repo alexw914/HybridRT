@@ -39,8 +39,7 @@ public:
     if (!is_float_outputs(engine, "e2e_rotated"))
       return false;
     param_ = config.get<E2ERotatedParam>();
-    if (param_.class_num == 0 ||
-        !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
+    if (!expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
       return false;
     const auto& outputs = engine.output_protos();
     KZ_CHECK_RETURN(engine.input_protos().size() == 1 && outputs.size() == 1 && outputs[0].shape.size() == 3 &&
@@ -82,7 +81,7 @@ private:
 
 } // namespace
 
-auto make_e2e_rotated() -> UniquePtr<RotatedPostprocessor> {
+auto create_e2e_rotated() -> UniquePtr<RotatedPostprocessor> {
   return std::make_unique<E2ERotated>();
 }
 

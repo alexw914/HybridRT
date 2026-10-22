@@ -29,8 +29,7 @@ public:
     if (!is_float_outputs(engine, "general_detect"))
       return false;
     param_ = config.get<GeneralDetectParam>();
-    if (param_.class_num == 0 ||
-        !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
+    if (!expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
       return false;
     const auto& outputs = engine.output_protos();
@@ -73,7 +72,7 @@ private:
 
 } // namespace
 
-auto make_general_detect() -> UniquePtr<DetectPostprocessor> {
+auto create_general_detect() -> UniquePtr<DetectPostprocessor> {
   return std::make_unique<GeneralDetect>();
 }
 

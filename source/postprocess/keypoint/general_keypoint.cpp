@@ -137,7 +137,7 @@ public:
     }
     KZ_CHECK_RETURN(type != KeypointOutput::PointWithVisible || outputs[2].shape[2] == 3, false,
                     "general_keypoint: visibility needs 3 states (unlabeled, invisible, visible)");
-    scratch_ = make_scratch(engine);
+    scratch_ = create_scratch(engine);
     data_.resize(outputs.size());
     return true;
   }
@@ -340,29 +340,29 @@ private:
 
 } // namespace
 
-auto make_general_keypoint() -> UniquePtr<KeypointPostprocessor> {
+auto create_general_keypoint() -> UniquePtr<KeypointPostprocessor> {
   return std::make_unique<GeneralKeypoint>();
 }
 
-auto make_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor> {
+auto create_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor> {
   if (type == "GeneralKeypoint")
-    return make_general_keypoint();
+    return create_general_keypoint();
   if (type == "GeneralYoloPose")
-    return make_general_yolo_pose();
+    return create_general_yolo_pose();
   if (type == "YoloV8Keypoint")
-    return make_yolov8_keypoint();
+    return create_yolov8_keypoint();
   if (type == "Yolo26Keypoint")
-    return make_yolo26_keypoint();
+    return create_yolo26_keypoint();
   if (type == "RtmoKeypoint")
-    return make_rtmo_keypoint();
+    return create_rtmo_keypoint();
   if (type == "E2EKeypoint")
-    return make_e2e_keypoint();
+    return create_e2e_keypoint();
   return nullptr;
 }
 
 auto create_keypoint_postprocessor(std::string_view type, const kitzoo::json::Json& config,
                                    const engine::Engine& engine) -> UniquePtr<KeypointPostprocessor> {
-  return init_or_abort(make_keypoint(type), type, config, engine);
+  return check_init_postprocess(create_keypoint(type), type, config, engine);
 }
 
 } // namespace hrt::postprocess

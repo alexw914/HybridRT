@@ -92,7 +92,7 @@ private:
 
 } // namespace
 
-auto make_yolo26_rotated() -> UniquePtr<RotatedPostprocessor> {
+auto create_yolo26_rotated() -> UniquePtr<RotatedPostprocessor> {
   return std::make_unique<Yolo26Rotated>();
 }
 

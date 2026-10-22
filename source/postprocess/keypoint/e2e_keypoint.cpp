@@ -41,8 +41,7 @@ public:
       return false;
     param_ = config.get<E2EKeypointParam>();
     KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "e2e_keypoint: keypoint_num must be positive");
-    if (param_.class_num == 0 ||
-        !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
+    if (!expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
       return false;
     const auto& outputs = engine.output_protos();
     KZ_CHECK_RETURN(engine.input_protos().size() == 1 && outputs.size() == 1 && outputs[0].shape.size() == 3 &&
@@ -95,7 +94,7 @@ private:
 
 } // namespace
 
-auto make_e2e_keypoint() -> UniquePtr<KeypointPostprocessor> {
+auto create_e2e_keypoint() -> UniquePtr<KeypointPostprocessor> {
   return std::make_unique<E2EKeypoint>();
 }
 

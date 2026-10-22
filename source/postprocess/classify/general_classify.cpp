@@ -46,7 +46,7 @@ public:
     if (!is_float_outputs(engine, "general_classify"))
       return false;
     activation_ = config.get<GeneralClassifyParam>().classify_postprocess_type;
-    scratch_ = make_scratch(engine);
+    scratch_ = create_scratch(engine);
     return true;
   }
 
@@ -84,17 +84,17 @@ private:
 
 } // namespace
 
-auto make_general_classify() -> UniquePtr<ClassifyPostprocessor> {
+auto create_general_classify() -> UniquePtr<ClassifyPostprocessor> {
   return std::make_unique<GeneralClassify>();
 }
 
-auto make_classify(std::string_view type) -> UniquePtr<ClassifyPostprocessor> {
-  return type == "GeneralClassify" ? make_general_classify() : nullptr;
+auto create_classify(std::string_view type) -> UniquePtr<ClassifyPostprocessor> {
+  return type == "GeneralClassify" ? create_general_classify() : nullptr;
 }
 
 auto create_classify_postprocessor(std::string_view type, const kitzoo::json::Json& config,
                                    const engine::Engine& engine) -> UniquePtr<ClassifyPostprocessor> {
-  return init_or_abort(make_classify(type), type, config, engine);
+  return check_init_postprocess(create_classify(type), type, config, engine);
 }
 
 } // namespace hrt::postprocess

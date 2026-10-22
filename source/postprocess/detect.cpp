@@ -31,25 +31,25 @@ auto nms(DetectResult& boxes, float iou_threshold) -> void {
   boxes = std::move(kept);
 }
 
-auto make_detect(std::string_view type) -> UniquePtr<DetectPostprocessor> {
+auto create_detect(std::string_view type) -> UniquePtr<DetectPostprocessor> {
   if (type == "YoloV8Detect")
-    return make_yolov8_detect();
+    return create_yolov8_detect();
   if (type == "Yolo26Detect")
-    return make_yolo26_detect();
+    return create_yolo26_detect();
   if (type == "YoloV5Detect")
-    return make_yolov5_detect();
+    return create_yolov5_detect();
   if (type == "GeneralDetect")
-    return make_general_detect();
+    return create_general_detect();
   if (type == "DetrDetect")
-    return make_detr_detect();
+    return create_detr_detect();
   if (type == "E2EDetect")
-    return make_e2e_detect();
+    return create_e2e_detect();
   return nullptr;
 }
 
 auto create_detect_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
     -> UniquePtr<DetectPostprocessor> {
-  return init_or_abort(make_detect(type), type, config, engine);
+  return check_init_postprocess(create_detect(type), type, config, engine);
 }
 
 auto nms_to_source(DetectResultMap& result, const Vector<float>& iou_threshold,
@@ -63,7 +63,7 @@ auto nms_to_source(DetectResultMap& result, const Vector<float>& iou_threshold,
 }
 
 auto resolve_yolov5_heads(YoloV5Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool {
-  if (param.class_num == 0 || !expand_per_class(param.confidence_threshold, param.class_num, "confidence_threshold") ||
+  if (!expand_per_class(param.confidence_threshold, param.class_num, "confidence_threshold") ||
       !expand_per_class(param.iou_threshold, param.class_num, "iou_threshold"))
     return false;
   if (!is_4d_outputs(engine, "yolov5"))
@@ -74,28 +74,28 @@ auto resolve_yolov5_heads(YoloV5Param& param, const engine::Engine& engine, std:
                   "yolov5: needs one anchor list per head, got {} outputs", outputs.size());
   Vector<core::Point2f> inferred;
   for (std::size_t i = 0; i < outputs.size(); ++i) {
-    const auto head = HeadGridShape::from_proto(outputs[i], engine.proto().output_layout);
+    const auto channels = head_channels(outputs[i], engine.proto().output_layout);
     const auto anchors = param.anchors[i].size() / 2;
     if (anchors == 0 || param.anchors[i].size() % 2 != 0 ||
-        static_cast<std::size_t>(head.channels) != (param.class_num + 5 + extra_channels) * anchors) {
+        static_cast<std::size_t>(channels) != (param.class_num + 5 + extra_channels) * anchors) {
       KZ_LOG_ERROR("yolov5: output {} does not match the anchors or class_num", i);
       return false;
     }
-    inferred.push_back(head.stride(input));
+    inferred.push_back(head_stride(outputs[i], engine.proto().output_layout, input));
   }
   param.strides = std::move(inferred);
   return true;
 }
 
 auto resolve_yolov8_heads(YoloV8Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool {
-  if (param.class_num == 0 || !expand_per_class(param.confidence_threshold, param.class_num, "confidence_threshold") ||
+  if (!expand_per_class(param.confidence_threshold, param.class_num, "confidence_threshold") ||
       !expand_per_class(param.iou_threshold, param.class_num, "iou_threshold"))
     return false;
   if (!is_4d_outputs(engine, "yolov8"))
     return false;
   const auto input = *engine.input_size();
   const auto& outputs = engine.output_protos();
-  const auto channels = HeadGridShape::from_proto(outputs.front(), engine.proto().output_layout).channels -
+  const auto channels = head_channels(outputs.front(), engine.proto().output_layout) -
                         static_cast<std::int64_t>(param.class_num) - static_cast<std::int64_t>(extra_channels);
   KZ_CHECK_RETURN(channels > 0 && channels % 4 == 0, false, "yolov8: invalid channels for reg_max");
   const auto inferred_bins = static_cast<std::size_t>(channels / 4);
@@ -104,12 +104,12 @@ auto resolve_yolov8_heads(YoloV8Param& param, const engine::Engine& engine, std:
   param.reg_max = inferred_bins;
   Vector<core::Point2f> inferred;
   for (std::size_t i = 0; i < outputs.size(); ++i) {
-    const auto head = HeadGridShape::from_proto(outputs[i], engine.proto().output_layout);
-    if (static_cast<std::size_t>(head.channels) != param.reg_max * 4 + param.class_num + extra_channels) {
+    if (static_cast<std::size_t>(head_channels(outputs[i], engine.proto().output_layout)) !=
+        param.reg_max * 4 + param.class_num + extra_channels) {
       KZ_LOG_ERROR("yolov8: output {} does not match reg_max or class_num", i);
       return false;
     }
-    inferred.push_back(head.stride(input));
+    inferred.push_back(head_stride(outputs[i], engine.proto().output_layout, input));
   }
   param.strides = std::move(inferred);
   return true;

@@ -39,8 +39,7 @@ public:
     if (!is_float_outputs(engine, "e2e_segment"))
       return false;
     param_ = config.get<E2ESegmentParam>();
-    if (param_.class_num == 0 ||
-        !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
+    if (!expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
       return false;
     const auto& outputs = engine.output_protos();
     KZ_CHECK_RETURN(engine.proto().output_layout == engine::DataLayout::Nchw && outputs.size() == 2, false,
@@ -101,7 +100,7 @@ private:
 
 } // namespace
 
-auto make_e2e_segment() -> UniquePtr<SegmentPostprocessor> {
+auto create_e2e_segment() -> UniquePtr<SegmentPostprocessor> {
   return std::make_unique<E2ESegment>();
 }
 

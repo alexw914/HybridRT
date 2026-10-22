@@ -44,8 +44,7 @@ public:
       return false;
     param_ = config.get<YoloV8SegmentParam>();
     KZ_CHECK_RETURN(!config.contains("reg_max") || param_.reg_max > 0, false, "reg_max must be positive when supplied");
-    if (param_.class_num == 0 ||
-        !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
+    if (!expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold") ||
         !expand_per_class(param_.iou_threshold, param_.class_num, "iou_threshold"))
       return false;
     auto box_channels = param_.reg_max * 4;
@@ -139,7 +138,7 @@ private:
 
 } // namespace
 
-auto make_yolov8_segment() -> UniquePtr<SegmentPostprocessor> {
+auto create_yolov8_segment() -> UniquePtr<SegmentPostprocessor> {
   return std::make_unique<YoloV8Segment>();
 }
 

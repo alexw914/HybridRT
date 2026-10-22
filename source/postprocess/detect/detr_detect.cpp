@@ -30,7 +30,7 @@ public:
     param_ = config.get<DetrParam>();
     if (!config.contains("confidence_threshold"))
       param_.confidence_threshold = {0.25F};
-    if (param_.class_num == 0 || param_.background_class < -1 ||
+    if (param_.background_class < -1 ||
         static_cast<std::int64_t>(param_.background_class) > static_cast<std::int64_t>(param_.class_num) ||
         !expand_per_class(param_.confidence_threshold, param_.class_num, "confidence_threshold"))
       return false;
@@ -116,7 +116,7 @@ private:
 
 } // namespace
 
-auto make_detr_detect() -> UniquePtr<DetectPostprocessor> {
+auto create_detr_detect() -> UniquePtr<DetectPostprocessor> {
   return std::make_unique<DetrDetect>();
 }
 

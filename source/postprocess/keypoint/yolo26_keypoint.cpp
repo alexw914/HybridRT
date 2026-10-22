@@ -134,7 +134,7 @@ private:
 
 } // namespace
 
-auto make_yolo26_keypoint() -> UniquePtr<KeypointPostprocessor> {
+auto create_yolo26_keypoint() -> UniquePtr<KeypointPostprocessor> {
   return std::make_unique<Yolo26Keypoint>();
 }
 
