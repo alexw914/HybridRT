@@ -169,12 +169,12 @@ TEST_F(ImageModelTest, PicksTheFirstUsableEngine) {
 }
 
 TEST_F(ImageModelTest, ChecksConfigWithoutThrowing) {
-  using hrt::model::check_config;
-  EXPECT_TRUE(check_config(classify_algo(R"({"resize_type": "center_keep_ratio"})")).empty());
-  EXPECT_EQ(check_config(classify_algo(R"({"resize_typ": "normal"})")).size(), 1U);
-  EXPECT_EQ(check_config(classify_algo(R"({"resize_type": "stretch"})")).size(), 1U);
-  EXPECT_EQ(check_config(classify_algo(R"({"mean": [0, 0]})")).size(), 1U);
-  EXPECT_EQ(check_config(classify_algo("{}", "Mystery")).size(), 1U);
+  using hrt::model::check_algo_config;
+  EXPECT_TRUE(check_algo_config(classify_algo(R"({"resize_type": "center_keep_ratio"})")).empty());
+  EXPECT_EQ(check_algo_config(classify_algo(R"({"resize_typ": "normal"})")).size(), 1U);
+  EXPECT_EQ(check_algo_config(classify_algo(R"({"resize_type": "stretch"})")).size(), 1U);
+  EXPECT_EQ(check_algo_config(classify_algo(R"({"mean": [0, 0]})")).size(), 1U);
+  EXPECT_EQ(check_algo_config(classify_algo("{}", "Mystery")).size(), 1U);
   // Stage counts are ImageModelOptions and engine settings each engine's
   // config, so neither belongs in the algo config.
   const auto with = [](const char* section, const kitzoo::json::Json& value) -> hrt::hrtc::AlgoParam {
@@ -184,9 +184,9 @@ TEST_F(ImageModelTest, ChecksConfigWithoutThrowing) {
     algo.config = config.dump();
     return algo;
   };
-  EXPECT_EQ(check_config(with("preprocess", {{"num", 2}})).size(), 1U);
-  EXPECT_EQ(check_config(with("postprocess", {{"type", "GeneralClassify"}, {"num", 2}})).size(), 1U);
-  EXPECT_EQ(check_config(with("engine", {{"num", 2}})).size(), 1U);
+  EXPECT_EQ(check_algo_config(with("preprocess", {{"num", 2}})).size(), 1U);
+  EXPECT_EQ(check_algo_config(with("postprocess", {{"type", "GeneralClassify"}, {"num", 2}})).size(), 1U);
+  EXPECT_EQ(check_algo_config(with("engine", {{"num", 2}})).size(), 1U);
 }
 
 TEST_F(ImageModelTest, CreatesContextForEngineAndPreprocessor) {

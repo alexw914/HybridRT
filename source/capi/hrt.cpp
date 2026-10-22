@@ -162,7 +162,7 @@ auto device_of(hrt::preprocess::ImagePreprocessorType type) -> core::DeviceType 
 
 // Whether ImageModel::create finds an engine to load instead of aborting:
 // one compiled in whose device, shared with the preprocessor, is usable.
-// `algo` passed check_config.
+// `algo` passed check_algo_config.
 auto check_engines(const hrt::hrtc::AlgoParam& algo) -> HrtStatus {
   const kitzoo::json::Reader reader{algo.config};
   const auto preprocess = reader.raw()
@@ -461,7 +461,7 @@ auto hrt_model_create(const HrtPackage* package, const char* algo, const HrtMode
     if (num < 1 || num > kMaxStageNum)
       return fail(HRT_STATUS_INVALID_ARGUMENT, "stage counts must be in [1, " + std::to_string(kMaxStageNum) + "]");
   }
-  const auto problems = model::check_config(*param);
+  const auto problems = model::check_algo_config(*param);
   if (!problems.empty())
     return fail(HRT_STATUS_INVALID_CONFIG, "invalid config of algo " + param->name + ": " + core::join(problems));
   const auto task = model::task_of(*param);

@@ -137,7 +137,8 @@ TEST(SegmentTest, AbortsOnMismatchedOutputs) {
   config["class_num"] = 2;
   EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", config, engine), "");
   EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("Mystery", segment_config(), engine), "");
-  EXPECT_EQ(hrt::postprocess::check_config("SemanticSegment", Json::parse(R"({"class_num": 3})")).size(), 1U);
+  EXPECT_EQ(hrt::postprocess::check_postprocess_config("SemanticSegment", Json::parse(R"({"class_num": 3})")).size(),
+            1U);
 }
 
 // One stride-8 head of the 16x16 input (2x2 cells) whose cell (0, 0) holds
@@ -227,7 +228,7 @@ TEST(SegmentTest, ChecksExplicitRawHeadStrides) {
       config["reg_max"] = 1;
     EXPECT_NE(hrt::postprocess::create_segment_postprocessor(type, config, engine), nullptr);
     config["strides"] = {16, 8};
-    EXPECT_FALSE(hrt::postprocess::check_config(type, config).empty());
+    EXPECT_FALSE(hrt::postprocess::check_postprocess_config(type, config).empty());
   }
 }
 

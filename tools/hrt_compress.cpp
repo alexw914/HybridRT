@@ -88,7 +88,7 @@ auto extract(const hrt::hrtc::Package& package, const std::filesystem::path& dir
 auto check(const hrt::hrtc::Package& package, bool as_error) -> bool {
   bool clean = true;
   for (const auto& algo : package.algos) {
-    for (const auto& problem : hrt::model::check_config(algo)) {
+    for (const auto& problem : hrt::model::check_algo_config(algo)) {
       if (as_error)
         KZ_LOG_ERROR("Algo {}: {}", algo.name, problem);
       else

@@ -39,7 +39,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralClassifyParam, classify_p
 class GeneralClassify final : public ClassifyPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    return check_section<GeneralClassifyParam>(config);
+    core::Problems problems;
+    core::check_param<GeneralClassifyParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {

@@ -29,7 +29,7 @@ typedef enum HrtStatus {
   HRT_STATUS_OK = 0,
   HRT_STATUS_INVALID_ARGUMENT = 1, // Null pointer, out-of-range option or unsupported image.
   HRT_STATUS_NOT_FOUND = 2,        // Package unreadable or algo missing.
-  HRT_STATUS_INVALID_CONFIG = 3,   // The algo config fails check_config.
+  HRT_STATUS_INVALID_CONFIG = 3,   // The algo config fails check_algo_config.
   HRT_STATUS_UNAVAILABLE = 4,      // No engine of the algo is compiled in with a usable device.
   HRT_STATUS_PROCESS_FAILED = 5,   // Preprocessing, inference or postprocessing failed.
 } HrtStatus;

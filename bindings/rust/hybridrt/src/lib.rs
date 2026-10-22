@@ -42,7 +42,7 @@ pub use sys::HrtRotatedBox as RotatedBox;
 pub enum Status {
     InvalidArgument, // Null pointer, out-of-range option or unsupported image.
     NotFound,        // Package unreadable or algo missing.
-    InvalidConfig,   // The algo config fails check_config.
+    InvalidConfig,   // The algo config fails check_algo_config.
     Unavailable,     // No engine of the algo is compiled in with a usable device.
     ProcessFailed,   // Preprocessing, inference or postprocessing failed.
     Unknown,         // A status this crate does not know.

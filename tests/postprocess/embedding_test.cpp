@@ -60,10 +60,10 @@ TEST(EmbeddingTest, NeedsOneOutput) {
 }
 
 TEST(EmbeddingTest, TakesNoParameters) {
-  EXPECT_TRUE(hrt::postprocess::check_config("Embedding", kitzoo::json::Json::object()).empty());
-  EXPECT_FALSE(
-      hrt::postprocess::check_config("Embedding", kitzoo::json::Json::parse(R"({"classify_postprocess_type": "none"})"))
-          .empty());
+  EXPECT_TRUE(hrt::postprocess::check_postprocess_config("Embedding", kitzoo::json::Json::object()).empty());
+  EXPECT_FALSE(hrt::postprocess::check_postprocess_config(
+                   "Embedding", kitzoo::json::Json::parse(R"({"classify_postprocess_type": "none"})"))
+                   .empty());
 }
 
 } // namespace

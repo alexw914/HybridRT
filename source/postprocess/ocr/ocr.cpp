@@ -62,7 +62,8 @@ public:
     if (!config.is_object() || !config.contains("stage") || !config["stage"].is_string())
       return {"postprocess.stage: expected detection or recognition"};
     if (config["stage"] == "detection") {
-      auto problems = check_section<DetectionParam>(config);
+      core::Problems problems;
+      core::check_param<DetectionParam>(config, "postprocess", {"type"}, problems);
       if (!problems.empty())
         return problems;
       const auto param = config.get<DetectionParam>();
@@ -77,7 +78,8 @@ public:
     }
     if (config["stage"] != "recognition")
       return {"postprocess.stage: expected detection or recognition"};
-    auto problems = check_section<RecognitionParam>(config);
+    core::Problems problems;
+    core::check_param<RecognitionParam>(config, "postprocess", {"type"}, problems);
     if (!problems.empty())
       return problems;
     const auto param = config.get<RecognitionParam>();

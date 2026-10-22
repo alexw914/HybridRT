@@ -161,14 +161,6 @@ auto create_scratch(const engine::Engine& engine) -> Vector<core::Buffer>;
 // Indices of the rects kept by greedy NMS, highest score first.
 auto nms(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold) -> Vector<std::size_t>;
 
-// check_config of a decoder reading `Param` from the "postprocess" section.
-template <typename Param>
-auto check_section(const kitzoo::json::Json& config) -> Vector<String> {
-  core::Problems problems;
-  core::check_param<Param>(config, "postprocess", {"type"}, problems);
-  return problems;
-}
-
 // Checks and initializes a postprocessor made for `type`. Aborts on an unknown
 // type, a config check_config rejects, an engine without one image input, or
 // engine outputs init() rejects. init() may therefore dereference

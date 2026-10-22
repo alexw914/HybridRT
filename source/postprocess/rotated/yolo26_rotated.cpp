@@ -23,7 +23,9 @@ namespace {
 class Yolo26Rotated final : public RotatedPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    return check_section<Yolo26Param>(config);
+    core::Problems problems;
+    core::check_param<Yolo26Param>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {

@@ -267,20 +267,28 @@ auto nms(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float i
   return kept;
 }
 
-auto check_config(std::string_view type, const kitzoo::json::Json& config) -> Vector<String> {
-  UniquePtr<PostprocessorBase> postprocessor = create_detect(type);
-  if (postprocessor == nullptr)
-    postprocessor = create_rotated(type);
-  if (postprocessor == nullptr)
-    postprocessor = create_classify(type);
-  if (postprocessor == nullptr)
-    postprocessor = create_embedding(type);
-  if (postprocessor == nullptr)
-    postprocessor = create_keypoint(type);
-  if (postprocessor == nullptr)
-    postprocessor = create_segment(type);
-  if (postprocessor == nullptr)
-    postprocessor = create_ocr(type);
+namespace {
+
+auto create_any(std::string_view type) -> UniquePtr<PostprocessorBase> {
+  if (auto postprocessor = create_detect(type))
+    return postprocessor;
+  if (auto postprocessor = create_rotated(type))
+    return postprocessor;
+  if (auto postprocessor = create_classify(type))
+    return postprocessor;
+  if (auto postprocessor = create_embedding(type))
+    return postprocessor;
+  if (auto postprocessor = create_keypoint(type))
+    return postprocessor;
+  if (auto postprocessor = create_segment(type))
+    return postprocessor;
+  return create_ocr(type);
+}
+
+} // namespace
+
+auto check_postprocess_config(std::string_view type, const kitzoo::json::Json& config) -> Vector<String> {
+  const auto postprocessor = create_any(type);
   if (postprocessor == nullptr)
     return {"postprocess.type: unknown \"" + String(type) + "\""};
   return postprocessor->check_config(config);

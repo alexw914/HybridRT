@@ -122,7 +122,7 @@ auto check(const hrtc::AlgoParam& algo, bool builtin_postprocess) -> core::Probl
   if (type == postprocess.end() || !type->is_string()) {
     problems.emplace_back("postprocess.type: expected a string");
   } else if (builtin_postprocess) {
-    const auto found = postprocess::check_config(type->get_ref<const String&>(), postprocess);
+    const auto found = postprocess::check_postprocess_config(type->get_ref<const String&>(), postprocess);
     problems.insert(problems.end(), found.begin(), found.end());
   }
   return problems;
@@ -226,7 +226,7 @@ auto task_of(const hrtc::AlgoParam& algo) -> std::optional<Task> {
   return type != postprocess->end() && type->is_string() ? task_of(type->get_ref<const String&>()) : std::nullopt;
 }
 
-auto check_config(const hrtc::AlgoParam& algo) -> Vector<String> {
+auto check_algo_config(const hrtc::AlgoParam& algo) -> Vector<String> {
   return check(algo, true);
 }
 

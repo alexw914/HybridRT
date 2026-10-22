@@ -85,8 +85,10 @@ TEST(RotatedTest, GeneralDecodesObb) {
   EXPECT_FLOAT_EQ(rect.size.height, 10.0F);
   EXPECT_NEAR(rect.angle, 15.0F, 1e-4F);
 
-  EXPECT_EQ(hrt::postprocess::check_config("GeneralRotated", kitzoo::json::Json::parse(R"({"unknown_key": 1})")).size(),
-            1U);
+  EXPECT_EQ(
+      hrt::postprocess::check_postprocess_config("GeneralRotated", kitzoo::json::Json::parse(R"({"unknown_key": 1})"))
+          .size(),
+      1U);
 }
 
 TEST(RotatedTest, Yolo26ReadsDistancesAndRadians) {

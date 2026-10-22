@@ -83,10 +83,10 @@ TEST(DetrDetectTest, RejectsNonfiniteAndEmptyBoxesAndClearsResults) {
 }
 
 TEST(DetrDetectTest, ChecksConfigAndOutputContract) {
-  EXPECT_TRUE(hrt::postprocess::check_config("DetrDetect", Json::parse(R"({"class_num":2})")).empty());
+  EXPECT_TRUE(hrt::postprocess::check_postprocess_config("DetrDetect", Json::parse(R"({"class_num":2})")).empty());
   for (const auto* text : {R"({"class_num":"two"})", R"({"class_num":-1})", R"({"class_num":2,"iou_threshold":[0.5]})",
                            R"({"class_num":2,"confidence_threshold":["high"]})"})
-    EXPECT_FALSE(hrt::postprocess::check_config("DetrDetect", Json::parse(text)).empty());
+    EXPECT_FALSE(hrt::postprocess::check_postprocess_config("DetrDetect", Json::parse(text)).empty());
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {proto(DataType::Float32, {1, 2, 6})});
   for (const auto* text :
@@ -156,7 +156,7 @@ TEST(DetrDetectTest, PacksStridedQueries) {
 
 TEST(DetrDetectTest, RejectsMismatchedSeparateQueriesAndRemovedOutputKeys) {
   for (const auto* text : {R"({"class_num":2,"score_activation":"auto"})", R"({"class_num":2,"output_format":"auto"})"})
-    EXPECT_FALSE(hrt::postprocess::check_config("DetrDetect", Json::parse(text)).empty());
+    EXPECT_FALSE(hrt::postprocess::check_postprocess_config("DetrDetect", Json::parse(text)).empty());
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})},
                     {proto(DataType::Float32, {1, 2, 4}), proto(DataType::Float32, {1, 3, 2})});
@@ -171,7 +171,7 @@ TEST(DetrDetectTest, RejectsMismatchedSeparateQueriesAndRemovedOutputKeys) {
   for (const auto* key : {"boxes_output", "scores_output"}) {
     auto removed = Json::parse(R"({"class_num":2,"output_format":"separate"})");
     removed[key] = 0;
-    EXPECT_FALSE(hrt::postprocess::check_config("DetrDetect", removed).empty());
+    EXPECT_FALSE(hrt::postprocess::check_postprocess_config("DetrDetect", removed).empty());
   }
   FakeEngine valid({proto(DataType::Float32, {1, 3, 40, 40})},
                    {proto(DataType::Float32, {1, 2, 4}), proto(DataType::Float32, {1, 2, 2})});

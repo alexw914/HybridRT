@@ -30,7 +30,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2EDetectParam, class_num, confi
 class E2EDetect final : public DetectPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    return check_section<E2EDetectParam>(config);
+    core::Problems problems;
+    core::check_param<E2EDetectParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {

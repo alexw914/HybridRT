@@ -88,7 +88,7 @@ TEST(YoloV8KeypointTest, DefaultsToSeventeenVisibleKeypointsAndSixteenBins) {
   // 4 x 16 bins + 1 class + 17 x 3 keypoint values.
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 116, 2, 2})});
   const auto options = Json::parse(R"({"class_num":1,"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
-  EXPECT_TRUE(hrt::postprocess::check_config("YoloV8Keypoint", options).empty());
+  EXPECT_TRUE(hrt::postprocess::check_postprocess_config("YoloV8Keypoint", options).empty());
   EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, engine), nullptr);
 }
 

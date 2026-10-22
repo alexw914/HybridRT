@@ -56,7 +56,8 @@ TEST(GeneralYoloPoseTest, AbortsOnOutputsThatDoNotFit) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {proto(DataType::Float32, {1, 10, 4})});
   EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("GeneralYoloPose", config(), engine), "");
-  EXPECT_EQ(hrt::postprocess::check_config("GeneralYoloPose", Json::parse(R"({"keypoints": 17})")).size(), 1U);
+  EXPECT_EQ(hrt::postprocess::check_postprocess_config("GeneralYoloPose", Json::parse(R"({"keypoints": 17})")).size(),
+            1U);
 }
 
 } // namespace

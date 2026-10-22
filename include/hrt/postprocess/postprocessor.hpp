@@ -64,7 +64,7 @@ protected:
 
 // Problems in a "postprocess" section for built-in `type`, including an
 // unknown type.
-auto check_config(std::string_view type, const kitzoo::json::Json& config) -> Vector<String>;
+auto check_postprocess_config(std::string_view type, const kitzoo::json::Json& config) -> Vector<String>;
 
 } // namespace hrt::postprocess
 

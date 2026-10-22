@@ -85,7 +85,9 @@ auto argmax(const float* begin, std::int64_t count) -> std::int64_t {
 class GeneralKeypoint final : public KeypointPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    return check_section<GeneralKeypointParam>(config);
+    core::Problems problems;
+    core::check_param<GeneralKeypointParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {

@@ -19,7 +19,7 @@ namespace hrt::model {
 namespace {
 
 auto check_stage(const hrtc::AlgoParam& algo, std::string_view stage) -> core::Problems {
-  auto problems = check_config(algo);
+  auto problems = check_algo_config(algo);
   if (!problems.empty())
     return problems;
   const kitzoo::json::Reader reader{algo.config};

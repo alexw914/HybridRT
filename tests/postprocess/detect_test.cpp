@@ -79,7 +79,7 @@ TEST(DetectTest, InfersStridesInOutputOrderAndChecksExplicitValues) {
     EXPECT_NE(hrt::postprocess::create_detect_postprocessor(type, config, engine), nullptr);
     // Strides are always inferred, so a configured list is an unknown key.
     config["strides"] = {16, 8};
-    EXPECT_FALSE(hrt::postprocess::check_config(type, config).empty());
+    EXPECT_FALSE(hrt::postprocess::check_postprocess_config(type, config).empty());
   }
 }
 
@@ -197,7 +197,7 @@ TEST(DetectYolo26Test, ReadsDistancesInCells) {
   FakeEngine bins({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 65, 2, 2})});
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("Yolo26Detect", config, bins), "");
-  EXPECT_EQ(hrt::postprocess::check_config("Yolo26Detect", Json::parse(R"({"reg_max": 1})")).size(), 1U);
+  EXPECT_EQ(hrt::postprocess::check_postprocess_config("Yolo26Detect", Json::parse(R"({"reg_max": 1})")).size(), 1U);
 }
 
 TEST(DetectYoloV5Test, KeepsLowObjectnessAboveThreshold) {
@@ -230,14 +230,14 @@ TEST(DetectYoloV5Test, TakesOneStrideAndAnchorListPerHead) {
   // Two anchors in the head: 2 * (class_num + 5) channels.
   const auto good = Json::parse(
       R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "anchors": [[8, 8, 16, 16]]})");
-  EXPECT_TRUE(hrt::postprocess::check_config("YoloV5Detect", good).empty());
+  EXPECT_TRUE(hrt::postprocess::check_postprocess_config("YoloV5Detect", good).empty());
   EXPECT_NE(hrt::postprocess::create_detect_postprocessor("YoloV5Detect", good, engine), nullptr);
 
   // The removed head_num, anchors_per_head and strides_per_head are unknown keys.
   const auto old = Json::parse(
       R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "head_num": 1, "anchors_per_head": [2], "strides_per_head": [8],
                                    "anchors": [[8, 8, 16, 16]]})");
-  EXPECT_EQ(hrt::postprocess::check_config("YoloV5Detect", old).size(), 3U);
+  EXPECT_EQ(hrt::postprocess::check_postprocess_config("YoloV5Detect", old).size(), 3U);
 
   for (const auto* bad :
        {R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "anchors": [[8, 8, 16]]})",
@@ -327,7 +327,7 @@ TEST(DetectGeneralTest, DecodesInt8) {
 
 TEST(DetectGeneralTest, ChecksConfigWithoutThrowing) {
   const auto problems = [](std::string_view config) -> hrt::Vector<hrt::String> {
-    return hrt::postprocess::check_config("GeneralDetect", Json::parse(config));
+    return hrt::postprocess::check_postprocess_config("GeneralDetect", Json::parse(config));
   };
   EXPECT_TRUE(problems(R"({"type": "GeneralDetect", "class_num": 1})").empty());
   EXPECT_EQ(problems(R"({"type": "GeneralDetect", "num": 2})").size(), 1U);
@@ -336,7 +336,7 @@ TEST(DetectGeneralTest, ChecksConfigWithoutThrowing) {
   EXPECT_EQ(problems(R"({"confidence_treshold": [0.5]})").size(), 1U);
   EXPECT_EQ(problems(R"({"confidence_threshold": ["high"]})").size(), 1U);
   EXPECT_EQ(problems(R"({"box_format": "cxcywh"})").size(), 1U);
-  EXPECT_EQ(hrt::postprocess::check_config("Mystery", Json::object()).size(), 1U);
+  EXPECT_EQ(hrt::postprocess::check_postprocess_config("Mystery", Json::object()).size(), 1U);
 
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {proto(DataType::Float32, {1, 5, 2})});

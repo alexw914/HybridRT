@@ -36,7 +36,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8SegmentParam, class_num, r
 class YoloV8Segment final : public SegmentPostprocessor {
 public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    return check_section<YoloV8SegmentParam>(config);
+    core::Problems problems;
+    core::check_param<YoloV8SegmentParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {

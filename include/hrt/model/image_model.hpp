@@ -44,7 +44,7 @@ auto task_of(const hrtc::AlgoParam& algo) -> std::optional<Task>;
 
 // Problems in the config of `algo` (unknown keys, mistyped or unknown values,
 // unknown postprocess type), one line each; never throws.
-auto check_config(const hrtc::AlgoParam& algo) -> Vector<String>;
+auto check_algo_config(const hrtc::AlgoParam& algo) -> Vector<String>;
 
 // How many calls each stage serves at once, 1 to 64. Every resource is pooled
 // up front: preprocessors, engines, postprocessors, input and output buffers
@@ -65,7 +65,7 @@ public:
 
   // Runs everything in `context`: CPU engines run under any context, device
   // engines and device preprocessors (cuda, dvpp) need one of their device.
-  // Aborts when the config fails check_config (only "postprocess.type" with a
+  // Aborts when the config fails check_algo_config (only "postprocess.type" with a
   // custom factory), `options` is out of range, no engine runs on `context`,
   // or the engine does not fit the config.
   static auto create(const hrtc::AlgoParam& algo, SharedPtr<core::Context> context,
