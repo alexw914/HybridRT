@@ -68,11 +68,16 @@ auto CudaMemory::ref() -> SharedPtr<core::Memory> {
 }
 
 auto CudaMemory::resize(const core::Shape& shape, const core::Stride& stride) -> bool {
-  auto memory_stride = stride;
-  if (memory_stride.empty())
+  core::Stride memory_stride;
+  if (stride.empty()) {
     memory_stride = core::contiguous_stride(shape);
-  else if (!memory::check_stride(shape, memory_stride))
-    return false;
+  } else {
+    if (shape == shape_ && stride == stride_ && stride.front() <= pointer_->capacity)
+      return true;
+    if (!memory::check_stride(shape, stride))
+      return false;
+    memory_stride = stride;
+  }
   const auto size = memory_stride.front();
   if (size > pointer_->capacity) {
     if (!pointer_->owned) {

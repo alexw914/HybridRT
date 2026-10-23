@@ -4,6 +4,41 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-23: avoid resetting image layouts and rechecking unchanged explicit strides
+
+**Bottleneck.** Code inspection found that `Image::wrap()` established the final memory
+layout, but the intermediate `Buffer` constructor reset it to `{0}` before image initialization
+restored it. Repeated explicit-stride `resize()` also copied and checked the same layout again.
+
+**Change.** Memory-backed images construct their buffer with the final element shape, type
+and stride. CPU, DMA-buffer, CUDA, pinned-host and Ascend memory reuse an unchanged explicit
+layout while its allocation still fits; new explicit layouts remain checked. Default strides
+are computed directly without an extra equality comparison.
+
+**Measurement.** Apple M5 Pro, macOS arm64, Release, Google Benchmark
+`hybridrt_bench_preprocess`, one caller, OpenCV threads = 1. The baseline was commit `233982d`;
+both versions used the same benchmark source. The two binaries ran sequentially in alternating
+order for three rounds, each with three repetitions of at least 0.2 s; numbers are the median
+of the round medians. No concurrent CTest or other benchmark process was launched. Layout
+cases use a synthetic 640 x 480 RGB uint8 image with a 1984-byte row pitch, without inference.
+
+| Case | Before | After |
+| --- | ---: | ---: |
+| `BM_ImageLayout/0`: wrap padded image, including initialization | 240.24 ns | 174.15 ns |
+| `BM_ImageLayout/1`: resize with the same explicit stride | 29.14 ns | 4.23 ns |
+| `BM_ImageLayout/2`: reshape with a default stride | 47.27 ns | 47.17 ns |
+
+A separate six-round alternating comparison of `BM_Convert/0`, with three repetitions of
+at least 0.5 s per round, gave 0.03754 ms before
+and 0.03637 ms after. This is a CPU RGB identity copy on the 810 x 1080 `bus.jpg`; the
+round medians ranged from 0.03663 to 0.03807 ms before and 0.03229 to 0.03754 ms after.
+No general preprocessing throughput gain is claimed.
+
+**Remaining.** Default stride computation still runs when no explicit stride is supplied.
+A layout transferred to a different destination is checked when first established there;
+subsequent identical explicit resizes reuse it. CUDA, DMA/RGA and Ascend were not measured
+on hardware. Allocation, mapping and synchronization failures retain their existing handling.
+
 ## 2026-10-22: skip score blocks below the threshold and argmax semantic maps in pixel blocks
 
 **Bottleneck.** Profiling `hybridrt_bench_postprocess` with `sample` showed two hot loops.

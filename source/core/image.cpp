@@ -86,10 +86,19 @@ auto Image::wrap(MemoryType memory_type, void* data, ImageFormat format, Size si
 }
 
 Image::Image(MemoryType memory_type, ImageFormat format, DataType data_type, Size size, const Stride& stride)
-    : Image(std::make_shared<Buffer>(memory_type), format, data_type, size, stride) {}
+    : Image(SharedPtr<Memory>(Memory::create(memory_type)), format, data_type, size, stride) {}
 
 Image::Image(SharedPtr<Memory> memory, ImageFormat format, DataType data_type, Size size, const Stride& stride)
-    : Image(std::make_shared<Buffer>(std::move(memory)), format, data_type, size, stride) {}
+    : format_(format), size_(size) {
+  auto shape = image_shape(format, size);
+  if (!shape) {
+    KZ_LOG_ERROR("Image: unsupported format");
+    return;
+  }
+  buffer_ = std::make_shared<Buffer>(std::move(memory), data_type == DataType::Unknown ? DataType::Uint8 : data_type,
+                                     *shape, stride);
+  valid_ = buffer_->valid();
+}
 
 Image::Image(SharedPtr<Buffer> buffer, ImageFormat format, DataType data_type, Size size, const Stride& stride)
     : buffer_(std::move(buffer)) {

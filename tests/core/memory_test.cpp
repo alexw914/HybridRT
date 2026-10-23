@@ -6,6 +6,7 @@
 
 #include <hrt/core/buffer.hpp>
 #include <hrt/core/context.hpp>
+#include <hrt/core/image.hpp>
 #include <hrt/core/memory.hpp>
 
 #include <gtest/gtest.h>
@@ -86,6 +87,55 @@ TEST(MemoryTest, BufferUsesElementShape) {
   EXPECT_EQ(copy.data_type(), hrt::core::DataType::Float32);
   EXPECT_EQ(copy.shape(), buffer.shape());
   EXPECT_FLOAT_EQ(static_cast<const float*>(copy.memory()->cpu())[11], 11.0F);
+}
+
+TEST(MemoryTest, ReusesLayoutAndStillAppliesNewStrides) {
+  hrt::Array<std::uint8_t, 24> storage{};
+  const hrt::core::Shape shape{3, 4};
+  const hrt::core::Stride padded{18, 6};
+  auto memory = hrt::core::Memory::wrap(hrt::core::MemoryType::Cpu, storage.data(), 0, storage.size(), shape, padded);
+  ASSERT_NE(memory, nullptr);
+  auto* data = static_cast<std::uint8_t*>(memory->mutable_cpu());
+  data[7] = 42;
+  auto view = memory->ref();
+  EXPECT_TRUE(memory->resize(shape, padded));
+  EXPECT_EQ(memory->cpu(), data);
+  EXPECT_EQ(memory->head(), hrt::core::SyncedHead::AtCpu);
+  EXPECT_EQ(data[7], 42);
+  EXPECT_EQ(view->stride(), padded);
+
+  EXPECT_FALSE(memory->resize(shape, hrt::core::Stride{12, 3}));
+  EXPECT_EQ(memory->stride(), padded);
+  EXPECT_TRUE(memory->resize(shape));
+  EXPECT_EQ(memory->stride(), (hrt::core::Stride{12, 4}));
+  EXPECT_TRUE(memory->resize(shape));
+  EXPECT_TRUE(memory->resize(shape, hrt::core::Stride{24, 8}));
+  EXPECT_EQ(memory->stride(), (hrt::core::Stride{24, 8}));
+  EXPECT_EQ(view->stride(), padded);
+}
+
+TEST(MemoryTest, WrapsPaddedFloatImageAndCopiesItRepeatedly) {
+  hrt::Array<float, 16> pixels{};
+  for (std::size_t i = 0; i < pixels.size(); ++i)
+    pixels[i] = static_cast<float>(i);
+  const auto image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, pixels.data(), hrt::core::ImageFormat::InterRgb,
+                                            {2, 2}, hrt::core::DataType::Float32, 8 * sizeof(float));
+  ASSERT_TRUE(image);
+  EXPECT_EQ(image->memory()->cpu(), pixels.data());
+  EXPECT_EQ(image->memory()->shape(), (hrt::core::Shape{2, 2, 12}));
+  EXPECT_EQ(image->stride(), (hrt::core::Stride{64, 32, 12}));
+  EXPECT_EQ(image->buffer()->shape(), (hrt::core::Shape{2, 2, 3}));
+
+  hrt::core::Buffer copy(hrt::core::MemoryType::Cpu);
+  for (int i = 0; i < 2; ++i) {
+    ASSERT_TRUE(hrt::core::Buffer::copy(copy, *image->buffer(), hrt::core::CopyPolicy::KeepSrcStride));
+    EXPECT_EQ(copy.stride(), image->stride());
+    const auto* result = static_cast<const float*>(copy.memory()->cpu());
+    for (std::size_t row = 0; row < 2; ++row) {
+      for (std::size_t column = 0; column < 6; ++column)
+        EXPECT_EQ(result[row * 8 + column], pixels[row * 8 + column]);
+    }
+  }
 }
 
 TEST(MemoryTest, DmaBufferIsMappedAndSharedByFd) {

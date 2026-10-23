@@ -17,6 +17,53 @@
 
 namespace {
 
+// Establish a padded image layout, then reuse it with explicit or default strides.
+auto BM_ImageLayout(benchmark::State& state) -> void {
+  using namespace hrt::core;
+  constexpr Size kSize{640, 480};
+  constexpr std::size_t kRowPitch = 1984;
+  hrt::Vector<std::uint8_t> pixels(kRowPitch * kSize.height);
+  if (state.range(0) == 0) {
+    state.SetLabel("wrap_padded_rgb_u8");
+    for (auto _ : state) {
+      auto image =
+          Image::wrap(MemoryType::Cpu, pixels.data(), ImageFormat::InterRgb, kSize, DataType::Uint8, kRowPitch);
+      if (!image) {
+        state.SkipWithError("Image wrapping failed");
+        break;
+      }
+      benchmark::DoNotOptimize(image->memory()->cpu());
+    }
+    return;
+  }
+  auto image = Image::wrap(MemoryType::Cpu, pixels.data(), ImageFormat::InterRgb, kSize, DataType::Uint8, kRowPitch);
+  if (!image) {
+    state.SkipWithError("Image wrapping failed");
+    return;
+  }
+  if (state.range(0) == 1) {
+    state.SetLabel("resize_same_explicit_stride");
+    const auto shape = image->memory()->shape();
+    const auto stride = image->stride();
+    for (auto _ : state) {
+      if (!image->memory()->resize(shape, stride)) {
+        state.SkipWithError("Memory resize failed");
+        break;
+      }
+      benchmark::DoNotOptimize(image->memory()->cpu());
+    }
+  } else {
+    state.SetLabel("reshape_same_default_stride");
+    for (auto _ : state) {
+      if (!image->reshape(kSize)) {
+        state.SkipWithError("Image reshape failed");
+        break;
+      }
+      benchmark::DoNotOptimize(image->memory()->cpu());
+    }
+  }
+}
+
 // Conversion, layout and resize+normalize cases on the bus image.
 auto BM_Convert(benchmark::State& state) -> void {
   using namespace hrt::core;
@@ -263,6 +310,7 @@ auto cuda_cases(benchmark::Benchmark* bench) -> void {
 
 } // namespace
 
+BENCHMARK(BM_ImageLayout)->DenseRange(0, 2)->Unit(benchmark::kNanosecond)->UseRealTime();
 BENCHMARK(BM_Convert)->DenseRange(0, 8)->Unit(benchmark::kMillisecond)->UseRealTime();
 BENCHMARK(BM_Task)->DenseRange(0, 4)->Unit(benchmark::kMillisecond)->UseRealTime();
 BENCHMARK(BM_Ocr)->DenseRange(0, 1)->Unit(benchmark::kMillisecond)->UseRealTime();

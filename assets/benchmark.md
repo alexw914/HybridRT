@@ -5,6 +5,12 @@ Each benchmark has one caller; CPU preprocessing and postprocessing use one Open
 thread, without concurrent pipeline stages. Metal still executes its kernels on the GPU.
 Inference is used only to prepare real output tensors and is excluded from postprocess timing.
 
+`hybridrt_bench_preprocess` also includes `BM_ImageLayout/0..2`, reported in nanoseconds:
+wrapping a padded 640 x 480 RGB uint8 image, repeating an explicit-stride memory resize,
+and repeating an image reshape with a default stride. These cases isolate layout setup and
+reuse; they perform no preprocessing or inference. Initialization is included in case 0.
+The comparison protocol and results are recorded in [perf.md](perf.md).
+
 ## Measurement protocol
 
 - Current measurement: 2026-10-20, Mac mini, Apple M4, macOS arm64, Release build (`-O3`),
