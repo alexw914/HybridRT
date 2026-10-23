@@ -233,7 +233,7 @@ TEST(ImagePreprocessorTest, ConvertsAndNormalizesAllByteValuesWithChannelOrderAn
             for (int y = 0; y < 8; ++y) {
               const auto padding = y < 2 || y >= 6;
               for (int x = 0; x < 256; ++x) {
-                float expected = padding ? param.default_color[static_cast<std::size_t>(input_channel)]
+                float expected = padding ? param.default_color[channel]
                                          : src.pixels[static_cast<std::size_t>((y - 2) * 784 + x * 3 + input_channel)];
                 if (mode == NormalizeType::Full || (mode == NormalizeType::Roi && !padding))
                   expected = (expected - param.mean[channel]) / param.std[channel];

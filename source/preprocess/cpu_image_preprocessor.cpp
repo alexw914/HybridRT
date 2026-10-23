@@ -379,8 +379,8 @@ auto CpuImagePreprocessor::fused(core::Image& dst, const ImageTransform& transfo
     planes[input].convertTo(output(region), CV_32F, alpha, beta);
     if (region == whole)
       continue;
-    // Padding is the default color as a uint8 source pixel; a normalized ROI leaves it unnormalized.
-    const auto pad = static_cast<double>(cv::saturate_cast<std::uint8_t>(param.default_color[input]));
+    // Padding is the default color, in input channel order, as a uint8 pixel; a normalized ROI leaves it as is.
+    const auto pad = static_cast<double>(cv::saturate_cast<std::uint8_t>(param.default_color[c]));
     const auto value = param.normalize_type == NormalizeType::Roi ? pad : pad * alpha + beta;
     for (const auto& border : borders(whole, region)) {
       if (!border.empty())

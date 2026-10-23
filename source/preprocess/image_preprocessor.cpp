@@ -64,6 +64,18 @@ auto same_layout(core::ImageFormat a, core::ImageFormat b) -> bool {
   return family(a) == family(b);
 }
 
+auto rgb_order(core::ImageFormat format) -> bool {
+  return format == core::ImageFormat::InterRgb || format == core::ImageFormat::PlanarRgb ||
+         format == core::ImageFormat::InterRgba;
+}
+
+// `color`, given in the channel order of the input `dst`, in the channel order of `image`.
+auto ordered_color(const Array<float, 3>& color, const core::Image& image, const core::Image& dst) -> Array<float, 3> {
+  if (rgb_order(image.format()) == rgb_order(dst.format()))
+    return color;
+  return {color[2], color[1], color[0]};
+}
+
 auto is_identity(const Array<float, 3>& mean, const Array<float, 3>& stddev) -> bool {
   return std::all_of(mean.begin(), mean.end(), [](float v) -> bool { return v == 0.0F; }) &&
          std::all_of(stddev.begin(), stddev.end(), [](float v) -> bool { return v == 1.0F; });
@@ -425,7 +437,7 @@ auto ImagePreprocessor::run(core::Image& dst, const core::Image& src, const Imag
   const auto& [to_convert, to_fill, to_resize, to_cast, to_normalize] = steps;
   if (converted != nullptr && !to_convert->convert(*converted, src, stream))
     return false;
-  if (pad && !to_fill->fill(*resized, resized->rect(), param.default_color, stream))
+  if (pad && !to_fill->fill(*resized, resized->rect(), ordered_color(param.default_color, *resized, dst), stream))
     return false;
   if (!to_resize->resize(*resized, transform.dst_roi, *source, transform.src_roi, param.interpolation_mode, stream))
     return false;

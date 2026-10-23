@@ -37,7 +37,7 @@ most 64) to `ImageModel::create`.
 | `dst_image_format` | `planar_rgb` | `planar_rgb`, `planar_bgr`, `inter_rgb`, `inter_bgr`, `inter_rgba`, `gray`, `nv12`, `nv21`, `yu12`, `yv12`; planar and gray need an NCHW input, interleaved NHWC |
 | `normalize_type` | `full` | `full`, `roi` (only the resized region), `none` |
 | `mean`, `std` | `[0, 0, 0]`, `[1, 1, 1]` | Per channel: `x = (x - mean) / std` |
-| `default_color` | `[0, 0, 0]` | Padding color |
+| `default_color` | `[0, 0, 0]` | Padding color in the channel order of `dst_image_format`, as `mean` and `std` |
 | `resize_short_size` | `-1` | Short side before `center_crop` |
 | `pad_scale` | `1.0` | Scale of `pad_outside` |
 

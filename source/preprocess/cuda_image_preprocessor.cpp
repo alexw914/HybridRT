@@ -281,8 +281,8 @@ auto CudaImagePreprocessor::fused(core::Image& dst, const ImageTransform& transf
   task.roi_height = roi.height;
   task.float_output = dst.data_type() == core::DataType::Float32;
   task.nearest = param.interpolation_mode == InterpolationMode::Nearest;
-  // As the CPU flow: padding is the default color as a uint8 pixel, normalized unless only the ROI is. That flow
-  // fills planar inputs in source channel order and interleaved ones in input channel order.
+  // As the CPU flow: padding is the default color, in input channel order, as a uint8 pixel, normalized unless only
+  // the ROI is.
   const auto normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
   const auto swap = rgb_order(src.format()) != rgb_order(dst.format());
   for (int i = 0; i < 3; ++i) {
@@ -290,8 +290,7 @@ auto CudaImagePreprocessor::fused(core::Image& dst, const ImageTransform& transf
     const auto input = swap ? 2 - i : i;
     const auto alpha = normalize ? 1.0 / static_cast<double>(param.std[c]) : 1.0;
     const auto beta = normalize ? -static_cast<double>(param.mean[c]) * alpha : 0.0;
-    const auto color = param.default_color[static_cast<std::size_t>(planar ? input : i)];
-    const auto pad = std::clamp(std::nearbyint(static_cast<double>(color)), 0.0, 255.0);
+    const auto pad = std::clamp(std::nearbyint(static_cast<double>(param.default_color[c])), 0.0, 255.0);
     task.channel[c] = input;
     task.alpha[c] = static_cast<float>(alpha);
     task.beta[c] = static_cast<float>(beta);
