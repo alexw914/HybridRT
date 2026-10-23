@@ -29,10 +29,10 @@ auto make_input(const hrt::core::BufferProto& proto, std::mt19937& random) -> hr
   if (proto.data_type == hrt::core::DataType::Float32) {
     std::uniform_real_distribution<float> uniform(0.0F, 1.0F);
     auto* values = static_cast<float*>(data);
-    for (std::int64_t i = 0; i < host.volume(); ++i)
+    for (std::int64_t i = 0; i < host.get_volume(); ++i)
       values[i] = uniform(random);
   } else {
-    std::memset(data, 0, host.byte_size());
+    std::memset(data, 0, host.bytes());
   }
   auto buffer = std::make_shared<hrt::core::Buffer>(proto);
   if (!buffer->valid() || !hrt::core::Buffer::copy(*buffer, host, hrt::core::CopyPolicy::DirectCopy))

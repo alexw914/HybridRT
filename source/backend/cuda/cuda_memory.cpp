@@ -21,18 +21,6 @@ auto cuda_release(memory::BasePointer& pointer) -> void {
   pointer.capacity_ = 0;
 }
 
-auto cuda_allocate(memory::BasePointer& pointer, std::size_t size) -> bool {
-  cuda_release(pointer);
-  if (size == 0)
-    return true;
-  void* device = nullptr;
-  KZ_CHECK_RETURN(cudaMalloc(&device, size) == cudaSuccess, false, "cuda: cudaMalloc({}) failed: {}", size,
-                  cudaGetErrorString(cudaGetLastError()));
-  pointer.device_ = reinterpret_cast<std::uintptr_t>(device);
-  pointer.capacity_ = size;
-  return true;
-}
-
 auto address(core::Memory& memory, bool write, core::Stream* stream) -> void* {
   if (memory.memory_type() == core::MemoryType::Cuda)
     return reinterpret_cast<void*>(write ? memory.mutable_device(stream) : memory.device(stream));
@@ -60,7 +48,15 @@ auto CudaMemory::ref() -> SharedPtr<core::Memory> {
 }
 
 auto CudaMemory::reallocate(std::size_t size) -> bool {
-  return cuda_allocate(*pointer_, size);
+  cuda_release(*pointer_);
+  if (size == 0)
+    return true;
+  void* device = nullptr;
+  KZ_CHECK_RETURN(cudaMalloc(&device, size) == cudaSuccess, false, "cuda: cudaMalloc({}) failed: {}", size,
+                  cudaGetErrorString(cudaGetLastError()));
+  pointer_->device_ = reinterpret_cast<std::uintptr_t>(device);
+  pointer_->capacity_ = size;
+  return true;
 }
 
 auto copy_cuda(core::Memory& dst, core::Memory& src, std::size_t axis, core::Stream* stream) -> bool {
@@ -77,7 +73,7 @@ auto copy_cuda(core::Memory& dst, core::Memory& src, std::size_t axis, core::Str
   std::size_t chunk = 1;
   for (auto i = axis; i < shape.size(); ++i)
     chunk *= static_cast<std::size_t>(shape[i]);
-  const auto total = static_cast<std::size_t>(core::volume(shape));
+  const auto total = static_cast<std::size_t>(core::get_volume(shape));
   if (chunk == 0 || total == 0)
     return true;
   const auto status = axis == 0 ? cudaMemcpyAsync(to, from, total, kind, cuda_stream(stream))

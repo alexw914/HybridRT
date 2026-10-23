@@ -91,48 +91,6 @@ auto allocate_from(const char* path, std::size_t size) -> int {
   return allocated < 0 ? -1 : static_cast<int>(request.fd);
 }
 
-auto dma_allocate(BasePointer& pointer, std::size_t size, bool device32) -> bool {
-  dma_release(pointer);
-  if (size == 0)
-    return true;
-  const auto& order = device32 ? kDevice32Order : kAnyOrder;
-  Vector<String> tried;
-  int error = ENOENT;
-  for (const auto& heap : order) {
-    char resolved[PATH_MAX];
-    if (realpath(heap.path, resolved) == nullptr)
-      continue;
-    if (std::find(tried.begin(), tried.end(), resolved) != tried.end())
-      continue;
-    tried.emplace_back(resolved);
-    const int fd = allocate_from(heap.path, size);
-    if (fd < 0) {
-      error = errno;
-      continue;
-    }
-    auto* mapped = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (mapped == MAP_FAILED) {
-      error = errno;
-      close(fd);
-      continue;
-    }
-    if (device32 && !heap.below_4gb) {
-      static std::atomic<bool> warned{false};
-      if (!warned.exchange(true))
-        KZ_LOG_WARN("dma-buf: 32-bit DMA heaps are exhausted; using {}, where devices with 32-bit DMA (RGA2) "
-                    "leave the work to the CPU",
-                    heap.path);
-    }
-    pointer.cpu_ = mapped;
-    pointer.device_ = static_cast<std::uintptr_t>(fd);
-    pointer.capacity_ = size;
-    pointer.below_4gb_ = heap.below_4gb;
-    return true;
-  }
-  KZ_LOG_ERROR("dma-buf: allocation of {} bytes failed in every dma-heap: {}", size, std::strerror(error));
-  return false;
-}
-
 auto dma_sync(const BasePointer& pointer, __u64 flags) -> bool {
   if (pointer.device_ == 0)
     return true;
@@ -190,7 +148,45 @@ auto DmaBufferMemory::ref() -> SharedPtr<core::Memory> {
 }
 
 auto DmaBufferMemory::reallocate(std::size_t size) -> bool {
-  return dma_allocate(*pointer_, size, device32_);
+  dma_release(*pointer_);
+  if (size == 0)
+    return true;
+  const auto& order = device32_ ? kDevice32Order : kAnyOrder;
+  Vector<String> tried;
+  int error = ENOENT;
+  for (const auto& heap : order) {
+    char resolved[PATH_MAX];
+    if (realpath(heap.path, resolved) == nullptr)
+      continue;
+    if (std::find(tried.begin(), tried.end(), resolved) != tried.end())
+      continue;
+    tried.emplace_back(resolved);
+    const int fd = allocate_from(heap.path, size);
+    if (fd < 0) {
+      error = errno;
+      continue;
+    }
+    auto* mapped = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mapped == MAP_FAILED) {
+      error = errno;
+      close(fd);
+      continue;
+    }
+    if (device32_ && !heap.below_4gb) {
+      static std::atomic<bool> warned{false};
+      if (!warned.exchange(true))
+        KZ_LOG_WARN("dma-buf: 32-bit DMA heaps are exhausted; using {}, where devices with 32-bit DMA (RGA2) "
+                    "leave the work to the CPU",
+                    heap.path);
+    }
+    pointer_->cpu_ = mapped;
+    pointer_->device_ = static_cast<std::uintptr_t>(fd);
+    pointer_->capacity_ = size;
+    pointer_->below_4gb_ = heap.below_4gb;
+    return true;
+  }
+  KZ_LOG_ERROR("dma-buf: allocation of {} bytes failed in every dma-heap: {}", size, std::strerror(error));
+  return false;
 }
 
 auto DmaBufferMemory::below_4gb() const -> bool {

@@ -52,7 +52,6 @@ struct Package {
 };
 
 auto load(const std::filesystem::path& path) -> std::optional<Package>;
-
 auto load(std::span<const std::uint8_t> bytes) -> std::optional<Package>;
 
 // Builds a package from a JSON manifest (assets/template/hrtc_template.json).

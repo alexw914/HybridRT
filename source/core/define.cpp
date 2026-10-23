@@ -51,11 +51,29 @@ auto to_string(DataType type) -> std::string_view {
   return "unknown";
 }
 
+auto to_string(MemoryType type) -> std::string_view {
+  switch (type) {
+  case MemoryType::Cpu:
+    return "Cpu";
+  case MemoryType::Cuda:
+    return "Cuda";
+  case MemoryType::DmaBuffer:
+    return "DmaBuffer";
+  case MemoryType::Acl:
+    return "Acl";
+  case MemoryType::Dvpp:
+    return "Dvpp";
+  case MemoryType::Unknown:
+    break;
+  }
+  return "Unknown";
+}
+
 auto is_dynamic(const Shape& shape) -> bool {
   return std::any_of(shape.begin(), shape.end(), [](std::int64_t dim) -> bool { return dim < 0; });
 }
 
-auto volume(const Shape& shape) -> std::int64_t {
+auto get_volume(const Shape& shape) -> std::int64_t {
   if (is_dynamic(shape))
     return -1;
   std::int64_t count = 1;

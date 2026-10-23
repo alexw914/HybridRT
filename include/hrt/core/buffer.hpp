@@ -29,12 +29,9 @@ class Buffer {
 public:
   explicit Buffer(MemoryType memory_type, DataType data_type = DataType::Uint8, const Shape& shape = {},
                   const Stride& stride = {});
-
   explicit Buffer(SharedPtr<Memory> memory, DataType data_type = DataType::Uint8, const Shape& shape = {},
                   const Stride& stride = {});
-
   explicit Buffer(const BufferProto& proto);
-
   Buffer(SharedPtr<Memory> memory, const BufferProto& proto);
 
   KZ_NODISCARD auto valid() const -> bool { return memory_ != nullptr && valid_; }
@@ -45,24 +42,23 @@ public:
 
   KZ_NODISCARD auto data_type() const -> DataType { return data_type_; }
 
-  KZ_NODISCARD auto item_size() const -> std::size_t { return data_type_size(data_type_); }
+  KZ_NODISCARD auto data_type_size() const -> std::size_t { return hrt::core::data_type_size(data_type_); }
 
   KZ_NODISCARD auto dims() const -> std::size_t { return shape_.size(); }
 
   KZ_NODISCARD auto shape() const -> const Shape& { return shape_; }
 
-  KZ_NODISCARD auto volume() const -> std::int64_t { return hrt::core::volume(shape_); }
+  KZ_NODISCARD auto get_volume() const -> std::int64_t { return hrt::core::get_volume(shape_); }
 
   KZ_NODISCARD auto stride() const -> const Stride& { return memory_->stride(); }
 
-  KZ_NODISCARD auto byte_size() const -> std::size_t { return memory_->bytes(); }
+  KZ_NODISCARD auto bytes() const -> std::size_t { return memory_->bytes(); }
 
   KZ_NODISCARD auto is_contiguous() const -> bool { return memory_->is_contiguous(); }
 
   KZ_NODISCARD auto proto() const -> BufferProto;
 
   auto reshape(const Shape& shape, const Stride& stride = {}) -> bool;
-
   auto reshape(DataType data_type, const Shape& shape, const Stride& stride = {}) -> bool;
 
   // Byte offset of the element at the leading `index` coordinates.

@@ -23,18 +23,6 @@ auto host_release(memory::BasePointer& pointer) -> void {
   pointer.capacity_ = 0;
 }
 
-auto host_allocate(memory::BasePointer& pointer, std::size_t size) -> bool {
-  host_release(pointer);
-  if (size == 0)
-    return true;
-  void* host = nullptr;
-  const auto status = cudaHostAlloc(&host, size, cudaHostAllocDefault);
-  KZ_CHECK_RETURN(status == cudaSuccess, false, "cuda: cudaHostAlloc({}) failed: {}", size, cudaGetErrorString(status));
-  pointer.cpu_ = host;
-  pointer.capacity_ = size;
-  return true;
-}
-
 class CudaHostMemory final : public core::Memory {
 public:
   CudaHostMemory() : core::Memory(core::MemoryType::Cpu) {
@@ -45,7 +33,18 @@ public:
   auto ref() -> SharedPtr<core::Memory> override { return std::make_shared<CudaHostMemory>(*this); }
 
 protected:
-  auto reallocate(std::size_t size) -> bool override { return host_allocate(*pointer_, size); }
+  auto reallocate(std::size_t size) -> bool override {
+    host_release(*pointer_);
+    if (size == 0)
+      return true;
+    void* host = nullptr;
+    const auto status = cudaHostAlloc(&host, size, cudaHostAllocDefault);
+    KZ_CHECK_RETURN(status == cudaSuccess, false, "cuda: cudaHostAlloc({}) failed: {}", size,
+                    cudaGetErrorString(status));
+    pointer_->cpu_ = host;
+    pointer_->capacity_ = size;
+    return true;
+  }
 };
 
 } // namespace

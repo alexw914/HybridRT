@@ -49,7 +49,6 @@ struct EngineProto {
 class Engine {
 public:
   static auto create(EngineType type) -> UniquePtr<Engine>;
-
   static auto create(std::string_view name) -> UniquePtr<Engine>;
 
   virtual ~Engine();

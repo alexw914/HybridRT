@@ -62,7 +62,7 @@ auto Image::wrap(MemoryType memory_type, void* data, ImageFormat format, Size si
     return std::nullopt;
   }
   auto byte_shape = *shape;
-  byte_shape.back() *= static_cast<std::int64_t>(data_type_size(data_type));
+  byte_shape.back() *= static_cast<std::int64_t>(hrt::core::data_type_size(data_type));
   auto stride = contiguous_stride(byte_shape);
   if (row_pitch != 0) {
     const auto rows = row_axis(format);

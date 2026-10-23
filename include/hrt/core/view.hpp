@@ -20,13 +20,9 @@ namespace hrt::core {
 // Draws in place on a host CV_8UC3 BGR image; result coordinates are source-image pixels.
 
 auto draw(cv::Mat& canvas, const postprocess::DetectResultMap& result) -> void;
-
 auto draw(cv::Mat& canvas, const postprocess::RotatedResultMap& result) -> void;
-
 auto draw(cv::Mat& canvas, const postprocess::ClassifyResult& result) -> void;
-
 auto draw(cv::Mat& canvas, const postprocess::KeypointResultMap& result) -> void;
-
 auto draw(cv::Mat& canvas, const postprocess::SegmentResultMap& result) -> void;
 
 } // namespace hrt::core

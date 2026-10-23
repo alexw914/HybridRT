@@ -17,7 +17,6 @@ class AclMemory final : public core::Memory {
 public:
   // Owning; an empty stride takes aligned_stride().
   explicit AclMemory(core::MemoryType type, const core::Shape& shape = {}, const core::Stride& stride = {});
-
   AclMemory(core::MemoryType type, std::uintptr_t device, std::size_t size, const core::Shape& shape,
             const core::Stride& stride);
 

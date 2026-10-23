@@ -62,7 +62,7 @@ protected:
         floats = &scratch_[i];
       }
       const auto* data = static_cast<const float*>(floats->memory()->cpu());
-      auto& scores = result.emplace_back(data, data + floats->volume());
+      auto& scores = result.emplace_back(data, data + floats->get_volume());
       if (activation_ == ClassifyActivation::Sigmoid) {
         std::transform(scores.begin(), scores.end(), scores.begin(), core::sigmoid);
       } else if (activation_ == ClassifyActivation::Softmax && !scores.empty()) {

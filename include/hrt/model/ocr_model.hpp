@@ -20,7 +20,6 @@ class OcrModel {
 public:
   // Invalid config or no usable engine aborts, like ImageModel::create.
   static auto create(const hrtc::AlgoParam& detection, const hrtc::AlgoParam& recognition) -> UniquePtr<OcrModel>;
-
   static auto create(const hrtc::Package& package, std::string_view detection, std::string_view recognition)
       -> UniquePtr<OcrModel>;
 

@@ -342,7 +342,7 @@ auto dequantize_buffer(const core::Buffer& output, core::Buffer& scratch) -> voi
                       output.zero_point(), out);
     out += count;
   };
-  const auto count = static_cast<std::size_t>(output.volume());
+  const auto count = static_cast<std::size_t>(output.get_volume());
   if (output.is_contiguous()) {
     convert(base, count);
     return;

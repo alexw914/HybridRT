@@ -232,7 +232,8 @@ auto OrtEngine::resolve_outputs() -> bool {
     void* data = nullptr;
     failure = error(api_->GetTensorMutableData(inputs[i], &data));
     KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
-    std::memset(data, 0, static_cast<std::size_t>(core::volume(proto.shape)) * core::data_type_size(proto.data_type));
+    std::memset(data, 0,
+                static_cast<std::size_t>(core::get_volume(proto.shape)) * core::data_type_size(proto.data_type));
     input_names.push_back(input_names_[i].c_str());
   }
   for (const auto& name : output_names_)
@@ -318,7 +319,7 @@ auto OrtEngine::bind(const core::Buffers& buffers, bool input) -> bool {
                     "onnxruntime: buffer {} needs contiguous host memory", i);
     OrtValue* value = nullptr;
     const auto& shape = protos[i].shape;
-    auto failure = error(api_->CreateTensorWithDataAsOrtValue(memory_info_, data, buffers[i]->byte_size(), shape.data(),
+    auto failure = error(api_->CreateTensorWithDataAsOrtValue(memory_info_, data, buffers[i]->bytes(), shape.data(),
                                                               shape.size(), to_ort_type(protos[i].data_type), &value));
     KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
     values.push_back(value);

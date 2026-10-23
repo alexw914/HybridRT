@@ -54,7 +54,7 @@ auto copy_cpu_to_cpu(core::Memory& dst, core::Memory& src, std::size_t axis) -> 
   std::size_t chunk = 1;
   for (auto i = axis; i < shape.size(); ++i)
     chunk *= static_cast<std::size_t>(shape[i]);
-  const auto total = static_cast<std::size_t>(core::volume(shape));
+  const auto total = static_cast<std::size_t>(core::get_volume(shape));
   if (chunk == 0 || total == 0)
     return true;
 

@@ -41,7 +41,7 @@ protected:
       floats = &scratch_[0];
     }
     const auto* data = static_cast<const float*>(floats->memory()->cpu());
-    result.assign(data, data + floats->volume());
+    result.assign(data, data + floats->get_volume());
     return true;
   }
 

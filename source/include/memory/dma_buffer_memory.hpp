@@ -20,7 +20,6 @@ public:
   // are exhausted the system heap is used and below_4gb() turns false. Otherwise any pages are taken (system heap
   // first), for devices behind an IOMMU such as the RK3588 NPU.
   explicit DmaBufferMemory(const core::Shape& shape = {}, const core::Stride& stride = {}, bool device32 = true);
-
   // Views a caller's dma-buf (decoder, camera, display) without owning `fd`, mapping it when `host` is null. Its
   // pages are taken to be reachable by 32-bit DMA, as media allocators provide.
   DmaBufferMemory(int fd, void* host, std::size_t size, const core::Shape& shape, const core::Stride& stride);

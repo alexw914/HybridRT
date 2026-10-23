@@ -14,7 +14,7 @@
 namespace hrt::memory {
 
 struct BasePointer {
-  explicit BasePointer(core::MemoryType memory_type) : type_(memory_type) {}
+  explicit BasePointer(core::MemoryType memory_type) : memory_type_(memory_type) {}
 
   ~BasePointer() {
     if (release_ != nullptr)
@@ -26,7 +26,7 @@ struct BasePointer {
   BasePointer(BasePointer&&) = delete;
   auto operator=(BasePointer&&) -> BasePointer& = delete;
 
-  const core::MemoryType type_;
+  const core::MemoryType memory_type_;
   void* cpu_ = nullptr;
   std::uintptr_t device_ = 0;
   // Usable bytes; only owned storage can grow.

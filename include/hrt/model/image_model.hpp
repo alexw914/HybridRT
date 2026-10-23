@@ -39,7 +39,6 @@ enum class Task {
 };
 
 auto task_of(std::string_view postprocess_type) -> std::optional<Task>;
-
 auto task_of(const hrtc::AlgoParam& algo) -> std::optional<Task>;
 
 // Problems in the config of `algo` (unknown keys, mistyped or unknown values,
@@ -71,21 +70,18 @@ public:
   static auto create(const hrtc::AlgoParam& algo, SharedPtr<core::Context> context,
                      const ImageModelOptions& options = {}, const PostprocessorFactory& factory = {})
       -> UniquePtr<ImageModel>;
-
   // Uses the first engine of `algo`, in package order, whose device is usable
   // and whose model loads, in a new context that serves it and the
   // preprocessor: the engine's device, else the preprocessor's (cuda, dvpp),
   // else the CPU.
   static auto create(const hrtc::AlgoParam& algo, const ImageModelOptions& options = {},
                      const PostprocessorFactory& factory = {}) -> UniquePtr<ImageModel>;
-
   // From one entry of a manifest's "algos", {"name", "config"}; file paths are
   // absolute or relative to the working directory. Aborts when it cannot be
   // read.
   static auto create(const kitzoo::json::Json& algo, SharedPtr<core::Context> context,
                      const ImageModelOptions& options = {}, const PostprocessorFactory& factory = {})
       -> UniquePtr<ImageModel>;
-
   static auto create(const kitzoo::json::Json& algo, const ImageModelOptions& options = {},
                      const PostprocessorFactory& factory = {}) -> UniquePtr<ImageModel>;
 

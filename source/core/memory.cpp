@@ -26,24 +26,6 @@
 
 namespace hrt::core {
 
-auto to_string(MemoryType type) -> std::string_view {
-  switch (type) {
-  case MemoryType::Cpu:
-    return "Cpu";
-  case MemoryType::Cuda:
-    return "Cuda";
-  case MemoryType::DmaBuffer:
-    return "DmaBuffer";
-  case MemoryType::Acl:
-    return "Acl";
-  case MemoryType::Dvpp:
-    return "Dvpp";
-  case MemoryType::Unknown:
-    break;
-  }
-  return "Unknown";
-}
-
 auto device_type_of(MemoryType type) -> DeviceType {
   switch (type) {
   case MemoryType::Cuda:
@@ -255,7 +237,7 @@ auto Memory::is_contiguous() const -> bool {
 }
 
 auto Memory::memory_type() const -> MemoryType {
-  return pointer_->type_;
+  return pointer_->memory_type_;
 }
 
 auto Memory::head() const -> SyncedHead {

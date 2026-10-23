@@ -76,7 +76,7 @@ TEST(MemoryTest, CopiesBetweenPaddedAndPackedRows) {
 TEST(MemoryTest, BufferUsesElementShape) {
   hrt::core::Buffer buffer(hrt::core::MemoryType::Cpu, hrt::core::DataType::Float32, hrt::core::Shape{1, 3, 2, 2});
   ASSERT_TRUE(buffer.valid());
-  EXPECT_EQ(buffer.byte_size(), 48U);
+  EXPECT_EQ(buffer.bytes(), 48U);
   EXPECT_EQ(buffer.memory()->shape(), (hrt::core::Shape{1, 3, 2, 8}));
   EXPECT_EQ(buffer.offset({0, 1, 1, 1}), 16U + 8U + 4U);
 

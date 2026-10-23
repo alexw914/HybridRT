@@ -15,7 +15,6 @@ class CpuMemory final : public core::Memory {
 public:
   // Owning; an empty stride takes aligned_stride().
   explicit CpuMemory(const core::Shape& shape = {}, const core::Stride& stride = {});
-
   CpuMemory(void* data, std::size_t size, const core::Shape& shape, const core::Stride& stride);
 
   auto ref() -> SharedPtr<core::Memory> override;

@@ -52,10 +52,8 @@ enum class ResizeType {
   KeepRatio,
   CenterCrop,
   LetterBox,
-  // Grow the source rect to the input aspect ratio, scale by pad_scale and
-  // clip to the image.
-  PadOutside,
-  TextLine, // Fixed height, proportional width capped at input width, right padding.
+  PadOutside, // Grow the source rect to the input aspect ratio, scale by pad_scale and clip to the image.
+  TextLine,   // Fixed height, proportional width capped at input width, right padding.
 };
 
 NLOHMANN_JSON_SERIALIZE_ENUM(ResizeType, {
@@ -105,7 +103,6 @@ struct ImageTransform {
 
   // Maps network-input coordinates back to the source image.
   KZ_NODISCARD auto to_source(const core::Rect2f& rect) const -> core::Rect2f;
-
   KZ_NODISCARD auto to_source(const core::Point2f& point) const -> core::Point2f;
 
   // to_source() clipped to src_roi; empty when the box leaves it.

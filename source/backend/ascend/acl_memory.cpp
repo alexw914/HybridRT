@@ -37,21 +37,6 @@ auto dvpp_release(memory::BasePointer& pointer) -> void {
   pointer.capacity_ = 0;
 }
 
-auto ascend_allocate(memory::BasePointer& pointer, std::size_t size) -> bool {
-  pointer.release_(pointer);
-  if (size == 0)
-    return true;
-  void* device = nullptr;
-  // Both return a plain int, so the branches share a type without a cast.
-  const int status = pointer.type_ == core::MemoryType::Dvpp ? hi_mpi_dvpp_malloc(0, &device, size)
-                                                             : aclrtMalloc(&device, size, ACL_MEM_MALLOC_HUGE_FIRST);
-  KZ_CHECK_RETURN(status == ACL_SUCCESS, false, "acl: allocating {} bytes failed: 0x{:X} {}", size,
-                  static_cast<unsigned int>(status), aclGetRecentErrMsg());
-  pointer.device_ = reinterpret_cast<std::uintptr_t>(device);
-  pointer.capacity_ = size;
-  return true;
-}
-
 auto address(core::Memory& memory, bool write, core::Stream* stream) -> void* {
   if (is_ascend(memory.memory_type()))
     return reinterpret_cast<void*>(write ? memory.mutable_device(stream) : memory.device(stream));
@@ -90,7 +75,18 @@ auto AclMemory::ref() -> SharedPtr<core::Memory> {
 }
 
 auto AclMemory::reallocate(std::size_t size) -> bool {
-  return ascend_allocate(*pointer_, size);
+  pointer_->release_(*pointer_);
+  if (size == 0)
+    return true;
+  void* device = nullptr;
+  // Both return a plain int, so the branches share a type without a cast.
+  const int status = memory_type() == core::MemoryType::Dvpp ? hi_mpi_dvpp_malloc(0, &device, size)
+                                                             : aclrtMalloc(&device, size, ACL_MEM_MALLOC_HUGE_FIRST);
+  KZ_CHECK_RETURN(status == ACL_SUCCESS, false, "acl: allocating {} bytes failed: 0x{:X} {}", size,
+                  static_cast<unsigned int>(status), aclGetRecentErrMsg());
+  pointer_->device_ = reinterpret_cast<std::uintptr_t>(device);
+  pointer_->capacity_ = size;
+  return true;
 }
 
 auto copy_acl(core::Memory& dst, core::Memory& src, std::size_t axis, core::Stream* stream) -> bool {
@@ -107,7 +103,7 @@ auto copy_acl(core::Memory& dst, core::Memory& src, std::size_t axis, core::Stre
   std::size_t chunk = 1;
   for (auto i = axis; i < shape.size(); ++i)
     chunk *= static_cast<std::size_t>(shape[i]);
-  const auto total = static_cast<std::size_t>(core::volume(shape));
+  const auto total = static_cast<std::size_t>(core::get_volume(shape));
   if (chunk == 0 || total == 0)
     return true;
   // Without a stream the copy runs synchronously.

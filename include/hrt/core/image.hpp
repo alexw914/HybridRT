@@ -57,10 +57,8 @@ public:
 
   Image(MemoryType memory_type, ImageFormat format, DataType data_type = DataType::Uint8, Size size = {},
         const Stride& stride = {});
-
   Image(SharedPtr<Memory> memory, ImageFormat format, DataType data_type = DataType::Uint8, Size size = {},
         const Stride& stride = {});
-
   Image(SharedPtr<Buffer> buffer, ImageFormat format, DataType data_type = DataType::Uint8, Size size = {},
         const Stride& stride = {});
 
@@ -74,7 +72,7 @@ public:
 
   KZ_NODISCARD auto data_type() const -> DataType { return buffer_->data_type(); }
 
-  KZ_NODISCARD auto item_size() const -> std::size_t { return buffer_->item_size(); }
+  KZ_NODISCARD auto data_type_size() const -> std::size_t { return buffer_->data_type_size(); }
 
   KZ_NODISCARD auto stride() const -> const Stride& { return buffer_->stride(); }
 
@@ -84,7 +82,6 @@ public:
 
   // Unknown data_type keeps the current one.
   auto reshape(Size size, DataType data_type = DataType::Unknown, const Stride& stride = {}) -> bool;
-
   auto reshape(ImageFormat format, Size size, DataType data_type = DataType::Unknown, const Stride& stride = {})
       -> bool;
 

@@ -81,7 +81,7 @@ TEST(ImagePreprocessorTest, TextLineUsesCeilingWidthAndZeroNormalizedPadding) {
   hrt::core::Image source(hrt::core::MemoryType::Cpu, hrt::core::ImageFormat::InterBgr, hrt::core::DataType::Uint8,
                           {5, 3});
   auto* pixels = static_cast<std::uint8_t*>(source.memory()->mutable_cpu());
-  std::fill(pixels, pixels + source.buffer()->byte_size(), std::uint8_t{255});
+  std::fill(pixels, pixels + source.buffer()->bytes(), std::uint8_t{255});
   hrt::core::Image output(hrt::core::MemoryType::Cpu, hrt::core::ImageFormat::PlanarBgr, hrt::core::DataType::Float32,
                           {16, 4});
   auto processor = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Cpu);

@@ -33,7 +33,7 @@ auto Buffer::reshape(const Shape& shape, const Stride& stride) -> bool {
 auto Buffer::reshape(DataType data_type, const Shape& shape, const Stride& stride) -> bool {
   auto new_shape = shape.empty() ? Shape{0} : shape;
   auto byte_shape = new_shape;
-  byte_shape.back() *= static_cast<std::int64_t>(data_type_size(data_type));
+  byte_shape.back() *= static_cast<std::int64_t>(hrt::core::data_type_size(data_type));
   if (!memory_->resize(byte_shape, stride))
     return false;
   data_type_ = data_type;
@@ -46,7 +46,7 @@ auto Buffer::offset(std::initializer_list<std::int64_t> index) const -> std::siz
   std::size_t result = 0;
   std::size_t axis = 0;
   for (auto value : index) {
-    const auto step = axis + 1 == dims() ? item_size() : steps[axis + 1];
+    const auto step = axis + 1 == dims() ? data_type_size() : steps[axis + 1];
     result += static_cast<std::size_t>(value) * step;
     ++axis;
   }

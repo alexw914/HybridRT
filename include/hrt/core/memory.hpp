@@ -15,30 +15,12 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <string_view>
 
 namespace hrt::memory {
 struct BasePointer;
 } // namespace hrt::memory
 
 namespace hrt::core {
-
-enum class MemoryType {
-  Unknown,
-  Cpu,
-  Cuda,
-  // Linux dma-buf from a dma-heap, mapped to the host; device() is the fd. Media devices (RGA, NPUs, decoders)
-  // share it without copies, and host engines read it through the mapping.
-  DmaBuffer,
-  // Ascend device memory from aclrtMalloc, for engine IO.
-  Acl,
-  // Ascend media memory from the DVPP pool, which VPC requires of the images it reads and
-  // writes on products before A2. Its address space is small, so only those images use it,
-  // and without an explicit stride its rows are padded to what VPC can address.
-  Dvpp,
-};
-
-auto to_string(MemoryType type) -> std::string_view;
 
 enum class SyncedHead {
   AtCpu,
@@ -47,12 +29,9 @@ enum class SyncedHead {
 };
 
 enum class CopyPolicy {
-  // dst takes src's shape and stride.
-  KeepSrcStride,
-  // dst takes src's shape with a packed stride.
-  AutoDstStride,
-  // dst already has src's shape; only data is copied.
-  DirectCopy,
+  KeepSrcStride, // dst takes src's shape and stride.
+  AutoDstStride, // dst takes src's shape with a packed stride.
+  DirectCopy,    // dst already has src's shape; only data is copied.
 };
 
 // Shape and stride describe bytes: the last dimension is in bytes and
@@ -61,7 +40,6 @@ enum class CopyPolicy {
 class Memory {
 public:
   static auto create(MemoryType type, std::size_t size = 0) -> UniquePtr<Memory>;
-
   static auto create(MemoryType type, const Shape& shape, const Stride& stride = {}) -> UniquePtr<Memory>;
 
   // Views external storage without owning it; `size` bytes must stay valid. For DmaBuffer, `device` is the dma-buf fd

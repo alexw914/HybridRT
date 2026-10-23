@@ -33,9 +33,20 @@ enum class DataType {
   Bool,
 };
 
+enum class MemoryType {
+  Unknown,
+  Cpu,
+  Cuda,
+  DmaBuffer, // Linux dma-buf mapped to the host; device() is the fd, shared with media devices and NPUs.
+  Acl,       // Ascend device memory from aclrtMalloc, for engine IO.
+  Dvpp,      // Ascend DVPP media memory, required by VPC before A2; rows are padded to 16 by default.
+};
+
 auto data_type_size(DataType type) -> std::size_t;
 
+// Names for logs and diagnostics.
 auto to_string(DataType type) -> std::string_view;
+auto to_string(MemoryType type) -> std::string_view;
 
 // Dimensions, outermost first; negative values mark dynamic dimensions.
 using Shape = Vector<std::int64_t>;
@@ -46,7 +57,7 @@ using Stride = Vector<std::size_t>;
 
 auto is_dynamic(const Shape& shape) -> bool;
 
-auto volume(const Shape& shape) -> std::int64_t;
+auto get_volume(const Shape& shape) -> std::int64_t;
 
 auto contiguous_stride(const Shape& shape, DataType type = DataType::Uint8) -> Stride;
 

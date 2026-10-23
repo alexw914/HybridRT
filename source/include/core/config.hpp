@@ -63,20 +63,15 @@ auto check_keys(const kitzoo::json::Json& object, std::initializer_list<std::str
 // Reads an optional key; a mistyped value is a problem and leaves `value`.
 auto read(const kitzoo::json::Json& object, std::string_view key, int& value, std::string_view section,
           Problems& problems) -> void;
-
 auto read(const kitzoo::json::Json& object, std::string_view key, bool& value, std::string_view section,
           Problems& problems) -> void;
-
 auto read(const kitzoo::json::Json& object, std::string_view key, String& value, std::string_view section,
           Problems& problems) -> void;
-
 auto read(const kitzoo::json::Json& object, std::string_view key, Vector<String>& value, std::string_view section,
           Problems& problems) -> void;
-
 // An object whose values are all strings.
 auto read(const kitzoo::json::Json& object, std::string_view key, Map<String, String>& value, std::string_view section,
           Problems& problems) -> void;
-
 // An object of shapes: arrays of positive integers.
 auto read(const kitzoo::json::Json& object, std::string_view key, Map<String, Vector<std::int64_t>>& value,
           std::string_view section, Problems& problems) -> void;

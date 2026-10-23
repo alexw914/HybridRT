@@ -16,7 +16,6 @@ class CudaMemory final : public core::Memory {
 public:
   // Owning; an empty stride takes aligned_stride().
   explicit CudaMemory(const core::Shape& shape = {}, const core::Stride& stride = {});
-
   CudaMemory(std::uintptr_t device, std::size_t size, const core::Shape& shape, const core::Stride& stride);
 
   auto ref() -> SharedPtr<core::Memory> override;
