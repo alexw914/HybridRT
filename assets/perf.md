@@ -4,6 +4,53 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-24: fuse CPU letterbox padding, conversion and normalization
+
+**Bottleneck.** For interleaved uint8 BGR/RGB sources and planar float32 inputs, the CPU flow
+filled the whole uint8 input-sized scratch with the padding color, resized into its region, then
+split and converted the whole image, padding included, to float. Letterbox inputs therefore
+filled, split and converted the padding area twice. Timing the steps separately (OpenCV 4.6,
+one thread, 1920 x 1080 random source) showed that `cv::resize` to 640 x 360 takes 0.413 ms,
+while `split` takes 0.039 ms and three `convertTo` take 0.046 ms.
+
+**Change.** `CpuImagePreprocessor` implements the fused operator for that format pair:
+`cv::resize` writes a region-sized uint8 buffer, `split` and `convertTo` (with the RGB/BGR swap
+and normalization) process only the region, and the four padding strips receive their final
+float value with `setTo`. The buffers grow to the largest region and are reused. Results are
+those of the previous flow: `cv::resize` output depends only on the source region and the
+region size, and the padding is the default color saturated to uint8, normalized unless
+`normalize_type` is `roi`. Other format pairs keep the step-by-step flow.
+
+**Measurement.** WSL2 Ubuntu 24.04, AMD Ryzen 5 5600X, Release GCC 13, OpenCV 4.6.0,
+`hybridrt_bench_preprocess`, OpenCV threads = 1, pinned to one core with `taskset -c 4`. The
+baseline binary is commit `885505a`; both binaries used the same benchmark source and ran in
+alternating order for five rounds, each with three repetitions of at least 0.5 s after 0.2 s
+warm-up; numbers are the median of the round medians, with the range of round medians. No
+build, CTest or other benchmark ran meanwhile. Letterbox with linear resize, padding 114,
+planar RGB float32, mean 0, std 255; `BM_Task/0` letterboxes `bus.jpg` (810 x 1080) into
+640 x 480, `BM_Resolution` uses synthetic uint8 BGR frames.
+
+| Case | Before, ms | After, ms | Change |
+| --- | ---: | ---: | ---: |
+| `BM_Task/0` detect, 810 x 1080 to 640 x 480 | 0.478 (0.454-0.509) | 0.445 (0.441-0.489) | -6.8% |
+| 1920 x 1080 to 640 x 360 (no padding) | 0.531 (0.519-0.623) | 0.546 (0.531-0.601) | +2.9% |
+| 1920 x 1080 to 640 x 640 | 0.667 (0.647-0.715) | 0.631 (0.576-0.712) | -5.3% |
+| 1920 x 1080 to 960 x 960 | 1.187 (1.103-1.316) | 0.951 (0.904-1.016) | -19.9% |
+| 3840 x 2160 to 640 x 360 (no padding) | 0.583 (0.556-0.597) | 0.578 (0.545-0.640) | -0.9% |
+
+The cases without padding do the same work as before; their differences lie within the
+round-to-round range. Unpinned runs on this machine varied by up to 20% between rounds and
+were not used.
+
+**Validation.** The CPU preprocessing tests, which check every byte value with both channel
+orders, all three normalize types and padding, and the ImageModel tests pass.
+
+**Remaining.** `cv::resize` of the large source dominates CPU preprocessing; fusing the
+conversion further cannot save more than the 0.085 ms of split and conversion above. Batches
+gain from running samples on OpenCV threads (previous commit); a faster host path would need
+a cheaper resize, for example on the GPU. NV12 and other format pairs, RKNN/RGA, Ascend/DVPP,
+Metal and Windows were not measured.
+
 ## 2026-10-23: avoid resetting image layouts and rechecking unchanged explicit strides
 
 **Bottleneck.** Code inspection found that `Image::wrap()` established the final memory

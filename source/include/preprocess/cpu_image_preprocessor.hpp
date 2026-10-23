@@ -30,6 +30,11 @@ public:
   auto normalize(core::Image& image, const core::Rect& roi, const Array<float, 3>& mean, const Array<float, 3>& stddev,
                  core::Stream* stream) -> bool override;
 
+  // Interleaved uint8 BGR/RGB to planar float32: resizes only the region,
+  // then converts and normalizes it and writes the padding directly.
+  auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
+             const ImagePreprocessorParam& param, core::Stream* stream) -> bool override;
+
   KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Cpu; }
 
   KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::Cpu; }
@@ -42,9 +47,15 @@ private:
   auto convert_normalize(core::Image& dst, const core::Image& src, const core::Rect& roi, const Array<float, 3>& mean,
                          const Array<float, 3>& stddev, core::Stream* stream) -> bool override;
 
+  KZ_NODISCARD auto supports_fused(const core::Image& dst, const core::Image& src,
+                                   const ImagePreprocessorParam& param) const -> bool override;
+
   // Reused intermediates for multi-step conversions.
   cv::Mat bgr_;
   Array<cv::Mat, 3> planes_;
+  // Fused-path buffers, kept at the largest input size so frame changes reuse them.
+  cv::Mat region_;
+  Array<cv::Mat, 3> region_planes_;
 };
 
 } // namespace hrt::preprocess

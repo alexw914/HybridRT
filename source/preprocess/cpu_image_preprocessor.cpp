@@ -6,6 +6,8 @@
 
 #include "include/preprocess/cpu_image_preprocessor.hpp"
 
+#include <algorithm>
+#include <cstdint>
 #include <opencv2/imgproc.hpp>
 
 namespace hrt::preprocess {
@@ -119,6 +121,26 @@ auto yuv_to_bgr_code(core::ImageFormat format) -> int {
   default:
     return cv::COLOR_YUV2BGR_YV12;
   }
+}
+
+auto is_identity(const Array<float, 3>& mean, const Array<float, 3>& stddev) -> bool {
+  return std::all_of(mean.begin(), mean.end(), [](float v) -> bool { return v == 0.0F; }) &&
+         std::all_of(stddev.begin(), stddev.end(), [](float v) -> bool { return v == 1.0F; });
+}
+
+// Top-left `size` part of `buffer`, which grows to hold it and is otherwise reused.
+auto area(cv::Mat& buffer, int type, core::Size size) -> cv::Mat {
+  if (buffer.type() != type || buffer.cols < size.width || buffer.rows < size.height)
+    buffer.create(std::max(buffer.rows, size.height), std::max(buffer.cols, size.width), type);
+  return buffer(cv::Rect(0, 0, size.width, size.height));
+}
+
+// The parts of `rect` outside `roi`, which lies inside it.
+auto borders(const cv::Rect& rect, const cv::Rect& roi) -> Array<cv::Rect, 4> {
+  return {cv::Rect(rect.x, rect.y, rect.width, roi.y - rect.y),
+          cv::Rect(rect.x, roi.y + roi.height, rect.width, rect.y + rect.height - roi.y - roi.height),
+          cv::Rect(rect.x, roi.y, roi.x - rect.x, roi.height),
+          cv::Rect(roi.x + roi.width, roi.y, rect.x + rect.width - roi.x - roi.width, roi.height)};
 }
 
 } // namespace
@@ -317,6 +339,53 @@ auto CpuImagePreprocessor::convert_normalize(core::Image& dst, const core::Image
       input.convertTo(output, CV_32F);
     const auto alpha = 1.0 / static_cast<double>(stddev[c]);
     input(rect).convertTo(output(rect), CV_32F, alpha, -static_cast<double>(mean[c]) * alpha);
+  }
+  return true;
+}
+
+auto CpuImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
+                                          const ImagePreprocessorParam& /*param*/) const -> bool {
+  return layout_of(src.format()) == Layout::Inter3 && src.data_type() == core::DataType::Uint8 &&
+         layout_of(dst.format()) == Layout::Planar3 && dst.data_type() == core::DataType::Float32;
+}
+
+auto CpuImagePreprocessor::fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
+                                 const ImagePreprocessorParam& param, core::Stream* stream) -> bool {
+  auto* dst_base = mutable_host(dst, stream);
+  auto* src_base = host(src, stream);
+  const auto& roi = transform.dst_roi;
+  if (dst_base == nullptr || src_base == nullptr || roi.empty() || transform.src_roi.empty())
+    return false;
+  // Same results as filling, resizing into the region and converting the whole input, without touching the padding
+  // twice: cv::resize depends only on the source region and the region size.
+  auto pixels = area(region_, CV_8UC3, roi.size());
+  cv::resize(inter(src, src_base)(cv_rect(transform.src_roi)), pixels, pixels.size(), 0, 0,
+             interpolation(param.interpolation_mode));
+  Array<cv::Mat, 3> planes;
+  for (std::size_t i = 0; i < planes.size(); ++i)
+    planes[i] = area(region_planes_[i], CV_8UC1, roi.size());
+  cv::split(pixels, planes.data());
+
+  const bool normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
+  const auto swap = rgb_order(src.format()) != rgb_order(dst.format());
+  const auto whole = cv_rect(dst.rect());
+  const auto region = cv_rect(roi);
+  for (int i = 0; i < 3; ++i) {
+    const auto c = static_cast<std::size_t>(i);
+    const auto input = static_cast<std::size_t>(swap ? 2 - i : i);
+    const auto alpha = normalize ? 1.0 / static_cast<double>(param.std[c]) : 1.0;
+    const auto beta = normalize ? -static_cast<double>(param.mean[c]) * alpha : 0.0;
+    auto output = plane(dst, dst_base, i);
+    planes[input].convertTo(output(region), CV_32F, alpha, beta);
+    if (region == whole)
+      continue;
+    // Padding is the default color as a uint8 source pixel; a normalized ROI leaves it unnormalized.
+    const auto pad = static_cast<double>(cv::saturate_cast<std::uint8_t>(param.default_color[input]));
+    const auto value = param.normalize_type == NormalizeType::Roi ? pad : pad * alpha + beta;
+    for (const auto& border : borders(whole, region)) {
+      if (!border.empty())
+        output(border).setTo(value);
+    }
   }
   return true;
 }
