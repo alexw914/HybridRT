@@ -53,13 +53,14 @@ auto argmax_vector(const float* data, int channels, std::size_t plane, std::uint
   }
 #elif defined(__SSE2__) || defined(_M_X64)
   for (; i + 16 <= plane; i += 16) {
-    Array<__m128, 4> best{_mm_loadu_ps(data + i), _mm_loadu_ps(data + i + 4), _mm_loadu_ps(data + i + 8),
-                          _mm_loadu_ps(data + i + 12)};
-    Array<__m128i, 2> labels{_mm_setzero_si128(), _mm_setzero_si128()};
+    // GCC drops SIMD type attributes when they are used as template arguments.
+    __m128 best[4]{_mm_loadu_ps(data + i), _mm_loadu_ps(data + i + 4), _mm_loadu_ps(data + i + 8),
+                   _mm_loadu_ps(data + i + 12)};
+    __m128i labels[2]{_mm_setzero_si128(), _mm_setzero_si128()};
     for (int c = 1; c < channels; ++c) {
       const auto* channel = data + static_cast<std::size_t>(c) * plane + i;
       const auto label = _mm_set1_epi16(static_cast<short>(c));
-      Array<__m128, 4> greater{};
+      __m128 greater[4]{};
       for (std::size_t k = 0; k < 4; ++k) {
         const auto value = _mm_loadu_ps(channel + k * 4);
         greater[k] = _mm_cmpgt_ps(value, best[k]);
