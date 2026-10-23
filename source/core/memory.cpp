@@ -78,6 +78,7 @@ auto Memory::create(MemoryType type, const Shape& shape, const Stride& stride) -
       memory_stride = backend::AclMemory::dvpp_stride(shape);
       break;
 #endif
+    case MemoryType::Cpu:
     default:
       memory_stride = contiguous_stride(shape);
       break;
