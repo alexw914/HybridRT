@@ -3,7 +3,7 @@
 
 include(FetchContent)
 
-set(HYBRIDRT_KITZOO_GIT_TAG "v0.5.1" CACHE STRING "kitzoo git tag or commit")
+set(HYBRIDRT_KITZOO_GIT_TAG "v0.5.2" CACHE STRING "kitzoo git tag or commit")
 
 FetchContent_Declare(
     kitzoo
