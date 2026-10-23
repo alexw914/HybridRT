@@ -170,7 +170,7 @@ auto check_init(UniquePtr<Postprocessor> postprocessor, std::string_view type, c
   KZ_CHECK_MSG(postprocessor != nullptr, "postprocess: unknown type \"{}\"", type);
   const auto problems = postprocessor->check_config(config);
   KZ_CHECK_MSG(problems.empty(), "postprocess: invalid {} config: {}", type, core::join(problems));
-  KZ_CHECK_MSG(engine.input_size().has_value(), "postprocess: {} needs one batch-1 4-D image input", type);
+  KZ_CHECK_MSG(engine.input_size().has_value(), "postprocess: {} needs one 4-D image input", type);
   KZ_CHECK_MSG(postprocessor->init(config, engine), "postprocess: {} does not fit the engine", type);
   return postprocessor;
 }

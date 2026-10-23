@@ -139,6 +139,7 @@ if(HRT_USE_ORT OR HRT_USE_TENSORRT)
         target_link_libraries(hybridrt_test_image_model PRIVATE kitzoo::os)
         target_compile_definitions(hybridrt_test_image_model PRIVATE HRT_TEST_ORT)
     endif()
+    hybridrt_enable_model_test(image_model)
     if(HRT_USE_TENSORRT)
         target_link_libraries(hybridrt_test_image_model PRIVATE TensorRT::nvinfer CUDA::cudart kitzoo::log)
         target_compile_definitions(hybridrt_test_image_model PRIVATE

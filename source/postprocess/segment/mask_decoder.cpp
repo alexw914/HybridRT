@@ -146,7 +146,7 @@ auto find_raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f
   std::size_t selected_channels = 0;
   for (std::size_t candidate = 0; candidate < outputs.size(); ++candidate) {
     const auto& shape = outputs[candidate].shape;
-    if (shape[0] != 1 || std::any_of(shape.begin(), shape.end(), [](std::int64_t dim) -> bool { return dim <= 0; }))
+    if (std::any_of(shape.begin(), shape.end(), [](std::int64_t dim) -> bool { return dim <= 0; }))
       continue;
     RawSegmentOutputs found{{}, candidate, static_cast<std::size_t>(head_channels(outputs[candidate], layout))};
     Vector<core::Point2f> candidate_strides;

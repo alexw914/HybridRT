@@ -20,22 +20,33 @@
 #include <future>
 #include <gtest/gtest.h>
 
+#ifdef HRT_ORT_MODEL_TEST
+#include <opencv2/imgcodecs.hpp>
+#endif
+
 #ifdef HRT_TEST_ORT
 #include "../engine/onnx_model.hpp"
+#endif
+#ifdef HRT_ORT_MODEL_TEST
+#include "../engine/template_config.hpp"
+#endif
+
+#ifdef HRT_TEST_ORT
 
 namespace {
 
-// `type` names the postprocessor.
-auto classify_algo(std::string_view preprocess, std::string_view type = "GeneralClassify") -> hrt::hrtc::AlgoParam {
+// `type` names the postprocessor; `batch` is the static batch of the identity model.
+auto classify_algo(std::string_view preprocess, std::string_view type = "GeneralClassify", std::int64_t batch = 1)
+    -> hrt::hrtc::AlgoParam {
   const auto config = kitzoo::json::Json{{"preprocess", kitzoo::json::Json::parse(preprocess)},
                                          {"postprocess", {{"type", type}, {"classify_postprocess_type", "none"}}}};
-  return {
-      .name = "classify",
-      .engines = {{.engine_type = "ort",
-                   .config = {},
-                   .proto = {},
-                   .data = std::make_shared<const hrt::hrtc::Bytes>(hrt::test::unary_model("Identity", {1, 3, 2, 2}))}},
-      .config = config.dump()};
+  return {.name = "classify",
+          .engines = {{.engine_type = "ort",
+                       .config = {},
+                       .proto = {},
+                       .data = std::make_shared<const hrt::hrtc::Bytes>(
+                           hrt::test::unary_model("Identity", {batch, 3, 2, 2}))}},
+          .config = config.dump()};
 }
 
 class ImageModelTest : public ::testing::Test {
@@ -424,6 +435,153 @@ TEST_F(ImageModelTest, FeedsHeadsGrownWithPadScale) {
     expect_fed_crop(result->front(), 16, 16, whole, read);
   }
 }
+
+TEST_F(ImageModelTest, RunsImagesAsOneStaticBatch) {
+  using Images = hrt::Vector<hrt::core::Image>;
+  const auto model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>::create(
+      classify_algo(R"({"dst_image_format": "planar_rgb", "std": [255, 255, 255]})", "GeneralClassify", 2), cpu_);
+  ASSERT_NE(model, nullptr);
+  EXPECT_EQ(model->batch(), 2U);
+
+  hrt::Vector<std::uint8_t> first;
+  hrt::Vector<std::uint8_t> second;
+  const Images images{uniform_bgr(first, 10, 20, 30), uniform_bgr(second, 40, 50, 60)};
+  const auto results = model->process_sync(images);
+  ASSERT_TRUE(results);
+  ASSERT_EQ(results->size(), 2U);
+  // The identity model returns each sample's R, G and B planes.
+  ASSERT_EQ((*results)[0].front().size(), 12U);
+  EXPECT_FLOAT_EQ((*results)[0][0][0], 30.0F / 255.0F);
+  EXPECT_FLOAT_EQ((*results)[0][0][11], 10.0F / 255.0F);
+  ASSERT_EQ((*results)[1].front().size(), 12U);
+  EXPECT_FLOAT_EQ((*results)[1][0][0], 60.0F / 255.0F);
+  EXPECT_FLOAT_EQ((*results)[1][0][11], 40.0F / 255.0F);
+
+  // Fewer images than the batch, the single-image overload and per-image rects.
+  const auto one = model->process_sync(Images{images[1]});
+  ASSERT_TRUE(one);
+  ASSERT_EQ(one->size(), 1U);
+  EXPECT_FLOAT_EQ((*one)[0][0][0], 60.0F / 255.0F);
+  const auto single = model->process_sync(images[0]);
+  ASSERT_TRUE(single);
+  EXPECT_FLOAT_EQ((*single)[0][0], 30.0F / 255.0F);
+  EXPECT_TRUE(model->process_sync(images, {{0, 0, 8, 8}, {0, 0, 4, 4}}));
+
+  // Empty, oversized and mismatched requests are refused.
+  EXPECT_FALSE(model->process_sync(Images{}));
+  EXPECT_FALSE(model->process_sync(Images{images[0], images[1], images[0]}));
+  EXPECT_FALSE(model->process_sync(images, {{0, 0, 8, 8}}));
+}
+
+TEST_F(ImageModelTest, RunsTheBatchOverloadOnABatchOfOne) {
+  using Images = hrt::Vector<hrt::core::Image>;
+  const auto model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>::create(
+      classify_algo(R"({"dst_image_format": "planar_rgb", "std": [255, 255, 255]})"), cpu_);
+  ASSERT_NE(model, nullptr);
+  EXPECT_EQ(model->batch(), 1U);
+
+  hrt::Vector<std::uint8_t> pixels;
+  const auto image = uniform_bgr(pixels, 10, 20, 30);
+  const auto results = model->process_sync(Images{image});
+  const auto single = model->process_sync(image);
+  ASSERT_TRUE(results);
+  ASSERT_TRUE(single);
+  ASSERT_EQ(results->size(), 1U);
+  EXPECT_EQ(results->front(), *single);
+  EXPECT_FALSE(model->process_sync(Images{image, image}));
+}
+
+#ifdef HRT_ORT_MODEL_TEST
+auto expect_same(const hrt::postprocess::ObjectBox& batched, const hrt::postprocess::ObjectBox& single) -> void {
+  EXPECT_EQ(batched.type, single.type);
+  EXPECT_NEAR(batched.score, single.score, 1e-4F);
+  EXPECT_NEAR(batched.rect.x, single.rect.x, 1e-2F);
+  EXPECT_NEAR(batched.rect.y, single.rect.y, 1e-2F);
+  EXPECT_NEAR(batched.rect.width, single.rect.width, 1e-2F);
+  EXPECT_NEAR(batched.rect.height, single.rect.height, 1e-2F);
+}
+
+auto expect_same(const hrt::postprocess::KeypointObject& batched, const hrt::postprocess::KeypointObject& single)
+    -> void {
+  expect_same(batched.box, single.box);
+  ASSERT_EQ(batched.keypoints.size(), single.keypoints.size());
+  for (std::size_t i = 0; i < batched.keypoints.size(); ++i) {
+    EXPECT_NEAR(batched.keypoints[i].point.x, single.keypoints[i].point.x, 1e-2F);
+    EXPECT_NEAR(batched.keypoints[i].point.y, single.keypoints[i].point.y, 1e-2F);
+    EXPECT_NEAR(batched.keypoints[i].score, single.keypoints[i].score, 1e-4F);
+  }
+}
+
+auto expect_same(const hrt::postprocess::SegmentObject& batched, const hrt::postprocess::SegmentObject& single)
+    -> void {
+  expect_same(batched.box, single.box);
+  EXPECT_EQ(batched.mask.rect, single.mask.rect);
+  EXPECT_EQ(batched.mask.data, single.mask.data);
+}
+
+auto expect_same(const hrt::postprocess::ClassifyResult& batched, const hrt::postprocess::ClassifyResult& single)
+    -> void {
+  ASSERT_EQ(batched.size(), single.size());
+  for (std::size_t output = 0; output < batched.size(); ++output) {
+    ASSERT_EQ(batched[output].size(), single[output].size());
+    for (std::size_t i = 0; i < batched[output].size(); ++i)
+      EXPECT_NEAR(batched[output][i], single[output][i], 1e-4F);
+  }
+}
+
+template <typename Map>
+auto expect_same(const Map& batched, const Map& single) -> void {
+  ASSERT_EQ(batched.size(), single.size());
+  for (const auto& [cls, objects] : single) {
+    ASSERT_TRUE(batched.contains(cls)) << "class " << cls;
+    ASSERT_EQ(batched.at(cls).size(), objects.size()) << "class " << cls;
+    for (std::size_t i = 0; i < objects.size(); ++i)
+      expect_same(batched.at(cls)[i], objects[i]);
+  }
+}
+
+// Runs bus.jpg and zidane.jpg through the static batch-2 copy of `name` in one
+// batch and expects the results of the batch-1 model, image by image.
+template <typename Result>
+auto expect_batch_matches_single(std::string_view name) -> void {
+  const auto single_algo = hrt::test::template_algo(name);
+  const auto batch_algo = hrt::test::template_algo(hrt::String(name) + "_batch2");
+  const auto images_dir = hrt::test::source_root() / "assets/test/images";
+  hrt::Vector<cv::Mat> frames{cv::imread((images_dir / "bus.jpg").string()),
+                              cv::imread((images_dir / "zidane.jpg").string())};
+  if (single_algo.is_null() || batch_algo.is_null() ||
+      !std::filesystem::is_regular_file(hrt::test::template_model(single_algo)) ||
+      !std::filesystem::is_regular_file(hrt::test::template_model(batch_algo)) || frames[0].empty() ||
+      frames[1].empty())
+    GTEST_SKIP() << name << " batch-2 fixture, its batch-1 model or the test images are unavailable";
+
+  hrt::Vector<hrt::core::Image> images;
+  for (auto& frame : frames) {
+    images.push_back(*hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, frame.data, hrt::core::ImageFormat::InterBgr,
+                                             {frame.cols, frame.rows}, hrt::core::DataType::Uint8, frame.step));
+  }
+  const auto single = hrt::model::ImageModel<Result>::create(single_algo);
+  const auto batched = hrt::model::ImageModel<Result>::create(batch_algo);
+  ASSERT_EQ(batched->batch(), 2U);
+  const auto results = batched->process_sync(images);
+  ASSERT_TRUE(results);
+  ASSERT_EQ(results->size(), images.size());
+  for (std::size_t i = 0; i < images.size(); ++i) {
+    SCOPED_TRACE(i);
+    const auto expected = single->process_sync(images[i]);
+    ASSERT_TRUE(expected);
+    EXPECT_FALSE(expected->empty());
+    expect_same((*results)[i], *expected);
+  }
+}
+
+TEST_F(ImageModelTest, MatchesBatchOneOnStaticBatchModels) {
+  expect_batch_matches_single<hrt::postprocess::ClassifyResult>("yolov8n_classify");
+  expect_batch_matches_single<hrt::postprocess::DetectResultMap>("yolov8n_detect");
+  expect_batch_matches_single<hrt::postprocess::KeypointResultMap>("yolov8n_pose");
+  expect_batch_matches_single<hrt::postprocess::SegmentResultMap>("yolov8n_segment");
+}
+#endif
 
 } // namespace
 #endif

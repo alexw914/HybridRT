@@ -40,9 +40,14 @@ protected:
 
   auto to_host(const core::Buffers& outputs, core::Stream* stream) -> const core::Buffers*;
 
+  // Sample `index` of every output of `host` (from to_host()); outputs whose
+  // batch is 1 are returned as they are.
+  auto sample_outputs(const core::Buffers& host, std::size_t index) -> const core::Buffers*;
+
 private:
   core::Buffers host_;
   core::Buffers view_;
+  core::Buffers sample_;
 };
 
 template <typename Result>
@@ -55,6 +60,22 @@ public:
     result.clear();
     const auto* host = to_host(outputs, stream);
     return host != nullptr && decode(result, *host, transform);
+  }
+
+  // One result per transform from batched outputs: sample i of every output
+  // belongs to transforms[i], and samples past transforms.size() are ignored.
+  auto process(Vector<Result>& results, const core::Buffers& outputs,
+               const Vector<preprocess::ImageTransform>& transforms, core::Stream* stream = nullptr) -> bool {
+    results.assign(transforms.size(), Result{});
+    const auto* host = to_host(outputs, stream);
+    if (host == nullptr)
+      return false;
+    for (std::size_t i = 0; i < transforms.size(); ++i) {
+      const auto* sample = sample_outputs(*host, i);
+      if (sample == nullptr || !decode(results[i], *sample, transforms[i]))
+        return false;
+    }
+    return true;
   }
 
 protected:

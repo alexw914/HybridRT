@@ -32,6 +32,7 @@ add_library(hybridrt STATIC
     core/context.cpp
     core/memory.cpp
     core/buffer.cpp
+    core/batch.cpp
     core/image.cpp
     core/config.cpp
     core/view.cpp

@@ -20,6 +20,7 @@
 #include <emmintrin.h>
 #endif
 
+#include "include/core/batch.hpp"
 #include "include/postprocess/params.hpp"
 
 namespace hrt::postprocess {
@@ -47,6 +48,19 @@ auto PostprocessorBase::to_host(const core::Buffers& outputs, core::Stream* stre
   if (copied && stream != nullptr)
     stream->synchronize();
   return &view_;
+}
+
+auto PostprocessorBase::sample_outputs(const core::Buffers& host, std::size_t index) -> const core::Buffers* {
+  const auto single = [](const auto& buffer) -> bool { return buffer->shape().empty() || buffer->shape()[0] == 1; };
+  if (index == 0 && std::all_of(host.begin(), host.end(), single))
+    return &host;
+  sample_.resize(host.size());
+  for (std::size_t i = 0; i < host.size(); ++i) {
+    sample_[i] = core::batch_sample(*host[i], index, false);
+    if (sample_[i] == nullptr)
+      return nullptr;
+  }
+  return &sample_;
 }
 
 auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* name) -> bool {

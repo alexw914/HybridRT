@@ -84,6 +84,15 @@ normalization). Model conversion and preprocessing must match the selected backe
 dynamic dims once at load. An input without an entry only gets a dynamic leading batch dim, set to 1;
 other dynamic dims need an entry. Outputs whose size depends on the data are not supported.
 
+A leading dim above 1, from the model or `input_shapes` (e.g. `{"images": [4, 3, 640, 640]}`), is a
+static batch. `ImageModel::process_sync` then also takes a vector of 1 to batch images with an empty
+or matching vector of source rects: every image is preprocessed into its own sample of the engine
+input, the engine runs once for the whole batch and each sample is postprocessed into one result,
+in order; samples past the given images are left as they are and not decoded. Every output must
+lead with the same batch. With a batch above 1, samples of dma-buf inputs are written on the host
+(RGA is not used for them) and the `dvpp` preprocessor is refused. `ncnn` always has a batch of 1,
+and dynamic batches are not supported: the batch is fixed at load.
+
 Operator libraries are optional: one that does not load is skipped with a warning.
 
 Per platform:
@@ -353,7 +362,8 @@ backend in `hrtc_device_config.json` therefore uses `NeuralNetwork`.
 ## Test models
 
 Template model files live in `assets/test/onnx/`, named after their postprocessor.
-All external input/output dimensions are positive, fixed integers; batch is 1. `Ocr` has
+All external input/output dimensions are positive, fixed integers; batch is 1 except in the
+static batch-2 fixtures below. `Ocr` has
 separate `OcrDetection.onnx`, `OcrRecognition.onnx` (tiny) and `OcrRecognitionSmall.onnx`
 files because detection and recognition need different networks. `Embedding.onnx` is a
 copy of the classifier and returns its 1000 class scores as an example vector.
@@ -404,6 +414,21 @@ Single-thread timing results and reproduction commands are in [benchmark.md](../
 | `yolo26n_segment_raw` | `Yolo26Segment.onnx` | `1 x 3 x 640 x 640` | `52f066c5e682fddf899466d975d4f7c0bc727fb49424072fc7d986f9d09b8ed8` |
 | `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `78cb9fff568e1a006523a54ae96c1f43ea6b376e93dd637e10eede16128335f4` |
 | `lraspp_voc_segment` | `SemanticSegment.onnx` | `1 x 3 x 512 x 512` | `70e2c6d571872208589c43a491fde37fbf73376481343119a5c67dfd55df8c6f` |
+
+Static batch-2 fixtures, named `<base>Batch2.onnx`, are built by local
+`assets/test/scripts/make_batch.py` from the batch-1 files: the input is sliced into its two samples,
+each runs through its own copy of the graph with shared weights, and the outputs are concatenated on
+dim 0. Their template algos add `_batch2` to the base algo name. Built on 2026-10-23 with ONNX 1.23.2
+from the local base files listed below; with ONNX Runtime 1.23.2 CPU each sample's outputs equal the
+base model's on random inputs (maximum difference 0), and `ImageModelTest.MatchesBatchOneOnStaticBatchModels`
+checks that one batch of bus.jpg and zidane.jpg gives the per-image results of the base algo.
+
+| Algo | ONNX file in `assets/test/onnx/` | Input NCHW | Outputs | Base file SHA256 | SHA256 |
+| --- | --- | --- | --- | --- | --- |
+| `yolov8n_classify_batch2` | `GeneralClassifyBatch2.onnx` | `2 x 3 x 480 x 640` | `2 x 1000` | `29e1963b77c3d1e38d3c8772ecbce294e48aa3287c3f703c39bc4e8d0b1a0f1c` | `31531b92ed0e4a989fc51464fa8ed81c8cd8eef01f5d334166bbf679d7296673` |
+| `yolov8n_detect_batch2` | `GeneralDetectBatch2.onnx` | `2 x 3 x 480 x 640` | `2 x 84 x 6300` | `fa2c856b0effedce4f49fffd121f438247a64c8f633bf0e6d5e5960e869ccc5a` | `cbdeab2964cca82dcea5668b3870e2de6da4685824ffd8ebfb17d29feb57ad45` |
+| `yolov8n_pose_batch2` | `GeneralYoloPoseBatch2.onnx` | `2 x 3 x 480 x 640` | `2 x 56 x 6300` | `6fc546ff26e38b25e29c047fcacd71d3607705c0b5a590f0bd97492aed459f94` | `d073f0f9a72b62143653f5e090d7133a74ec02583cf9b69f6d6acecb91fe032e` |
+| `yolov8n_segment_batch2` | `GeneralYoloSegmentBatch2.onnx` | `2 x 3 x 480 x 640` | `2 x 116 x 6300`, `2 x 32 x 120 x 160` | `9373c971598d799b54e6911e5a665b99653eb0be611471c28ae9dc3676a6a995` | `5ef132c211a65a594fb4c0f41ad4659c1bd6de63f013f49500d6f8076a20a04a` |
 
 Additional OCR fixtures use official PaddlePaddle ONNX weights. The `ppocrv6_tiny_det`,
 `ppocrv6_tiny_rec` and `ppocrv6_small_rec` template algos run through `OcrModel`.

@@ -28,9 +28,9 @@ public:
       return false;
     const auto& outputs = engine.output_protos();
     if (engine.proto().output_layout != engine::DataLayout::Nchw || engine.input_protos().size() != 1 ||
-        outputs.size() != 1 || outputs[0].shape.size() != 3 || outputs[0].shape[0] != 1 ||
+        outputs.size() != 1 || outputs[0].shape.size() != 3 || outputs[0].shape[0] < 1 ||
         outputs[0].shape[1] != static_cast<std::int64_t>(param_.class_num) + 4) {
-      KZ_LOG_ERROR("general_detect: needs one input and one [1, 4 + class_num, N] output");
+      KZ_LOG_ERROR("general_detect: needs one input and one [batch, 4 + class_num, N] output");
       return false;
     }
     return true;

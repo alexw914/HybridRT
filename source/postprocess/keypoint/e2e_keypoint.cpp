@@ -41,8 +41,8 @@ public:
       return false;
     const auto& outputs = engine.output_protos();
     KZ_CHECK_RETURN(engine.input_protos().size() == 1 && outputs.size() == 1 && outputs[0].shape.size() == 3 &&
-                        outputs[0].shape[0] == 1 && outputs[0].shape[1] > 0,
-                    false, "e2e_keypoint: needs one input and one [1, N, columns] output");
+                        outputs[0].shape[0] >= 1 && outputs[0].shape[1] > 0,
+                    false, "e2e_keypoint: needs one input and one [batch, N, columns] output");
     KZ_CHECK_RETURN(outputs[0].shape[2] == 6 + static_cast<std::int64_t>(param_.keypoint_num * kKeypointValues), false,
                     "e2e_keypoint: output columns do not match keypoint_num");
     return true;

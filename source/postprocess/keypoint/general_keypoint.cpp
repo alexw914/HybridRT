@@ -120,7 +120,7 @@ public:
       case KeypointOutput::Simcc:
       case KeypointOutput::PointWithVisible:
         KZ_CHECK_RETURN(shape.size() == 3 && shape[1] == outputs[0].shape[1], false,
-                        "general_keypoint: needs [1, K, bins] outputs with matching K");
+                        "general_keypoint: needs [batch, K, bins] outputs with matching K");
         break;
       }
     }

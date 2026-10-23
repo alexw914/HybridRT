@@ -93,8 +93,8 @@ TEST(DetrDetectTest, ChecksConfigAndOutputContract) {
        {R"({"class_num":0})", R"({"class_num":3})", R"({"class_num":2,"confidence_threshold":[-0.1]})",
         R"({"class_num":2,"confidence_threshold":[0.1,0.2,0.3]})"})
     EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("DetrDetect", Json::parse(text), engine), "");
-  for (const auto& output : {proto(DataType::Float32, {1, 6, 2}), proto(DataType::Float32, {2, 2, 6}),
-                             proto(DataType::Float32, {1, 0, 6}), proto(DataType::Int32, {1, 2, 6})}) {
+  for (const auto& output :
+       {proto(DataType::Float32, {1, 6, 2}), proto(DataType::Float32, {1, 0, 6}), proto(DataType::Int32, {1, 2, 6})}) {
     FakeEngine invalid({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
     EXPECT_DEATH(
         hrt::postprocess::create_detect_postprocessor("DetrDetect", Json::parse(R"({"class_num":2})"), invalid), "");

@@ -119,8 +119,8 @@ public:
   auto init(const kitzoo::json::Json& /*config*/, const engine::Engine& engine) -> bool override {
     const auto& outputs = engine.output_protos();
     if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 1 ||
-        (outputs[0].shape.size() != 3 && outputs[0].shape.size() != 4) || outputs[0].shape[0] != 1) {
-      KZ_LOG_ERROR("semantic_segment: needs one [1, C, H, W] or [1, H, W] output");
+        (outputs[0].shape.size() != 3 && outputs[0].shape.size() != 4) || outputs[0].shape[0] < 1) {
+      KZ_LOG_ERROR("semantic_segment: needs one [batch, C, H, W] or [batch, H, W] output");
       return false;
     }
     const auto type = outputs[0].data_type;

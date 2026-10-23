@@ -35,8 +35,8 @@ public:
       return false;
     const auto& outputs = engine.output_protos();
     KZ_CHECK_RETURN(engine.input_protos().size() == 1 && outputs.size() == 1 && outputs[0].shape.size() == 3 &&
-                        outputs[0].shape[0] == 1 && outputs[0].shape[1] > 0 && outputs[0].shape[2] == 6,
-                    false, "e2e_detect: needs one input and one [1, N, 6] output");
+                        outputs[0].shape[0] >= 1 && outputs[0].shape[1] > 0 && outputs[0].shape[2] == 6,
+                    false, "e2e_detect: needs one input and one [batch, N, 6] output");
     return true;
   }
 

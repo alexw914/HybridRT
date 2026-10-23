@@ -27,7 +27,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralYoloSegmentParam, class_n
                                                 mask_threshold)
 
 // Outputs: detections [1, 4 + classes + masks, N] and prototypes
-// [1, masks, mh, mw], identified by rank.
+// [batch, masks, mh, mw], identified by rank.
 class GeneralYoloSegment final : public SegmentPostprocessor {
 public:
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
@@ -46,9 +46,9 @@ public:
     prototypes_ = 1 - detections_;
     const auto& det = outputs[detections_].shape;
     const auto& proto = outputs[prototypes_].shape;
-    if (det.size() != 3 || proto.size() != 4 || det[0] != 1 || proto[0] != 1 ||
+    if (det.size() != 3 || proto.size() != 4 || det[0] < 1 || proto[0] != det[0] ||
         det[1] != static_cast<std::int64_t>(param_.class_num) + 4 + proto[1]) {
-      KZ_LOG_ERROR("general_yolo_segment: outputs must be [1, 4 + class_num + masks, N] and [1, masks, h, w]");
+      KZ_LOG_ERROR("general_yolo_segment: outputs must be [batch, 4 + class_num + masks, N] and [batch, masks, h, w]");
       return false;
     }
     mask_logit_ = core::logit(param_.mask_threshold);

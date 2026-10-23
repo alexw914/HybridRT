@@ -25,6 +25,7 @@
 
 #include <functional>
 #include <optional>
+#include <span>
 #include <string_view>
 
 namespace hrt::model {
@@ -97,6 +98,11 @@ public:
   // grow and clip detections with core::pad_scale, core::cover_pixels and
   // core::intersect.
   auto process_sync(const core::Image& src, const core::Rect& src_rect = {}) -> std::optional<Result>;
+  // Runs 1 to batch() images as one batch: each is preprocessed into its own
+  // sample of the engine input, the engine runs once, and one result per image
+  // comes back in order. `src_rects` is empty (whole images) or one per image.
+  auto process_sync(const Vector<core::Image>& srcs, const Vector<core::Rect>& src_rects = {})
+      -> std::optional<Vector<Result>>;
 
   KZ_NODISCARD auto context() const -> const SharedPtr<core::Context>& { return context_; }
 
@@ -106,17 +112,26 @@ public:
 
   KZ_NODISCARD auto options() const -> const ImageModelOptions& { return options_; }
 
+  // Static batch of the engine's image input, from the leading dim of its shape.
+  KZ_NODISCARD auto batch() const -> std::size_t { return batch_; }
+
 private:
   ImageModel(SharedPtr<core::Context> context, const ImageModelOptions& options);
 
   auto build(const hrtc::AlgoParam& algo, const kitzoo::json::Json& config, const PostprocessorFactory& factory,
              UniquePtr<engine::Engine> first, const hrtc::EngineParam& chosen) -> void;
 
+  auto run(std::span<const core::Image> srcs, std::span<const core::Rect> src_rects) -> std::optional<Vector<Result>>;
+
   KZ_NODISCARD auto create_input_image(const core::Buffer& input) const -> std::optional<core::Image>;
+
+  // Image view of sample `index` of the engine input `input`.
+  KZ_NODISCARD auto input_image(const core::Buffers& input, std::size_t index) const -> std::optional<core::Image>;
 
   SharedPtr<core::Context> context_;
   ImageModelOptions options_;
   engine::DataLayout input_layout_ = engine::DataLayout::Nchw;
+  std::size_t batch_ = 1;
   preprocess::ImagePreprocessorParam preprocessor_param_;
   kitzoo::thread::ObjectPool<UniquePtr<preprocess::ImagePreprocessor>> preprocessor_pool_;
   kitzoo::thread::ObjectPool<UniquePtr<engine::Engine>> engine_pool_;

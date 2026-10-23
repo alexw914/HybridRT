@@ -34,16 +34,17 @@ public:
     score_channels_ = static_cast<std::size_t>(param_.class_num) + (param_.background_class >= 0 ? 1U : 0U);
     const auto& outputs = engine.output_protos();
     const auto valid = [](const core::BufferProto& output, std::size_t channels) -> bool {
-      return output.shape.size() == 3 && output.shape[0] == 1 && output.shape[1] > 0 &&
+      return output.shape.size() == 3 && output.shape[0] >= 1 && output.shape[1] > 0 &&
              output.shape[2] == static_cast<std::int64_t>(channels);
     };
     if (param_.output_format == DetrOutputFormat::Combined) {
       KZ_CHECK_RETURN(outputs.size() == 1 && valid(outputs[0], 4 + score_channels_), false,
-                      "detr_detect: combined format needs one [1, N, 4 + score channels] output");
+                      "detr_detect: combined format needs one [batch, N, 4 + score channels] output");
     } else {
-      KZ_CHECK_RETURN(outputs.size() == 2 && valid(outputs[0], 4) && valid(outputs[1], score_channels_) &&
-                          outputs[0].shape[1] == outputs[1].shape[1],
-                      false, "detr_detect: separate format needs output 0 [1, N, 4] boxes and output 1 [1, N, scores]");
+      KZ_CHECK_RETURN(
+          outputs.size() == 2 && valid(outputs[0], 4) && valid(outputs[1], score_channels_) &&
+              outputs[0].shape[1] == outputs[1].shape[1],
+          false, "detr_detect: separate format needs output 0 [batch, N, 4] boxes and output 1 [batch, N, scores]");
     }
     count_ = static_cast<std::size_t>(outputs[0].shape[1]);
     return true;

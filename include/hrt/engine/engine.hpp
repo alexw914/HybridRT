@@ -82,7 +82,7 @@ public:
 
   KZ_NODISCARD auto output_protos() const -> const Vector<core::BufferProto>& { return output_protos_; }
 
-  // Width x height of the single 4-D batch-1 input under proto().input_layout;
+  // Width x height of the single 4-D input under proto().input_layout;
   // nullopt, logged, for any other inputs or a dynamic or empty size.
   KZ_NODISCARD auto input_size() const -> std::optional<core::Size>;
 

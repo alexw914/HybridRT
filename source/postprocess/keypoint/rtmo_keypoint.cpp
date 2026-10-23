@@ -44,9 +44,9 @@ public:
     boxes_index_ = outputs[0].shape.size() == 3 ? 0 : 1;
     const auto& boxes = outputs[boxes_index_].shape;
     const auto& keypoints = outputs[1 - boxes_index_].shape;
-    KZ_CHECK_RETURN(boxes.size() == 3 && boxes[0] == 1 && boxes[1] > 0 && boxes[2] == 5 && keypoints.size() == 4 &&
-                        keypoints[0] == 1 && keypoints[1] == boxes[1] && keypoints[2] > 0 && keypoints[3] == 3,
-                    false, "rtmo_keypoint: needs [1, M, 5] boxes and [1, M, K, 3] keypoints");
+    KZ_CHECK_RETURN(boxes.size() == 3 && boxes[0] >= 1 && boxes[1] > 0 && boxes[2] == 5 && keypoints.size() == 4 &&
+                        keypoints[0] == boxes[0] && keypoints[1] == boxes[1] && keypoints[2] > 0 && keypoints[3] == 3,
+                    false, "rtmo_keypoint: needs [batch, M, 5] boxes and [batch, M, K, 3] keypoints");
     return true;
   }
 

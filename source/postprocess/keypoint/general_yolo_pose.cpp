@@ -42,8 +42,8 @@ public:
       return false;
     const auto& outputs = engine.output_protos();
     KZ_CHECK_RETURN(engine.proto().output_layout == engine::DataLayout::Nchw && engine.input_protos().size() == 1 &&
-                        outputs.size() == 1 && outputs[0].shape.size() == 3 && outputs[0].shape[0] == 1,
-                    false, "general_yolo_pose: needs one input and one [1, rows, N] output");
+                        outputs.size() == 1 && outputs[0].shape.size() == 3 && outputs[0].shape[0] >= 1,
+                    false, "general_yolo_pose: needs one input and one [batch, rows, N] output");
     KZ_CHECK_RETURN(outputs[0].shape[1] ==
                         static_cast<std::int64_t>(4 + param_.class_num + param_.keypoint_num * kKeypointValues),
                     false, "general_yolo_pose: output rows do not match class_num and keypoint_num");

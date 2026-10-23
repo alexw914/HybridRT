@@ -300,6 +300,50 @@
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/OcrRecognitionSmall.onnx"}]},
         "postprocess": {"type": "Ocr", "stage": "recognition", "decoder": "ctc", "dictionary": "assets/test/weights/ocr/PP-OCRv6_small_rec/characters.txt", "append_space": true}
       }
+    },
+    {
+      "name": "yolov8n_classify_batch2",
+      "config": {
+        "preprocess": {"std": [255, 255, 255]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralClassifyBatch2.onnx"}]},
+        "postprocess": {"type": "GeneralClassify", "classify_postprocess_type": "none"}
+      }
+    },
+    {
+      "name": "yolov8n_detect_batch2",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralDetectBatch2.onnx"}]},
+        "postprocess": {"type": "GeneralDetect", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
+      }
+    },
+    {
+      "name": "yolov8n_pose_batch2",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralYoloPoseBatch2.onnx"}]},
+        "postprocess": {
+          "type": "GeneralYoloPose",
+          "class_num": 1,
+          "keypoint_threshold": 0.5,
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
+      "name": "yolov8n_segment_batch2",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralYoloSegmentBatch2.onnx"}]},
+        "postprocess": {
+          "type": "GeneralYoloSegment",
+          "class_num": 80,
+          "mask_threshold": 0.5,
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
     }
   ]
 }

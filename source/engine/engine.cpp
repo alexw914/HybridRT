@@ -140,8 +140,8 @@ auto Engine::release() -> void {
 }
 
 auto Engine::input_size() const -> std::optional<core::Size> {
-  if (input_protos_.size() != 1 || input_protos_[0].shape.size() != 4 || input_protos_[0].shape[0] != 1) {
-    KZ_LOG_ERROR("Engine: expected one 4-D batch-1 input");
+  if (input_protos_.size() != 1 || input_protos_[0].shape.size() != 4 || input_protos_[0].shape[0] < 1) {
+    KZ_LOG_ERROR("Engine: expected one 4-D input with a static batch");
     return std::nullopt;
   }
   const auto& shape = input_protos_[0].shape;

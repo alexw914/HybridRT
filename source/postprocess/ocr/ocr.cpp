@@ -69,9 +69,9 @@ public:
     if (detection_) {
       det_ = config.get<DetectionParam>();
       KZ_CHECK_RETURN(engine.proto().output_layout == engine::DataLayout::Nchw && shape_.size() == 4 &&
-                          shape_[0] == 1 && shape_[1] == 1 && shape_[2] > 0 && shape_[3] > 0 && shape_[2] <= 32768 &&
+                          shape_[0] >= 1 && shape_[1] == 1 && shape_[2] > 0 && shape_[3] > 0 && shape_[2] <= 32768 &&
                           shape_[3] <= 32768,
-                      false, "Ocr DB: expected [1, 1, H, W]");
+                      false, "Ocr DB: expected [batch, 1, H, W]");
       return true;
     }
     const auto param = config.get<RecognitionParam>();
@@ -87,9 +87,9 @@ public:
     }
     if (param.append_space)
       characters_.emplace_back(" ");
-    KZ_CHECK_RETURN(shape_.size() == 3 && shape_[0] == 1 && shape_[1] > 0 &&
+    KZ_CHECK_RETURN(shape_.size() == 3 && shape_[0] >= 1 && shape_[1] > 0 &&
                         shape_[2] == static_cast<std::int64_t>(characters_.size()),
-                    false, "Ocr CTC: expected [1, T, dictionary + blank + optional space]");
+                    false, "Ocr CTC: expected [batch, T, dictionary + blank + optional space]");
     return true;
   }
 

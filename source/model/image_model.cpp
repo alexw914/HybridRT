@@ -11,6 +11,7 @@
 
 #include <type_traits>
 
+#include "include/core/batch.hpp"
 #include "include/core/config.hpp"
 #include "include/postprocess/params.hpp"
 
@@ -310,16 +311,34 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
   // preprocessor (Auto follows the engine's input memory).
   const auto* host_input_engine =
       preprocessor_param_.device == preprocess::ImagePreprocessorType::Cpu ? &engine : nullptr;
+  // A batch above 1 has every input sample viewed in place and decoded from
+  // the same sample of every output.
+  const auto& inputs = engine.input_protos();
+  KZ_CHECK_MSG(!inputs.empty() && !inputs.front().shape.empty() && inputs.front().shape[0] >= 1,
+               "ImageModel: algo {} needs an image input with a static batch", algo.name);
+  batch_ = static_cast<std::size_t>(inputs.front().shape[0]);
+  if (batch_ > 1) {
+    for (const auto& output : engine.output_protos()) {
+      KZ_CHECK_MSG(!output.shape.empty() && output.shape[0] == inputs.front().shape[0],
+                   "ImageModel: every output of algo {} needs the input batch {} as its leading dim", algo.name,
+                   batch_);
+    }
+  }
+
   core::MemoryType input_memory = core::MemoryType::Cpu;
   for (std::size_t i = 0; i < preprocess_num + engine_num; ++i) {
     auto buffers = make_buffers(engine.input_protos(), host_input_engine);
     KZ_CHECK_MSG(buffers && !buffers->empty(), "ImageModel: cannot allocate the inputs of algo {}", algo.name);
-    auto image = create_input_image(*buffers->front());
+    auto image = input_image(*buffers, 0);
     KZ_CHECK_MSG(image.has_value(), "ImageModel: the engine input of algo {} does not fit the preprocess config",
                  algo.name);
     input_memory = buffers->front()->memory_type();
     input_pool_.add(std::make_unique<core::Buffers>(std::move(*buffers)));
   }
+  // VPC addresses whole DVPP buffers; samples at an offset are not verified.
+  KZ_CHECK_MSG(batch_ == 1 || (input_memory != core::MemoryType::Dvpp &&
+                               preprocessor_param_.device != preprocess::ImagePreprocessorType::Dvpp),
+               "ImageModel: the dvpp preprocessor of algo {} supports only a batch of 1", algo.name);
   for (std::size_t i = 0; i < preprocess_num; ++i) {
     auto preprocessor = preprocess::ImagePreprocessor::create(preprocessor_param_.device, input_memory);
     KZ_CHECK_MSG(preprocessor != nullptr, "ImageModel: preprocess device of algo {} is not available in this build",
@@ -367,25 +386,66 @@ auto ImageModel<Result>::create_input_image(const core::Buffer& input) const -> 
 }
 
 template <typename Result>
+auto ImageModel<Result>::input_image(const core::Buffers& input, std::size_t index) const
+    -> std::optional<core::Image> {
+  // A batch of 1 keeps the engine's own input memory, as RGA and VPC write it directly.
+  if (batch_ == 1)
+    return create_input_image(*input.front());
+  const auto sample = core::batch_sample(*input.front(), index, true);
+  if (sample == nullptr)
+    return std::nullopt;
+  return create_input_image(*sample);
+}
+
+template <typename Result>
 auto ImageModel<Result>::process_sync(const core::Image& src, const core::Rect& src_rect) -> std::optional<Result> {
-  KZ_CHECK_RETURN(src.valid() && src.size().width > 0 && src.size().height > 0, std::nullopt,
-                  "ImageModel: invalid source image");
+  auto results = run({&src, 1}, {&src_rect, 1});
+  if (!results)
+    return std::nullopt;
+  return std::move(results->front());
+}
+
+template <typename Result>
+auto ImageModel<Result>::process_sync(const Vector<core::Image>& srcs, const Vector<core::Rect>& src_rects)
+    -> std::optional<Vector<Result>> {
+  return run(srcs, src_rects);
+}
+
+template <typename Result>
+auto ImageModel<Result>::run(std::span<const core::Image> srcs, std::span<const core::Rect> src_rects)
+    -> std::optional<Vector<Result>> {
+  KZ_CHECK_RETURN(!srcs.empty() && srcs.size() <= batch_, std::nullopt, "ImageModel: got {} images for a batch of {}",
+                  srcs.size(), batch_);
+  KZ_CHECK_RETURN(src_rects.empty() || src_rects.size() == srcs.size(), std::nullopt,
+                  "ImageModel: got {} source rects for {} images", src_rects.size(), srcs.size());
+  for (const auto& src : srcs) {
+    KZ_CHECK_RETURN(src.valid() && src.size().width > 0 && src.size().height > 0, std::nullopt,
+                    "ImageModel: invalid source image");
+  }
+
   context_->set_current();
   auto stream_slot = stream_pool_.acquire();
   auto* stream = stream_slot->get();
   auto input = input_pool_.acquire();
-  // Rebuilt per call: preprocess settings may change between frames of a stream.
-  auto image = create_input_image(*input->front());
-  KZ_CHECK_RETURN(image.has_value(), std::nullopt, "ImageModel: cannot create input image view");
 
-  std::optional<preprocess::ImageTransform> transform;
+  Vector<preprocess::ImageTransform> transforms;
+  transforms.reserve(srcs.size());
   {
     auto preprocessor = preprocessor_pool_.acquire();
-    transform = (*preprocessor)->process(*image, src, src_rect, preprocessor_param_, stream);
+    for (std::size_t i = 0; i < srcs.size(); ++i) {
+      // Rebuilt per call: preprocess settings may change between frames of a stream.
+      auto image = input_image(*input, i);
+      const auto src_rect = src_rects.empty() ? core::Rect{} : src_rects[i];
+      auto transform =
+          image ? (*preprocessor)->process(*image, srcs[i], src_rect, preprocessor_param_, stream) : std::nullopt;
+      if (!transform)
+        break;
+      transforms.push_back(*transform);
+    }
     // Scratch buffers may be reused on another stream only after this completes.
     stream->synchronize();
   }
-  if (!transform)
+  if (transforms.size() != srcs.size())
     return std::nullopt;
 
   auto output = output_pool_.acquire();
@@ -396,11 +456,11 @@ auto ImageModel<Result>::process_sync(const core::Image& src, const core::Rect& 
     // The device must be done with the inputs before they go back to the pool.
     stream->synchronize();
   }
-  Result result;
+  Vector<Result> results;
   auto postprocessor = postprocessor_pool_.acquire();
-  if (!(*postprocessor)->process(result, *output, *transform, stream))
+  if (!(*postprocessor)->process(results, *output, transforms, stream))
     return std::nullopt;
-  return result;
+  return results;
 }
 
 template class ImageModel<postprocess::DetectResultMap>;

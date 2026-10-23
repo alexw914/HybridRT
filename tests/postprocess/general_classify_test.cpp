@@ -48,4 +48,26 @@ TEST(GeneralClassifyTest, DequantizesInt8Scores) {
   EXPECT_FLOAT_EQ(result[0][2], 1.0F);
 }
 
+TEST(GeneralClassifyTest, DecodesEachSampleOfABatch) {
+  const auto output = proto(DataType::Float32, {2, 3});
+  hrt::test::FakeEngine engine({proto(DataType::Float32, {2, 3, 8, 8})}, {output});
+  auto postprocessor = hrt::postprocess::create_classify_postprocessor(
+      "GeneralClassify", kitzoo::json::Json::parse(R"({"classify_postprocess_type": "softmax"})"), engine);
+  ASSERT_NE(postprocessor, nullptr);
+
+  const auto buffer = hrt::test::buffer_of<float>(output, {0.0F, std::log(3.0F), 0.0F, std::log(2.0F), 0.0F, 0.0F});
+  hrt::Vector<hrt::postprocess::ClassifyResult> results;
+  ASSERT_TRUE(postprocessor->process(results, {buffer}, {hrt::test::identity(8, 8), hrt::test::identity(8, 8)}));
+  ASSERT_EQ(results.size(), 2U);
+  ASSERT_EQ(results[0].at(0).size(), 3U);
+  EXPECT_NEAR(results[0][0][1], 0.6F, 1e-6F);
+  ASSERT_EQ(results[1].at(0).size(), 3U);
+  EXPECT_NEAR(results[1][0][0], 0.5F, 1e-6F);
+
+  // Fewer transforms than samples decode only the leading samples.
+  ASSERT_TRUE(postprocessor->process(results, {buffer}, {hrt::test::identity(8, 8)}));
+  ASSERT_EQ(results.size(), 1U);
+  EXPECT_NEAR(results[0][0][1], 0.6F, 1e-6F);
+}
+
 } // namespace

@@ -27,7 +27,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2ESegmentParam, class_num, conf
 // One detection output [1, N, 6 + masks]: per row x1, y1, x2, y2 in
 // network-input pixels, score, class id and mask coefficients, as YOLO26
 // (nms=False) and YOLOv8 (nms=True) segment exports write them, plus the
-// prototypes [1, masks, mh, mw]. Rows are already deduplicated; unused rows
+// prototypes [batch, masks, mh, mw]. Rows are already deduplicated; unused rows
 // score 0.
 class E2ESegment final : public SegmentPostprocessor {
 public:
@@ -44,9 +44,9 @@ public:
     prototypes_ = 1 - detections_;
     const auto& det = outputs[detections_].shape;
     const auto& proto = outputs[prototypes_].shape;
-    KZ_CHECK_RETURN(det.size() == 3 && proto.size() == 4 && det[0] == 1 && proto[0] == 1 && det[1] > 0 &&
+    KZ_CHECK_RETURN(det.size() == 3 && proto.size() == 4 && det[0] >= 1 && proto[0] == det[0] && det[1] > 0 &&
                         det[2] == 6 + proto[1],
-                    false, "e2e_segment: outputs must be [1, N, 6 + masks] and [1, masks, h, w]");
+                    false, "e2e_segment: outputs must be [batch, N, 6 + masks] and [batch, masks, h, w]");
     mask_logit_ = core::logit(param_.mask_threshold);
     return true;
   }
