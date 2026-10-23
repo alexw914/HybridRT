@@ -29,6 +29,13 @@ class Buffer {
 public:
   static auto copy(Buffer& dst, Buffer& src, CopyPolicy policy, Stream* stream = nullptr) -> bool;
 
+  explicit Buffer(MemoryType memory_type, DataType data_type = DataType::Uint8, const Shape& shape = {},
+                  const Stride& stride = {});
+  explicit Buffer(SharedPtr<Memory> memory, DataType data_type = DataType::Uint8, const Shape& shape = {},
+                  const Stride& stride = {});
+  explicit Buffer(const BufferProto& proto);
+  Buffer(SharedPtr<Memory> memory, const BufferProto& proto);
+
   auto reshape(const Shape& shape, const Stride& stride = {}) -> bool;
   auto reshape(DataType data_type, const Shape& shape, const Stride& stride = {}) -> bool;
 
@@ -36,13 +43,6 @@ public:
     scale_ = scale;
     zero_point_ = zero_point;
   }
-
-  explicit Buffer(MemoryType memory_type, DataType data_type = DataType::Uint8, const Shape& shape = {},
-                  const Stride& stride = {});
-  explicit Buffer(SharedPtr<Memory> memory, DataType data_type = DataType::Uint8, const Shape& shape = {},
-                  const Stride& stride = {});
-  explicit Buffer(const BufferProto& proto);
-  Buffer(SharedPtr<Memory> memory, const BufferProto& proto);
 
   KZ_NODISCARD auto valid() const -> bool { return memory_ != nullptr && valid_; }
 

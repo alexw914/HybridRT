@@ -9,6 +9,7 @@
 
 #include <kitzoo/log/logger.hpp>
 
+#include "include/memory/base_pointer.hpp"
 #include "include/memory/cpu_memory.hpp"
 
 #ifdef HRT_USE_CUDA

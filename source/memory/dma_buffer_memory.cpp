@@ -20,6 +20,8 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include "include/memory/base_pointer.hpp"
+
 namespace hrt::memory {
 
 namespace {

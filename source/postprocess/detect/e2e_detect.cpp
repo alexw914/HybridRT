@@ -8,8 +8,6 @@
 #include <kitzoo/core/macro.hpp>
 #include <kitzoo/log/logger.hpp>
 
-#include <cmath>
-
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/params.hpp"
 

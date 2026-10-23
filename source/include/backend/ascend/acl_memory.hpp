@@ -7,7 +7,7 @@
 #ifndef HRT_ASCEND_ACL_MEMORY_HPP
 #define HRT_ASCEND_ACL_MEMORY_HPP
 
-#include "include/memory/base_pointer.hpp"
+#include <hrt/core/memory.hpp>
 
 namespace hrt::backend {
 
@@ -15,12 +15,12 @@ namespace hrt::backend {
 // requires and, without an explicit stride, pads rows to 16 elements.
 class AclMemory final : public core::Memory {
 public:
-  auto ref() -> SharedPtr<core::Memory> override;
-
   // Owning; an empty stride takes aligned_stride().
   explicit AclMemory(core::MemoryType type, const core::Shape& shape = {}, const core::Stride& stride = {});
   AclMemory(core::MemoryType type, std::uintptr_t device, std::size_t size, const core::Shape& shape,
             const core::Stride& stride);
+
+  auto ref() -> SharedPtr<core::Memory> override;
 
   // Dvpp rows are padded to 16 elements, which VPC requires of the images it reads and writes.
   KZ_NODISCARD auto aligned_stride(const core::Shape& shape) const -> core::Stride override;

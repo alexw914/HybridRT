@@ -6,8 +6,6 @@
 
 #include "include/preprocess/cpu_image_preprocessor.hpp"
 
-#include <kitzoo/log/logger.hpp>
-
 #include <opencv2/imgproc.hpp>
 
 namespace hrt::preprocess {

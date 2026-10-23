@@ -7,12 +7,10 @@
 
 #include "include/postprocess/mask_decoder.hpp"
 
-#include <kitzoo/core/macro.hpp>
 #include <kitzoo/log/logger.hpp>
 
 #include <algorithm>
 #include <cmath>
-#include <opencv2/imgproc.hpp>
 
 #include "include/postprocess/common.hpp"
 

@@ -9,8 +9,6 @@
 
 #include <kitzoo/log/logger.hpp>
 
-#include <algorithm>
-
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/params.hpp"
 

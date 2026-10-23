@@ -130,6 +130,8 @@ public:
   static auto create(ImagePreprocessorType type, core::MemoryType target = core::MemoryType::Cpu)
       -> UniquePtr<ImagePreprocessor>;
 
+  virtual ~ImagePreprocessor();
+
   ImagePreprocessor(const ImagePreprocessor&) = delete;
   auto operator=(const ImagePreprocessor&) -> ImagePreprocessor& = delete;
   ImagePreprocessor(ImagePreprocessor&&) = delete;
@@ -140,8 +142,6 @@ public:
   // `src_rect`, so clip boxes for the others with core::intersect.
   auto process(core::Image& dst, const core::Image& src, const core::Rect& src_rect,
                const ImagePreprocessorParam& param, core::Stream* stream = nullptr) -> std::optional<ImageTransform>;
-
-  virtual ~ImagePreprocessor();
 
   // Narrows the regions to what this device can address, for the images it would run on.
   virtual auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst,

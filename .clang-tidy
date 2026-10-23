@@ -17,7 +17,6 @@ Checks: >
   -readability-function-cognitive-complexity,
   misc-*,
   -misc-non-private-member-variables-in-classes,
-  -misc-include-cleaner,
   cppcoreguidelines-*,
   -cppcoreguidelines-pro-type-cstyle-cast,
   -cppcoreguidelines-pro-type-vararg,
@@ -92,3 +91,7 @@ CheckOptions:
     value: '[a-z][a-z0-9_]*_'
   - key: readability-identifier-naming.FunctionIgnoredRegexp
     value: 'BM_.*'
+  - key: misc-include-cleaner.MissingIncludes
+    value: 'false'
+  - key: misc-include-cleaner.IgnoreHeaders
+    value: 'kitzoo/json/reader\.hpp;opencv2/.*;functional'

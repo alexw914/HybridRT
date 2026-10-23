@@ -22,12 +22,12 @@ namespace hrt::postprocess {
 // reusable host buffers first, others are synced through Memory.
 class PostprocessorBase {
 public:
+  virtual ~PostprocessorBase();
+
   PostprocessorBase(const PostprocessorBase&) = delete;
   auto operator=(const PostprocessorBase&) -> PostprocessorBase& = delete;
   PostprocessorBase(PostprocessorBase&&) = delete;
   auto operator=(PostprocessorBase&&) -> PostprocessorBase& = delete;
-
-  virtual ~PostprocessorBase();
 
   virtual auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool = 0;
 

@@ -6,7 +6,6 @@
 // -----------------------------------------------------------------------------
 
 #include <kitzoo/core/macro.hpp>
-#include <kitzoo/log/logger.hpp>
 
 #include <algorithm>
 #include <cmath>

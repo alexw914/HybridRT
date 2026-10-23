@@ -8,7 +8,7 @@
 #ifndef HRT_POSTPROCESS_COMMON_HPP
 #define HRT_POSTPROCESS_COMMON_HPP
 
-#include <hrt/postprocess/postprocessor.hpp>
+#include <hrt/engine/engine.hpp>
 
 #include <kitzoo/core/macro.hpp>
 #include <kitzoo/log/logger.hpp>
@@ -16,9 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <optional>
-#include <type_traits>
 
 #include "include/core/config.hpp"
 #include "include/core/math.hpp"

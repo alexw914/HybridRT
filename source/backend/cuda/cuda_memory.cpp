@@ -9,6 +9,7 @@
 #include <kitzoo/log/logger.hpp>
 
 #include "include/backend/cuda/cuda_common.hpp"
+#include "include/memory/base_pointer.hpp"
 
 namespace hrt::backend {
 

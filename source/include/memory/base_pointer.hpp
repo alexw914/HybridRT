@@ -14,6 +14,8 @@
 namespace hrt::memory {
 
 struct BasePointer {
+  explicit BasePointer(core::MemoryType memory_type) : memory_type_(memory_type) {}
+
   ~BasePointer() {
     if (release_ != nullptr)
       release_(*this);
@@ -23,8 +25,6 @@ struct BasePointer {
   auto operator=(const BasePointer&) -> BasePointer& = delete;
   BasePointer(BasePointer&&) = delete;
   auto operator=(BasePointer&&) -> BasePointer& = delete;
-
-  explicit BasePointer(core::MemoryType memory_type) : memory_type_(memory_type) {}
 
   const core::MemoryType memory_type_;
   void* cpu_ = nullptr;

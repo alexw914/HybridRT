@@ -51,6 +51,8 @@ public:
   static auto create(EngineType type) -> UniquePtr<Engine>;
   static auto create(std::string_view name) -> UniquePtr<Engine>;
 
+  virtual ~Engine();
+
   Engine(const Engine&) = delete;
   auto operator=(const Engine&) -> Engine& = delete;
   Engine(Engine&&) = delete;
@@ -61,8 +63,6 @@ public:
   auto initialize(const hrtc::EngineParam& param) -> bool;
 
   auto release() -> void;
-
-  virtual ~Engine();
 
   virtual auto inference(core::Stream* stream = nullptr) -> bool = 0;
 

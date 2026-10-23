@@ -8,6 +8,8 @@
 
 #include <cstring>
 
+#include "include/memory/base_pointer.hpp" // IWYU pragma: keep
+
 #ifdef HRT_USE_DMA_BUFFER
 #include "include/memory/dma_buffer_memory.hpp"
 #endif

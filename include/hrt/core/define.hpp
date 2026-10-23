@@ -91,11 +91,13 @@ struct BasicRect {
   T width{};
   T height{};
 
-  auto operator==(const BasicRect&) const -> bool = default;
-
   constexpr BasicRect() = default;
 
   constexpr BasicRect(T left, T top, T w, T h) : x(left), y(top), width(w), height(h) {}
+
+  // Spans two opposite corners given in any order.
+  constexpr BasicRect(BasicPoint<T> a, BasicPoint<T> b)
+      : x(std::min(a.x, b.x)), y(std::min(a.y, b.y)), width(std::max(a.x, b.x) - x), height(std::max(a.y, b.y) - y) {}
 
   // Element-wise static_cast; float to int truncates.
   template <typename U>
@@ -103,9 +105,7 @@ struct BasicRect {
       : x(static_cast<T>(other.x)), y(static_cast<T>(other.y)), width(static_cast<T>(other.width)),
         height(static_cast<T>(other.height)) {}
 
-  // Spans two opposite corners given in any order.
-  constexpr BasicRect(BasicPoint<T> a, BasicPoint<T> b)
-      : x(std::min(a.x, b.x)), y(std::min(a.y, b.y)), width(std::max(a.x, b.x) - x), height(std::max(a.y, b.y) - y) {}
+  auto operator==(const BasicRect&) const -> bool = default;
 
   KZ_NODISCARD constexpr auto tl() const -> BasicPoint<T> { return {x, y}; }
 

@@ -11,6 +11,7 @@
 #include <acl/dvpp/hi_dvpp.h>
 
 #include "include/backend/ascend/acl_common.hpp"
+#include "include/memory/base_pointer.hpp"
 
 namespace hrt::backend {
 

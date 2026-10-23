@@ -8,7 +8,6 @@
 #include <hrt/model/image_model.hpp>
 #include <hrt/postprocess/keypoint.hpp>
 
-#include <cmath>
 #include <gtest/gtest.h>
 
 #include "fake_engine.hpp"

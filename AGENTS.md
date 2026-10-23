@@ -123,9 +123,9 @@
 
 - 头文件只声明，实现放 .cpp，模板和 constexpr 除外。函数声明间空一行，同名重载（含构造函数）连续声明、不空行。
 - 转发给成员的方法与被调方法同名（如 `Buffer::bytes()` 返回 `memory_->bytes()`），不另起名字造成歧义。
-- 类的每个访问区段（public、protected、private）内依次放：静态成员函数；前面没有任何关键词和属性宏的成员函数
-  （含构造函数和 `= delete` 的拷贝、移动操作）；以 `virtual`、`explicit`、`constexpr`、`inline` 或 `KZ_NODISCARD`
-  等属性宏开头的成员函数（含 virtual 析构函数）。同名重载按首个声明归组。
+- 类的每个访问区段（public、protected、private）内依次放：静态成员函数；构造函数、析构函数和拷贝、移动操作
+  （依此顺序）；普通成员函数；虚函数（`virtual`、`override` 或纯虚）；以 `KZ_NODISCARD` 等属性宏开头的函数。
+  同名重载连续声明、不空行，按首个声明归组。
 - 修改状态的函数不加 `KZ_NODISCARD`，返回值是否检查由调用方决定。
 - 只读大对象传 `const T&`，修改调用方对象传 `T&`，转移所有权按值或 `T&&`；
   数值、指针、std::string_view、std::span 按值传递。

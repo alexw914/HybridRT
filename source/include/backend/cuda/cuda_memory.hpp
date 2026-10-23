@@ -7,18 +7,18 @@
 #ifndef HRT_CUDA_CUDA_MEMORY_HPP
 #define HRT_CUDA_CUDA_MEMORY_HPP
 
-#include "include/memory/base_pointer.hpp"
+#include <hrt/core/memory.hpp>
 
 namespace hrt::backend {
 
 // Device-only memory; host access goes through copies to host memory.
 class CudaMemory final : public core::Memory {
 public:
-  auto ref() -> SharedPtr<core::Memory> override;
-
   // Owning; an empty stride takes aligned_stride().
   explicit CudaMemory(const core::Shape& shape = {}, const core::Stride& stride = {});
   CudaMemory(std::uintptr_t device, std::size_t size, const core::Shape& shape, const core::Stride& stride);
+
+  auto ref() -> SharedPtr<core::Memory> override;
 
 protected:
   auto reallocate(std::size_t size) -> bool override;

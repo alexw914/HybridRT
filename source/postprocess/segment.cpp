@@ -6,8 +6,6 @@
 
 #include <hrt/postprocess/segment.hpp>
 
-#include <kitzoo/log/logger.hpp>
-
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/params.hpp"
 

@@ -28,6 +28,8 @@ constexpr std::string_view kInlinePrefix = "string:";
 // Copies the model files that follow the flatbuffer, in declaration order.
 class ByteReader {
 public:
+  explicit ByteReader(std::span<const std::uint8_t> bytes) : rest_(bytes) {}
+
   // Generic so the cast below is dependent: needed where std::size_t differs
   // from std::uint64_t, and GCC's -Wuseless-cast stays quiet where it does not.
   auto take(std::unsigned_integral auto size, SharedPtr<const Bytes>& out) -> bool {
@@ -38,8 +40,6 @@ public:
     rest_ = rest_.subspan(head.size());
     return true;
   }
-
-  explicit ByteReader(std::span<const std::uint8_t> bytes) : rest_(bytes) {}
 
   KZ_NODISCARD auto empty() const -> bool { return rest_.empty(); }
 

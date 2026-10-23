@@ -49,6 +49,8 @@ public:
 
   static auto copy(Memory& dst, Memory& src, CopyPolicy policy, Stream* stream = nullptr) -> bool;
 
+  virtual ~Memory();
+
   auto operator=(const Memory&) -> Memory& = delete;
   Memory(Memory&&) = delete;
   auto operator=(Memory&&) -> Memory& = delete;
@@ -72,8 +74,6 @@ public:
   auto sync_to_cpu(Stream* stream = nullptr) -> bool;
 
   auto sync_to_device(Stream* stream = nullptr) -> bool;
-
-  virtual ~Memory();
 
   virtual auto ref() -> SharedPtr<Memory> = 0;
 
@@ -99,10 +99,10 @@ public:
   KZ_NODISCARD auto head() const -> SyncedHead;
 
 protected:
+  explicit Memory(MemoryType type);
+
   // Copies share the allocation and its sync state, as ref() views do.
   Memory(const Memory&) = default;
-
-  explicit Memory(MemoryType type);
 
   // Replaces owned storage with exactly `size` bytes.
   virtual auto reallocate(std::size_t size) -> bool = 0;
