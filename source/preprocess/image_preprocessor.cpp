@@ -108,7 +108,10 @@ auto calc_resize_position(core::Rect& dst_roi, core::Rect& src_roi, const core::
     return true;
   }
   case ResizeType::LetterBox: {
-    const auto size = scaled(src_rect.size(), ratio);
+    // As Ultralytics' LetterBox: the scaled size rounds half to even, as Python's round(), to at least 1, and the
+    // offset rounds down.
+    const core::Size size{std::max(1, static_cast<int>(std::nearbyint(src_rect.width * ratio))),
+                          std::max(1, static_cast<int>(std::nearbyint(src_rect.height * ratio)))};
     dst_roi = core::intersect({dst_rect.x + (dst_rect.width - size.width) / 2,
                                dst_rect.y + (dst_rect.height - size.height) / 2, size.width, size.height},
                               dst_rect);

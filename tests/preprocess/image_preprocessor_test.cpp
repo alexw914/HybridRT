@@ -45,6 +45,24 @@ TEST(ImagePreprocessorTest, LetterBoxCentersTheImage) {
   EXPECT_EQ(src_roi, (hrt::core::Rect{0, 0, 1280, 720}));
 }
 
+TEST(ImagePreprocessorTest, LetterBoxRoundsTheScaledSizeAsUltralytics) {
+  const auto param = param_with(hrt::preprocess::ResizeType::LetterBox);
+  hrt::core::Rect dst_roi;
+  hrt::core::Rect src_roi;
+  // 768 * 640 / 1366 = 359.82 rounds to 360, as Ultralytics' new_unpad.
+  ASSERT_TRUE(
+      hrt::preprocess::calc_resize_position(dst_roi, src_roi, {0, 0, 640, 640}, {0, 0, 1366, 768}, {1366, 768}, param));
+  EXPECT_EQ(dst_roi, (hrt::core::Rect{0, 140, 640, 360}));
+  // 727 / 2 = 363.5 rounds half to even, as Python's round(), leaving 138 rows of padding on each side.
+  ASSERT_TRUE(
+      hrt::preprocess::calc_resize_position(dst_roi, src_roi, {0, 0, 640, 640}, {0, 0, 1280, 727}, {1280, 727}, param));
+  EXPECT_EQ(dst_roi, (hrt::core::Rect{0, 138, 640, 364}));
+  // A thin source keeps at least one row.
+  ASSERT_TRUE(
+      hrt::preprocess::calc_resize_position(dst_roi, src_roi, {0, 0, 640, 640}, {0, 0, 2000, 1}, {2000, 1}, param));
+  EXPECT_EQ(dst_roi, (hrt::core::Rect{0, 319, 640, 1}));
+}
+
 TEST(ImagePreprocessorTest, KeepRatioAnchorsTopLeft) {
   hrt::core::Rect dst_roi;
   hrt::core::Rect src_roi;
