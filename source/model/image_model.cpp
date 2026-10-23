@@ -9,6 +9,8 @@
 #include <kitzoo/json/reader.hpp>
 #include <kitzoo/log/logger.hpp>
 
+#include <algorithm>
+#include <iterator>
 #include <type_traits>
 
 #include "include/core/batch.hpp"
@@ -306,7 +308,8 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
   }
 
   // An input set is held from preprocessing through inference, an output set
-  // from inference through postprocessing, and a stream for the whole call.
+  // from inference through postprocessing, and a stream for the whole call;
+  // a call above the batch runs its batches one after another.
   // Outputs are read on the host; inputs are written there only by the CPU
   // preprocessor (Auto follows the engine's input memory).
   const auto* host_input_engine =
@@ -414,8 +417,7 @@ auto ImageModel<Result>::process_sync(const Vector<core::Image>& srcs, const Vec
 template <typename Result>
 auto ImageModel<Result>::run(std::span<const core::Image> srcs, std::span<const core::Rect> src_rects)
     -> std::optional<Vector<Result>> {
-  KZ_CHECK_RETURN(!srcs.empty() && srcs.size() <= batch_, std::nullopt, "ImageModel: got {} images for a batch of {}",
-                  srcs.size(), batch_);
+  KZ_CHECK_RETURN(!srcs.empty(), std::nullopt, "ImageModel: got no images");
   KZ_CHECK_RETURN(src_rects.empty() || src_rects.size() == srcs.size(), std::nullopt,
                   "ImageModel: got {} source rects for {} images", src_rects.size(), srcs.size());
   for (const auto& src : srcs) {
@@ -425,42 +427,59 @@ auto ImageModel<Result>::run(std::span<const core::Image> srcs, std::span<const 
 
   context_->set_current();
   auto stream_slot = stream_pool_.acquire();
-  auto* stream = stream_slot->get();
-  auto input = input_pool_.acquire();
+  Vector<Result> results;
+  results.reserve(srcs.size());
+  for (std::size_t first = 0; first < srcs.size(); first += batch_) {
+    const auto count = std::min(batch_, srcs.size() - first);
+    const auto rects = src_rects.empty() ? src_rects : src_rects.subspan(first, count);
+    if (!run_batch(srcs.subspan(first, count), rects, stream_slot->get(), results))
+      return std::nullopt;
+  }
+  return results;
+}
 
+template <typename Result>
+auto ImageModel<Result>::run_batch(std::span<const core::Image> srcs, std::span<const core::Rect> src_rects,
+                                   core::Stream* stream, Vector<Result>& results) -> bool {
+  // Only the given images are preprocessed, each straight into its own sample;
+  // the samples after them keep stale data and are not decoded.
   Vector<preprocess::ImageTransform> transforms;
   transforms.reserve(srcs.size());
+  decltype(output_pool_.acquire()) output;
   {
-    auto preprocessor = preprocessor_pool_.acquire();
-    for (std::size_t i = 0; i < srcs.size(); ++i) {
-      // Rebuilt per call: preprocess settings may change between frames of a stream.
-      auto image = input_image(*input, i);
-      const auto src_rect = src_rects.empty() ? core::Rect{} : src_rects[i];
-      auto transform =
-          image ? (*preprocessor)->process(*image, srcs[i], src_rect, preprocessor_param_, stream) : std::nullopt;
-      if (!transform)
-        break;
-      transforms.push_back(*transform);
+    auto input = input_pool_.acquire();
+    {
+      auto preprocessor = preprocessor_pool_.acquire();
+      for (std::size_t i = 0; i < srcs.size(); ++i) {
+        // Rebuilt per call: preprocess settings may change between frames of a stream.
+        auto image = input_image(*input, i);
+        const auto src_rect = src_rects.empty() ? core::Rect{} : src_rects[i];
+        auto transform =
+            image ? (*preprocessor)->process(*image, srcs[i], src_rect, preprocessor_param_, stream) : std::nullopt;
+        if (!transform)
+          break;
+        transforms.push_back(*transform);
+      }
+      // Scratch buffers may be reused on another stream only after this completes.
+      stream->synchronize();
     }
-    // Scratch buffers may be reused on another stream only after this completes.
-    stream->synchronize();
-  }
-  if (transforms.size() != srcs.size())
-    return std::nullopt;
+    if (transforms.size() != srcs.size())
+      return false;
 
-  auto output = output_pool_.acquire();
-  {
+    output = output_pool_.acquire();
     auto engine = engine_pool_.acquire();
-    if (!(*engine)->set_inputs(*input) || !(*engine)->set_outputs(*output) || !(*engine)->inference(stream))
-      return std::nullopt;
-    // The device must be done with the inputs before they go back to the pool.
+    const auto ran = (*engine)->set_inputs(*input) && (*engine)->set_outputs(*output) && (*engine)->inference(stream);
+    // The device must be done with the inputs before they go back to the pool, also after a failure.
     stream->synchronize();
+    if (!ran)
+      return false;
   }
-  Vector<Result> results;
+  Vector<Result> batch;
   auto postprocessor = postprocessor_pool_.acquire();
-  if (!(*postprocessor)->process(results, *output, transforms, stream))
-    return std::nullopt;
-  return results;
+  if (!(*postprocessor)->process(batch, *output, transforms, stream))
+    return false;
+  std::move(batch.begin(), batch.end(), std::back_inserter(results));
+  return true;
 }
 
 template class ImageModel<postprocess::DetectResultMap>;

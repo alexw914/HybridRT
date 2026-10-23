@@ -467,10 +467,53 @@ TEST_F(ImageModelTest, RunsImagesAsOneStaticBatch) {
   EXPECT_FLOAT_EQ((*single)[0][0], 30.0F / 255.0F);
   EXPECT_TRUE(model->process_sync(images, {{0, 0, 8, 8}, {0, 0, 4, 4}}));
 
-  // Empty, oversized and mismatched requests are refused.
+  // More images than the batch run as consecutive batches, the last one partial.
+  const auto split = model->process_sync(Images{images[0], images[1], images[1], images[0], images[1]});
+  ASSERT_TRUE(split);
+  ASSERT_EQ(split->size(), 5U);
+  const hrt::Array<float, 5> reds{30.0F, 60.0F, 60.0F, 30.0F, 60.0F};
+  for (std::size_t i = 0; i < reds.size(); ++i)
+    EXPECT_FLOAT_EQ((*split)[i][0][0], reds[i] / 255.0F) << i;
+
+  // Empty and mismatched requests are refused.
   EXPECT_FALSE(model->process_sync(Images{}));
-  EXPECT_FALSE(model->process_sync(Images{images[0], images[1], images[0]}));
   EXPECT_FALSE(model->process_sync(images, {{0, 0, 8, 8}}));
+  EXPECT_FALSE(model->process_sync(Images{images[0], images[1], images[0]}, {{0, 0, 8, 8}, {0, 0, 8, 8}}));
+}
+
+TEST_F(ImageModelTest, KeepsConcurrentBatchCallsIndependent) {
+  const auto model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>::create(
+      classify_algo(R"({"dst_image_format":"planar_rgb","std":[255,255,255]})", "GeneralClassify", 4), cpu_,
+      {.preprocess = 4, .engine = 1, .postprocess = 4});
+  ASSERT_NE(model, nullptr);
+  hrt::Vector<std::future<bool>> calls;
+  for (int worker = 0; worker < 8; ++worker) {
+    calls.push_back(std::async(std::launch::async, [&, worker]() -> bool {
+      hrt::Vector<hrt::Vector<std::uint8_t>> pixels(4);
+      hrt::Vector<hrt::core::Image> images;
+      for (std::size_t sample = 0; sample < 4; ++sample) {
+        const auto value = static_cast<std::uint8_t>(worker * 20 + static_cast<int>(sample));
+        images.push_back(uniform_bgr(pixels[sample], value, value, value));
+      }
+      for (int iteration = 0; iteration < 10; ++iteration) {
+        const auto results = model->process_sync(images);
+        if (!results || results->size() != images.size())
+          return false;
+        for (std::size_t sample = 0; sample < images.size(); ++sample) {
+          const float expected = static_cast<float>(worker * 20 + static_cast<int>(sample)) / 255.0F;
+          if ((*results)[sample].size() != 1 || (*results)[sample][0].size() != 12 ||
+              !std::all_of((*results)[sample][0].begin(), (*results)[sample][0].end(),
+                           [expected](float value) -> bool { return std::abs(value - expected) < 1e-6F; }))
+            return false;
+        }
+        if (images.size() == 4)
+          images.pop_back();
+      }
+      return true;
+    }));
+  }
+  for (auto& call : calls)
+    EXPECT_TRUE(call.get());
 }
 
 TEST_F(ImageModelTest, RunsTheBatchOverloadOnABatchOfOne) {
@@ -488,7 +531,15 @@ TEST_F(ImageModelTest, RunsTheBatchOverloadOnABatchOfOne) {
   ASSERT_TRUE(single);
   ASSERT_EQ(results->size(), 1U);
   EXPECT_EQ(results->front(), *single);
-  EXPECT_FALSE(model->process_sync(Images{image, image}));
+
+  // A batch of 1 runs every image on its own, as on engines without batching.
+  hrt::Vector<std::uint8_t> other;
+  const auto runs = model->process_sync(Images{image, uniform_bgr(other, 40, 50, 60), image});
+  ASSERT_TRUE(runs);
+  ASSERT_EQ(runs->size(), 3U);
+  EXPECT_EQ((*runs)[0], *single);
+  EXPECT_FLOAT_EQ((*runs)[1][0][0], 60.0F / 255.0F);
+  EXPECT_EQ((*runs)[2], *single);
 }
 
 #ifdef HRT_ORT_MODEL_TEST
@@ -540,9 +591,9 @@ auto expect_same(const Map& batched, const Map& single) -> void {
   }
 }
 
-// Runs bus.jpg and zidane.jpg through the static batch-4 copy of `name` in a
-// full and a partial batch and expects the results of the batch-1 model,
-// image by image.
+// Runs bus.jpg and zidane.jpg through the static batch-4 copy of `name` in
+// full, partial and split batches and expects the results of the batch-1
+// model, image by image.
 template <typename Result>
 auto expect_batch_matches_single(std::string_view name, std::string_view device = "cpu") -> void {
   const auto single_algo = hrt::test::template_algo(name);
@@ -597,6 +648,14 @@ auto expect_batch_matches_single(std::string_view name, std::string_view device 
   ASSERT_EQ(partial->size(), images.size());
   for (std::size_t i = 0; i < images.size(); ++i)
     expect_same((*partial)[i], (*results)[i]);
+  // Six images run as a full batch and a partial one.
+  auto more = images;
+  more.insert(more.end(), images.begin(), images.end());
+  const auto split = batched->process_sync(more);
+  ASSERT_TRUE(split);
+  ASSERT_EQ(split->size(), more.size());
+  for (std::size_t i = 0; i < more.size(); ++i)
+    expect_same((*split)[i], (*results)[i % images.size()]);
 }
 
 TEST_F(ImageModelTest, MatchesBatchOneOnStaticBatchModels) {

@@ -85,13 +85,14 @@ dynamic dims once at load. An input without an entry only gets a dynamic leading
 other dynamic dims need an entry. Outputs whose size depends on the data are not supported.
 
 A leading dim above 1, from the model or `input_shapes` (e.g. `{"images": [4, 3, 640, 640]}`), is a
-static batch. `ImageModel::process_sync` then also takes a vector of 1 to batch images with an empty
-or matching vector of source rects: every image is preprocessed into its own sample of the engine
-input, the engine runs once for the whole batch and each sample is postprocessed into one result,
-in order; samples past the given images are left as they are and not decoded. Every output must
-lead with the same batch. With a batch above 1, samples of dma-buf inputs are written on the host
-(RGA is not used for them) and the `dvpp` preprocessor is refused. `ncnn` always has a batch of 1,
-and dynamic batches are not supported: the batch is fixed at load.
+static batch. `ImageModel::process_sync` also takes a vector of any number of images with an empty
+or matching vector of source rects: they run in consecutive batches of up to that batch, every image
+is preprocessed straight into its own sample of the engine input, the engine runs once per batch and
+each sample is postprocessed into one result, in order. Samples past the images of a partial batch
+are left as they are and not decoded. With a batch of 1 (every `ncnn` model, RKNN models converted
+without a batch) the images simply run one by one. Every output must lead with the same batch.
+With a batch above 1, samples of dma-buf inputs are written on the host (RGA is not used for them)
+and the `dvpp` preprocessor is refused. Dynamic batches are not supported: the batch is fixed at load.
 
 Operator libraries are optional: one that does not load is skipped with a warning.
 

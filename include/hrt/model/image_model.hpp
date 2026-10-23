@@ -98,9 +98,10 @@ public:
   // grow and clip detections with core::pad_scale, core::cover_pixels and
   // core::intersect.
   auto process_sync(const core::Image& src, const core::Rect& src_rect = {}) -> std::optional<Result>;
-  // Runs 1 to batch() images as one batch: each is preprocessed into its own
-  // sample of the engine input, the engine runs once, and one result per image
-  // comes back in order. `src_rects` is empty (whole images) or one per image.
+  // Runs any number of images in batches of up to batch(): each image is
+  // preprocessed into its own sample of the engine input, the engine runs once
+  // per batch, and one result per image comes back in order. `src_rects` is
+  // empty (whole images) or one per image.
   auto process_sync(const Vector<core::Image>& srcs, const Vector<core::Rect>& src_rects = {})
       -> std::optional<Vector<Result>>;
 
@@ -122,6 +123,10 @@ private:
              UniquePtr<engine::Engine> first, const hrtc::EngineParam& chosen) -> void;
 
   auto run(std::span<const core::Image> srcs, std::span<const core::Rect> src_rects) -> std::optional<Vector<Result>>;
+
+  // Runs at most batch() images as one engine call and appends their results.
+  auto run_batch(std::span<const core::Image> srcs, std::span<const core::Rect> src_rects, core::Stream* stream,
+                 Vector<Result>& results) -> bool;
 
   KZ_NODISCARD auto create_input_image(const core::Buffer& input) const -> std::optional<core::Image>;
 
