@@ -42,10 +42,12 @@ most 64) to `ImageModel::create`.
 | `pad_scale` | `1.0` | Scale of `pad_outside` |
 
 Fused preprocessing is optional. A device without a fused implementation uses its
-independent operators when it supports every required stage. CUDA runs interleaved uint8
-BGR/RGB sources with `linear` or `nearest` interpolation into 3-channel planar or interleaved
-inputs in one kernel that follows OpenCV's uint8 sampling, so it matches the CPU result up to
-OpenCV's own rounding differences; NV12 sources and `cubic` use multi-stage NPP.
+independent operators when it supports every required stage. CUDA has only a fused kernel:
+it converts uint8 BGR, RGB, NV12 or NV21 sources with `linear` or `nearest` interpolation into
+3-channel planar or interleaved uint8 or float32 inputs, following OpenCV's uint8 color
+conversion and sampling, so it matches the CPU result up to OpenCV's own rounding
+differences. Other conversions (`cubic`, gray inputs, other source formats) run on the CPU.
+NV12 halves the bytes a host frame uploads compared with BGR.
 For device-only memory, an unsupported stage retains the whole-call CPU fallback,
 including source download and result upload. Host-accessible buffers can use CPU operators
 directly. Fusion and fallback decisions do not change the model's preprocess parameters.

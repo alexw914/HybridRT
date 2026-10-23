@@ -4,6 +4,43 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-24: convert NV12 and NV21 in the fused CUDA kernel and drop NPP
+
+**Bottleneck.** After the fused kernel, NV12 sources still ran NPP step by step: NV12 to BGR at
+full source size, then fill, resize, conversion and normalization. `BM_Batch` with 1920 x 1080
+NV12 frames measured 0.321 ms per frame from device memory against 0.040 ms for BGR, and host
+NV12 frames, which upload half the bytes of BGR, took as long as BGR (0.575 ms per frame).
+
+**Change.** The kernel reads NV12 and NV21: each tap converts its Y and the shared U, V to BGR
+with OpenCV's fixed-point BT.601 video-range formula (20 fractional bits), then the existing
+OpenCV-style sampling, padding and normalization apply, as the CPU flow converts the whole
+frame before resizing. With every template configuration covered, the NPP operators were
+removed: the CUDA preprocessor has no step operators, so `cubic`, gray inputs and other source
+formats run on the CPU through the shared fallback, and HybridRT no longer links NPP.
+
+**Measurement.** Same machine and tools as the entry below, CUDA 13.0, `BM_Batch` letterboxing
+distinct 1920 x 1080 frames into 640 x 640 planar RGB float32, pinned with `taskset -c 2-5`.
+The baseline is commit `b88a223` built with the same benchmark source; both ran alternately
+for three rounds of three repetitions of at least 0.5 s; medians in ms per frame.
+
+| Case | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| NV12 device frames, batch 4 | 0.321 | 0.040 | -87% |
+| NV12 device frames, batch 1 | 0.350 | 0.076 | -78% |
+| NV12 host frames, batch 4 | 0.575 | 0.343 | -40% |
+| NV12 host frames, batch 1 | 0.620 | 0.364 | -41% |
+| BGR host frames, batch 4 | 0.596 | 0.588 | noise |
+| BGR device frames, batch 4 | 0.041 | 0.040 | noise |
+
+**Validation.** `CudaFusedKernelMatchesCpu` adds NV12 and NV21 sources with a padded pitch and
+a crop at odd coordinates; every value stays within one uint8 step of the CPU and more than
+99.8% are identical. `CudaLeavesUnfusedConversionsToTheCpu` checks that cubic, gray output and
+gray sources from host and device memory give the CPU result byte for byte.
+
+**Remaining.** I420/YV12 sources and cubic interpolation run on the CPU with a download and an
+upload; a batch still launches the kernel once per sample. RKNN, Ascend, Metal and Windows were
+not measured.
+
 ## 2026-10-24: replace staged NPP preprocessing with one fused CUDA kernel
 
 **Bottleneck.** For interleaved uint8 BGR/RGB sources, CUDA preprocessing ran NPP step by step:

@@ -300,13 +300,15 @@ auto BM_CudaResolution(benchmark::State& state) -> void {
 }
 
 // One batched call letterboxing 1920x1080 frames into 640x640 inputs; args: batch size, mode (0 CPU with one OpenCV
-// thread, 1 CPU with four, 2 CUDA from host frames, 3 CUDA from device frames). Items are frames.
+// thread, 1 CPU with four, 2 CUDA from host frames, 3 CUDA from device frames, 4 and 5 the same from NV12 frames).
+// Items are frames.
 auto BM_Batch(benchmark::State& state) -> void {
   using namespace hrt::core;
   using namespace hrt::preprocess;
   const auto batch = static_cast<std::size_t>(state.range(0));
   const auto mode = state.range(1);
-  constexpr const char* kLabels[] = {"cpu_1_thread", "cpu_4_threads", "cuda_host_source", "cuda_device_source"};
+  constexpr const char* kLabels[] = {"cpu_1_thread",       "cpu_4_threads",  "cuda_host_source",
+                                     "cuda_device_source", "cuda_host_nv12", "cuda_device_nv12"};
   state.SetLabel(kLabels[mode]);
   const auto cuda = mode >= 2;
   cv::setNumThreads(mode == 1 ? 4 : 1);
@@ -323,16 +325,17 @@ auto BM_Batch(benchmark::State& state) -> void {
   hrt::Vector<Image> sources;
   hrt::Vector<Image> targets;
   for (auto& frame : frames) {
-    frame.create(source_size.height, source_size.width, CV_8UC3);
+    const auto nv12 = mode >= 4;
+    frame.create(nv12 ? source_size.height * 3 / 2 : source_size.height, source_size.width, nv12 ? CV_8UC1 : CV_8UC3);
     cv::randu(frame, 0, 256);
-    auto host =
-        Image::wrap(MemoryType::Cpu, frame.data, ImageFormat::InterBgr, source_size, DataType::Uint8, frame.step);
+    const auto format = nv12 ? ImageFormat::Nv12 : ImageFormat::InterBgr;
+    auto host = Image::wrap(MemoryType::Cpu, frame.data, format, source_size, DataType::Uint8, frame.step);
     if (!host || !processor) {
       state.SkipWithError("Cannot prepare batch preprocessing");
       return;
     }
-    if (mode == 3) {
-      Image device(MemoryType::Cuda, ImageFormat::InterBgr, DataType::Uint8, source_size);
+    if (mode == 3 || mode == 5) {
+      Image device(MemoryType::Cuda, format, DataType::Uint8, source_size);
       if (!device.valid() || !Buffer::copy(*device.buffer(), *host->buffer(), CopyPolicy::DirectCopy, stream.get())) {
         state.SkipWithError("Cannot upload a frame");
         return;
@@ -390,4 +393,4 @@ BENCHMARK(BM_Resolution)
     ->UseRealTime()
     ->MeasureProcessCPUTime();
 BENCHMARK(BM_CudaResolution)->Apply(cuda_cases)->Unit(benchmark::kMillisecond)->UseRealTime();
-BENCHMARK(BM_Batch)->ArgsProduct({{1, 4}, {0, 1, 2, 3}})->Unit(benchmark::kMillisecond)->UseRealTime();
+BENCHMARK(BM_Batch)->ArgsProduct({{1, 4}, {0, 1, 2, 3, 4, 5}})->Unit(benchmark::kMillisecond)->UseRealTime();

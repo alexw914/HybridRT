@@ -266,54 +266,26 @@ TEST(ImagePreprocessorTest, NormalizesInterleavedFloatOutputThroughFallback) {
   }
 }
 
-class CountingCudaPreprocessor final : public hrt::preprocess::ImagePreprocessor {
-public:
-  CountingCudaPreprocessor(hrt::UniquePtr<ImagePreprocessor> device, hrt::preprocess::ImageOperation unsupported)
-      : device_(std::move(device)), unsupported_(unsupported) {}
+// Element (c, x, y) of a planar, gray or interleaved uint8 or float32 host
+// image; stride[i] steps dim i - 1 and the last dim is packed.
+auto value_at(const hrt::core::Image& image, int c, int x, int y) -> float {
+  const auto* base = static_cast<const std::byte*>(image.memory()->cpu());
+  const auto& stride = image.stride();
+  const auto element = image.data_type() == hrt::core::DataType::Float32 ? sizeof(float) : 1;
+  const auto planar = image.format() == hrt::core::ImageFormat::PlanarRgb ||
+                      image.format() == hrt::core::ImageFormat::PlanarBgr ||
+                      image.format() == hrt::core::ImageFormat::Gray;
+  const auto offset = planar ? static_cast<std::size_t>(c) * stride[1] + static_cast<std::size_t>(y) * stride[2] +
+                                   static_cast<std::size_t>(x) * element
+                             : static_cast<std::size_t>(y) * stride[1] + static_cast<std::size_t>(x) * stride[2] +
+                                   static_cast<std::size_t>(c) * element;
+  if (image.data_type() == hrt::core::DataType::Float32)
+    return *reinterpret_cast<const float*>(base + offset);
+  return static_cast<float>(*reinterpret_cast<const std::uint8_t*>(base + offset));
+}
 
-  auto fill(hrt::core::Image& image, const hrt::core::Rect& roi, const hrt::Array<float, 3>& color,
-            hrt::core::Stream* stream) -> bool override {
-    ++calls_[0];
-    return device_->fill(image, roi, color, stream);
-  }
-
-  auto resize(hrt::core::Image& dst, const hrt::core::Rect& dst_roi, const hrt::core::Image& src,
-              const hrt::core::Rect& src_roi, hrt::preprocess::InterpolationMode mode, hrt::core::Stream* stream)
-      -> bool override {
-    ++calls_[1];
-    return device_->resize(dst, dst_roi, src, src_roi, mode, stream);
-  }
-
-  auto convert(hrt::core::Image& dst, const hrt::core::Image& src, hrt::core::Stream* stream) -> bool override {
-    ++calls_[2];
-    return device_->convert(dst, src, stream);
-  }
-
-  auto normalize(hrt::core::Image& image, const hrt::core::Rect& roi, const hrt::Array<float, 3>& mean,
-                 const hrt::Array<float, 3>& stddev, hrt::core::Stream* stream) -> bool override {
-    ++calls_[3];
-    return device_->normalize(image, roi, mean, stddev, stream);
-  }
-
-  KZ_NODISCARD auto type() const -> hrt::preprocess::ImagePreprocessorType override { return device_->type(); }
-
-  KZ_NODISCARD auto memory_type() const -> hrt::core::MemoryType override { return device_->memory_type(); }
-
-  KZ_NODISCARD auto accepts(hrt::core::MemoryType type) const -> bool override { return device_->accepts(type); }
-
-  KZ_NODISCARD auto supports(hrt::preprocess::ImageOperation op, const hrt::core::Image& dst,
-                             const hrt::core::Image& src) const -> bool override {
-    return op != unsupported_ && device_->supports(op, dst, src);
-  }
-
-  hrt::Array<unsigned int, 4> calls_{};
-
-private:
-  hrt::UniquePtr<ImagePreprocessor> device_;
-  hrt::preprocess::ImageOperation unsupported_;
-};
-
-TEST(ImagePreprocessorTest, KeepsCudaStagesOnDeviceAndPreservesUnsupportedFallback) {
+// Conversions the CUDA kernel does not run go to the CPU operators, with the same result.
+TEST(ImagePreprocessorTest, CudaLeavesUnfusedConversionsToTheCpu) {
   using namespace hrt::core;
   using namespace hrt::preprocess;
   auto context = Context::create(DeviceType::Cuda);
@@ -321,41 +293,50 @@ TEST(ImagePreprocessorTest, KeepsCudaStagesOnDeviceAndPreservesUnsupportedFallba
     GTEST_SKIP() << "CUDA unavailable";
   context->set_current();
   auto stream = context->create_stream();
-  ASSERT_TRUE(stream);
+  auto cuda = ImagePreprocessor::create(ImagePreprocessorType::Cuda);
   auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
-  auto src = uniform_bgr(8, 4, {10, 20, 30});
-  for (const auto unsupported : {ImageOperation::Fused, ImageOperation::Fill, ImageOperation::Resize,
-                                 ImageOperation::Convert, ImageOperation::Normalize}) {
-    for (const auto mode : {NormalizeType::Full, NormalizeType::Roi}) {
-      SCOPED_TRACE(testing::Message() << "unsupported " << static_cast<int>(unsupported) << " normalization "
-                                      << static_cast<int>(mode));
-      auto cuda = ImagePreprocessor::create(ImagePreprocessorType::Cuda);
-      ASSERT_TRUE(cuda);
-      CountingCudaPreprocessor processor(std::move(cuda), unsupported);
+  ASSERT_TRUE(stream && cuda && cpu);
+  auto bgr = uniform_bgr(24, 16, {0, 0, 0});
+  for (std::size_t i = 0; i < bgr.pixels.size(); ++i)
+    bgr.pixels[i] = static_cast<std::uint8_t>((i * 37) % 251);
+  hrt::Vector<std::uint8_t> yuv(24 * 16 * 3 / 2);
+  for (std::size_t i = 0; i < yuv.size(); ++i)
+    yuv[i] = static_cast<std::uint8_t>((i * 53) % 241);
+  const auto nv12 = Image::wrap(MemoryType::Cpu, yuv.data(), ImageFormat::Nv12, {24, 16});
+  Image gray(MemoryType::Cpu, ImageFormat::Gray, DataType::Uint8, {24, 16});
+  ASSERT_TRUE(nv12 && gray.valid() && cpu->process(gray, bgr.image, {}, {}));
+
+  struct Case {
+    const Image* source;
+    ImageFormat format;
+    InterpolationMode mode;
+  };
+
+  for (const auto& item : {Case{&bgr.image, ImageFormat::PlanarRgb, InterpolationMode::Cubic},
+                           Case{&bgr.image, ImageFormat::Gray, InterpolationMode::Linear},
+                           Case{&*nv12, ImageFormat::PlanarBgr, InterpolationMode::Cubic},
+                           Case{&gray, ImageFormat::Gray, InterpolationMode::Nearest}}) {
+    for (const bool device_source : {false, true}) {
+      SCOPED_TRACE(testing::Message() << "format " << static_cast<int>(item.format) << " mode "
+                                      << static_cast<int>(item.mode) << " device " << device_source);
       ImagePreprocessorParam param;
       param.resize_type = ResizeType::LetterBox;
-      param.normalize_type = mode;
-      param.default_color = {114, 114, 114};
+      param.interpolation_mode = item.mode;
+      param.dst_image_format = item.format;
       param.mean = {2, 4, 6};
       param.std = {2, 4, 8};
-      Image expected(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {8, 8});
-      Image actual(MemoryType::Cuda, ImageFormat::PlanarRgb, DataType::Float32, {8, 8});
-      ASSERT_TRUE(actual.valid());
-      ASSERT_TRUE(cpu->process(expected, src.image, {}, param));
-      for (int repeat = 0; repeat < 3; ++repeat) {
-        ASSERT_TRUE(processor.process(actual, src.image, {}, param, stream.get()));
-        Image host(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {8, 8});
-        ASSERT_TRUE(Buffer::copy(*host.buffer(), *actual.buffer(), CopyPolicy::DirectCopy, stream.get()));
-        stream->synchronize();
-        for (int c = 0; c < 3; ++c)
-          for (int y = 0; y < 8; ++y)
-            for (int x = 0; x < 8; ++x)
-              ASSERT_NEAR(planar_at(host, c, x, y), planar_at(expected, c, x, y), 1.0e-5F);
-      }
-      for (std::size_t i = 0; i < processor.calls_.size(); ++i) {
-        const auto runs_on_cpu = unsupported != ImageOperation::Fused;
-        EXPECT_EQ(processor.calls_[i], runs_on_cpu ? 0U : 3U);
-      }
+      param.default_color = {114, 20, 250};
+      Image device(MemoryType::Cuda, item.source->format(), item.source->data_type(), item.source->size());
+      ASSERT_TRUE(Buffer::copy(*device.buffer(), *item.source->buffer(), CopyPolicy::AutoDstStride, stream.get()));
+      const auto& source = device_source ? device : *item.source;
+      Image expected(MemoryType::Cpu, item.format, DataType::Float32, {16, 16});
+      Image actual(MemoryType::Cuda, item.format, DataType::Float32, {16, 16});
+      Image host(MemoryType::Cpu, item.format, DataType::Float32, {16, 16});
+      ASSERT_TRUE(cpu->process(expected, *item.source, {1, 1, 20, 13}, param));
+      ASSERT_TRUE(cuda->process(actual, source, {1, 1, 20, 13}, param, stream.get()));
+      ASSERT_TRUE(Buffer::copy(*host.buffer(), *actual.buffer(), CopyPolicy::DirectCopy, stream.get()));
+      stream->synchronize();
+      EXPECT_EQ(std::memcmp(host.memory()->cpu(), expected.memory()->cpu(), expected.buffer()->bytes()), 0);
     }
   }
 }
@@ -475,23 +456,6 @@ TEST(ImagePreprocessorTest, CudaStagesOnlyTheCroppedHostRegion) {
   }
 }
 
-// Element (c, x, y) of a 3-channel planar or interleaved uint8 or float32 host
-// image; stride[i] steps dim i - 1 and the last dim is packed.
-auto value_at(const hrt::core::Image& image, int c, int x, int y) -> float {
-  const auto* base = static_cast<const std::byte*>(image.memory()->cpu());
-  const auto& stride = image.stride();
-  const auto element = image.data_type() == hrt::core::DataType::Float32 ? sizeof(float) : 1;
-  const auto planar =
-      image.format() == hrt::core::ImageFormat::PlanarRgb || image.format() == hrt::core::ImageFormat::PlanarBgr;
-  const auto offset = planar ? static_cast<std::size_t>(c) * stride[1] + static_cast<std::size_t>(y) * stride[2] +
-                                   static_cast<std::size_t>(x) * element
-                             : static_cast<std::size_t>(y) * stride[1] + static_cast<std::size_t>(x) * stride[2] +
-                                   static_cast<std::size_t>(c) * element;
-  if (image.data_type() == hrt::core::DataType::Float32)
-    return *reinterpret_cast<const float*>(base + offset);
-  return static_cast<float>(*reinterpret_cast<const std::uint8_t*>(base + offset));
-}
-
 TEST(ImagePreprocessorTest, CudaFusedKernelMatchesCpu) {
   using namespace hrt::core;
   using namespace hrt::preprocess;
@@ -508,10 +472,16 @@ TEST(ImagePreprocessorTest, CudaFusedKernelMatchesCpu) {
     src.pixels[i] = static_cast<std::uint8_t>((i * 7919 + i / 13) % 256);
   const auto rgb =
       Image::wrap(MemoryType::Cpu, src.pixels.data(), ImageFormat::InterRgb, {97, 61}, DataType::Uint8, 97 * 3 + 5);
-  ASSERT_TRUE(rgb);
+  // YUV of even size with a padded pitch; the crop below starts at odd coordinates.
+  hrt::Vector<std::uint8_t> yuv(104 * 60 * 3 / 2);
+  for (std::size_t i = 0; i < yuv.size(); ++i)
+    yuv[i] = static_cast<std::uint8_t>((i * 4111 + i / 7) % 256);
+  const auto nv12 = Image::wrap(MemoryType::Cpu, yuv.data(), ImageFormat::Nv12, {96, 60}, DataType::Uint8, 104);
+  const auto nv21 = Image::wrap(MemoryType::Cpu, yuv.data(), ImageFormat::Nv21, {96, 60}, DataType::Uint8, 104);
+  ASSERT_TRUE(rgb && nv12 && nv21);
   std::size_t checked = 0;
   std::size_t exact = 0;
-  for (const auto* source : hrt::Array<const Image*, 2>{&src.image, &*rgb}) {
+  for (const auto* source : hrt::Array<const Image*, 4>{&src.image, &*rgb, &*nv12, &*nv21}) {
     for (const auto format : {ImageFormat::PlanarRgb, ImageFormat::PlanarBgr, ImageFormat::InterRgb}) {
       for (const auto type : {DataType::Float32, DataType::Uint8}) {
         for (const auto resize : {ResizeType::LetterBox, ResizeType::Normal, ResizeType::KeepRatio}) {

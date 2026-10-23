@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/include/preprocess/cuda_image_preprocessor.hpp
-// Description: Declares the CUDA image operators: a fused kernel and NPP steps.
+// Description: Declares the CUDA image preprocessor, a fused kernel.
 // -----------------------------------------------------------------------------
 
 #ifndef HRT_PREPROCESS_CUDA_IMAGE_PREPROCESSOR_HPP
@@ -13,8 +13,9 @@
 
 namespace hrt::preprocess {
 
-// Operates on uint8 and float32 images in CUDA memory; NV12 is accepted as a
-// conversion source.
+// Runs every supported conversion in one fused kernel on CUDA memory; it has
+// no step operators, so the shared flow leaves other conversions (cubic
+// interpolation, gray or planar inputs and sources) to the CPU.
 class CudaImagePreprocessor final : public ImagePreprocessor {
 public:
   auto fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color, core::Stream* stream)
@@ -28,9 +29,9 @@ public:
   auto normalize(core::Image& image, const core::Rect& roi, const Array<float, 3>& mean, const Array<float, 3>& stddev,
                  core::Stream* stream) -> bool override;
 
-  // Interleaved uint8 BGR/RGB to a 3-channel uint8 or float32 input in one
-  // kernel: resize (linear or nearest), padding, channel order and
-  // normalization.
+  // Interleaved BGR/RGB or NV12/NV21 uint8 to a 3-channel uint8 or float32
+  // input in one kernel: color conversion, resize (linear or nearest),
+  // padding, channel order and normalization.
   auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
              const ImagePreprocessorParam& param, core::Stream* stream) -> bool override;
 
@@ -45,18 +46,6 @@ public:
 private:
   KZ_NODISCARD auto supports_fused(const core::Image& dst, const core::Image& src,
                                    const ImagePreprocessorParam& param) const -> bool override;
-
-  // Changes only the data type; `dst` has the source format.
-  auto convert_type(core::Image& dst, const core::Image& src, core::Stream* stream) -> bool;
-
-  // Changes only the channel layout; both images share a data type.
-  auto convert_layout(core::Image& dst, const core::Image& src, core::Stream* stream) -> bool;
-
-  auto scratch(UniquePtr<core::Image>& slot, core::ImageFormat format, core::DataType data_type, core::Size size)
-      -> core::Image*;
-
-  UniquePtr<core::Image> color_;
-  UniquePtr<core::Image> typed_;
 };
 
 } // namespace hrt::preprocess

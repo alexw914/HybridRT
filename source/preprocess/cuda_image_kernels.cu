@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/preprocess/cuda_image_kernels.cu
-// Description: Implements the fused CUDA resize, padding, conversion and
-//              normalization kernel.
+// Description: Implements the fused CUDA color conversion, resize, padding
+//              and normalization kernel.
 // -----------------------------------------------------------------------------
 
 #include <algorithm>
@@ -22,8 +22,39 @@ struct ResizeLaunch {
 constexpr int kBlockWidth = 32;
 constexpr int kBlockHeight = 8;
 
-__device__ auto pixel(const CudaResizeTask& s, int x, int y) -> const std::uint8_t* {
-  return s.src + static_cast<std::int64_t>(y) * s.src_pitch + static_cast<std::int64_t>(x) * 3;
+// OpenCV's fixed-point BT.601 video-range YUV to RGB (color_yuv): 20 fractional bits.
+constexpr int kYuvShift = 20;
+constexpr int kYuvY = 1220542;
+constexpr int kYuvUB = 2116026;
+constexpr int kYuvUG = -409993;
+constexpr int kYuvVG = -852492;
+constexpr int kYuvVR = 1673527;
+
+__device__ auto saturate(int value) -> int {
+  return min(max(value, 0), 255);
+}
+
+// Pixel (x, y) of the source region: its channels for interleaved sources,
+// BGR as OpenCV's cvtColor gives it for NV12 and NV21.
+__device__ auto fetch(const CudaResizeTask& s, int x, int y, int (&out)[3]) -> void {
+  const auto* row = s.src + static_cast<std::int64_t>(y) * s.src_pitch;
+  if (s.source == CudaResizeSource::Interleaved) {
+    const auto* p = row + static_cast<std::int64_t>(x) * 3;
+    out[0] = p[0];
+    out[1] = p[1];
+    out[2] = p[2];
+    return;
+  }
+  const int gx = s.origin_x + x;
+  const int gy = s.origin_y + y;
+  const auto* uv = s.chroma + static_cast<std::int64_t>(gy / 2) * s.src_pitch + static_cast<std::int64_t>(gx / 2) * 2;
+  const int u = (s.source == CudaResizeSource::Nv12 ? uv[0] : uv[1]) - 128;
+  const int v = (s.source == CudaResizeSource::Nv12 ? uv[1] : uv[0]) - 128;
+  const int luma = max(0, static_cast<int>(row[x]) - 16) * kYuvY;
+  const int half = 1 << (kYuvShift - 1);
+  out[0] = saturate((luma + half + kYuvUB * u) >> kYuvShift);
+  out[1] = saturate((luma + half + kYuvVG * v + kYuvUG * u) >> kYuvShift);
+  out[2] = saturate((luma + half + kYuvVR * v) >> kYuvShift);
 }
 
 // OpenCV's fixed-point INTER_LINEAR weights: 11 fractional bits, each rounded on its own.
@@ -53,7 +84,7 @@ __device__ auto linear_tap(int d, double scale, int size, int& first, int& secon
 // multiplied by the weights keeping the high 16 bits, then rounded by 2 bits.
 __device__ auto linear_value(int top, int bottom, int w0, int w1) -> float {
   const auto high = [](int sum, int weight) -> int { return ((sum >> 4) * weight) >> 16; };
-  return static_cast<float>(min(max((high(top, w0) + high(bottom, w1) + 2) >> 2, 0), 255));
+  return static_cast<float>(saturate((high(top, w0) + high(bottom, w1) + 2) >> 2));
 }
 
 __device__ auto store(const CudaResizeTask& s, int x, int y, int c, float value) -> void {
@@ -66,7 +97,7 @@ __device__ auto store(const CudaResizeTask& s, int x, int y, int c, float value)
   if (s.float_output)
     reinterpret_cast<float*>(row)[element] = value;
   else
-    row[element] = static_cast<std::uint8_t>(min(max(__float2int_rn(value), 0), 255));
+    row[element] = static_cast<std::uint8_t>(saturate(__float2int_rn(value)));
 }
 
 __global__ auto resize_kernel(ResizeLaunch launch) -> void {
@@ -87,7 +118,8 @@ __global__ auto resize_kernel(ResizeLaunch launch) -> void {
     // In double as OpenCV: exact products such as 78 * 50 / 156 must floor the same way.
     const int sx = min(static_cast<int>(floor(static_cast<double>(rx) * s.scale_x)), s.src_width - 1);
     const int sy = min(static_cast<int>(floor(static_cast<double>(ry) * s.scale_y)), s.src_height - 1);
-    const auto* p = pixel(s, sx, sy);
+    int p[3];
+    fetch(s, sx, sy, p);
     for (int c = 0; c < 3; ++c)
       value[c] = static_cast<float>(p[c]);
   } else {
@@ -101,10 +133,14 @@ __global__ auto resize_kernel(ResizeLaunch launch) -> void {
     int ay1 = 0;
     linear_tap(rx, s.scale_x, s.src_width, x0, x1, ax0, ax1);
     linear_tap(ry, s.scale_y, s.src_height, y0, y1, ay0, ay1);
-    const auto* p00 = pixel(s, x0, y0);
-    const auto* p01 = pixel(s, x1, y0);
-    const auto* p10 = pixel(s, x0, y1);
-    const auto* p11 = pixel(s, x1, y1);
+    int p00[3];
+    int p01[3];
+    int p10[3];
+    int p11[3];
+    fetch(s, x0, y0, p00);
+    fetch(s, x1, y0, p01);
+    fetch(s, x0, y1, p10);
+    fetch(s, x1, y1, p11);
     for (int c = 0; c < 3; ++c)
       value[c] = linear_value(p00[c] * ax0 + p01[c] * ax1, p10[c] * ax0 + p11[c] * ax1, ay0, ay1);
   }

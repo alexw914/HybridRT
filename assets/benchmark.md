@@ -81,7 +81,8 @@ matched the local worktree. The GPU was idle before the run; this is a shared ma
 The same one-caller, 3-repetition wall-clock median protocol and preprocessing
 parameters apply. CPU uses one OpenCV thread, without CPU affinity.
 
-CUDA uses multi-stage NPP for fill, resize, conversion and normalization. The
+These numbers predate the fused CUDA kernel of 2026-10-24, which replaced NPP; see
+[perf.md](perf.md). At the time, CUDA used multi-stage NPP for fill, resize, conversion and normalization. The
 shared dispatch verifies that all required stages are supported before executing
 them on the device. An unsupported stage retains the previous whole-call CPU
 fallback for device-only memory. No custom fused CUDA kernel is used here.
@@ -117,11 +118,14 @@ random 1920 x 1080 BGR frames into 640 x 640 planar RGB float32 with one batched
 | CPU, four OpenCV threads | 0.335 | 0.513 | 2.052 |
 | CUDA, host frames | 0.614 | 0.632 | 2.529 |
 | CUDA, device frames | 0.078 | 0.042 | 0.167 |
+| CUDA, host NV12 frames | 0.364 | 0.343 | 1.372 |
+| CUDA, device NV12 frames | 0.076 | 0.040 | 0.160 |
 
 Batch 1 reuses one frame that stays in cache; four distinct frames (24 MB) do not, which is
 closer to a video stream. Four CPU threads run the samples in parallel but stay memory bound.
 Host-frame CUDA cases are limited by the pageable upload (about 0.53 ms per frame); device
-frames run one kernel launch per sample.
+frames run one kernel launch per sample. NV12 rows (modes 4 and 5) were measured after NPP was
+replaced by the fused kernel: NV12 uploads half the bytes of BGR.
 
 ### Other platforms: historical measurements
 

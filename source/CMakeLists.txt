@@ -115,14 +115,12 @@ if(HRT_USE_CUDA)
         CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON POSITION_INDEPENDENT_CODE ON)
     hybridrt_apply_warnings(hybridrt_cuda_kernels)
     target_sources(hybridrt PRIVATE
-        backend/cuda/cuda_common.cpp
         backend/cuda/cuda_context.cpp
         backend/cuda/cuda_memory.cpp
         backend/cuda/cuda_host_memory.cpp
         preprocess/cuda_image_preprocessor.cpp
         $<TARGET_OBJECTS:hybridrt_cuda_kernels>)
-    target_link_libraries(hybridrt PRIVATE
-        CUDA::cudart CUDA::nppc CUDA::nppial CUDA::nppicc CUDA::nppidei CUDA::nppig)
+    target_link_libraries(hybridrt PRIVATE CUDA::cudart)
     target_compile_definitions(hybridrt PRIVATE HRT_USE_CUDA)
 endif()
 
