@@ -51,13 +51,15 @@ public:
   auto ref() -> SharedPtr<core::Memory> override { return std::make_shared<CudaHostMemory>(pointer_, shape_, stride_); }
 
   auto resize(const core::Shape& shape, const core::Stride& stride) -> bool override {
-    auto resolved = memory::resolve_stride(shape, stride);
-    if (!resolved)
+    auto memory_stride = stride;
+    if (memory_stride.empty())
+      memory_stride = core::contiguous_stride(shape);
+    else if (!memory::check_stride(shape, memory_stride))
       return false;
-    if (resolved->front() > pointer_->capacity && !host_allocate(*pointer_, resolved->front()))
+    if (memory_stride.front() > pointer_->capacity && !host_allocate(*pointer_, memory_stride.front()))
       return false;
     shape_ = shape;
-    stride_ = std::move(*resolved);
+    stride_ = std::move(memory_stride);
     return true;
   }
 

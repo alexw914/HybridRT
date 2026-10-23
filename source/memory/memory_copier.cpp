@@ -40,30 +40,19 @@ auto discontinuous_axis(const core::Shape& shape, const core::Stride& stride) ->
 
 } // namespace
 
-auto resolve_stride(const core::Shape& shape, const core::Stride& stride) -> std::optional<core::Stride> {
-  if (shape.empty() || core::is_dynamic(shape)) {
-    KZ_LOG_ERROR("Memory: shape must be non-empty and static");
-    return std::nullopt;
-  }
-  auto packed = core::contiguous_stride(shape);
-  if (stride.empty())
-    return packed;
-  if (stride.size() != shape.size()) {
-    KZ_LOG_ERROR("Memory: stride rank {} does not match shape rank {}", stride.size(), shape.size());
-    return std::nullopt;
-  }
+auto check_stride(const core::Shape& shape, const core::Stride& stride) -> bool {
+  KZ_CHECK_RETURN(!shape.empty() && !core::is_dynamic(shape), false, "Memory: shape must be non-empty and static");
+  KZ_CHECK_RETURN(stride.size() == shape.size(), false, "Memory: stride rank {} does not match shape rank {}",
+                  stride.size(), shape.size());
+  const auto packed = core::contiguous_stride(shape);
   for (std::size_t i = 0; i < stride.size(); ++i) {
-    if (stride[i] < packed[i]) {
-      KZ_LOG_ERROR("Memory: stride[{}] = {} is smaller than packed {}", i, stride[i], packed[i]);
-      return std::nullopt;
-    }
+    KZ_CHECK_RETURN(stride[i] >= packed[i], false, "Memory: stride[{}] = {} is smaller than packed {}", i, stride[i],
+                    packed[i]);
   }
-  return stride;
+  return true;
 }
 
 auto contiguous_axis(const core::Memory& dst, const core::Memory& src) -> std::optional<std::size_t> {
-  if (dst.dims() != src.dims() || dst.dims() == 0)
-    return std::nullopt;
   auto dst_axis = discontinuous_axis(dst.shape(), dst.stride());
   auto src_axis = discontinuous_axis(src.shape(), src.stride());
   if (!dst_axis || !src_axis)

@@ -199,10 +199,12 @@ auto DmaBufferMemory::ref() -> SharedPtr<core::Memory> {
 }
 
 auto DmaBufferMemory::resize(const core::Shape& shape, const core::Stride& stride) -> bool {
-  auto resolved = resolve_stride(shape, stride.empty() ? aligned_stride(shape) : stride);
-  if (!resolved)
+  auto memory_stride = stride;
+  if (memory_stride.empty())
+    memory_stride = aligned_stride(shape);
+  else if (!check_stride(shape, memory_stride))
     return false;
-  const auto size = resolved->front();
+  const auto size = memory_stride.front();
   if (size > pointer_->capacity) {
     if (!pointer_->owned) {
       KZ_LOG_ERROR("DmaBufferMemory: cannot grow wrapped memory from {} to {} bytes", pointer_->capacity, size);
@@ -212,7 +214,7 @@ auto DmaBufferMemory::resize(const core::Shape& shape, const core::Stride& strid
       return false;
   }
   shape_ = shape;
-  stride_ = std::move(*resolved);
+  stride_ = std::move(memory_stride);
   return true;
 }
 

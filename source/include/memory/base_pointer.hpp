@@ -11,8 +11,6 @@
 
 #include <kitzoo/memory/bytebuffer.hpp>
 
-#include <optional>
-
 namespace hrt::memory {
 
 struct BasePointer {
@@ -43,8 +41,8 @@ struct BasePointer {
   void (*release)(BasePointer&) = nullptr;
 };
 
-// Validates `stride` against `shape`; an empty stride selects a packed one.
-auto resolve_stride(const core::Shape& shape, const core::Stride& stride) -> std::optional<core::Stride>;
+// Checks that the byte stride matches the non-empty static shape.
+auto check_stride(const core::Shape& shape, const core::Stride& stride) -> bool;
 
 } // namespace hrt::memory
 

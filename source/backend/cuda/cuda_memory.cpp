@@ -68,10 +68,12 @@ auto CudaMemory::ref() -> SharedPtr<core::Memory> {
 }
 
 auto CudaMemory::resize(const core::Shape& shape, const core::Stride& stride) -> bool {
-  auto resolved = memory::resolve_stride(shape, stride);
-  if (!resolved)
+  auto memory_stride = stride;
+  if (memory_stride.empty())
+    memory_stride = core::contiguous_stride(shape);
+  else if (!memory::check_stride(shape, memory_stride))
     return false;
-  const auto size = resolved->front();
+  const auto size = memory_stride.front();
   if (size > pointer_->capacity) {
     if (!pointer_->owned) {
       KZ_LOG_ERROR("CudaMemory: cannot grow wrapped memory from {} to {} bytes", pointer_->capacity, size);
@@ -81,7 +83,7 @@ auto CudaMemory::resize(const core::Shape& shape, const core::Stride& stride) ->
       return false;
   }
   shape_ = shape;
-  stride_ = std::move(*resolved);
+  stride_ = std::move(memory_stride);
   return true;
 }
 

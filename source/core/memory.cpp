@@ -64,38 +64,46 @@ auto Memory::create(MemoryType type, std::size_t size) -> UniquePtr<Memory> {
 }
 
 auto Memory::create(MemoryType type, const Shape& shape, const Stride& stride) -> UniquePtr<Memory> {
-  // Media memory needs row-aligned buffers unless the caller fixes the layout.
-  auto requested = stride;
+  // Media memory needs row-aligned buffers unless the caller fixes the stride.
+  auto memory_stride = stride;
+  if (memory_stride.empty()) {
+    switch (type) {
 #ifdef HRT_USE_DMA_BUFFER
-  if (type == MemoryType::DmaBuffer && stride.empty())
-    requested = memory::DmaBufferMemory::aligned_stride(shape);
+    case MemoryType::DmaBuffer:
+      memory_stride = memory::DmaBufferMemory::aligned_stride(shape);
+      break;
 #endif
 #ifdef HRT_USE_CANN
-  if (type == MemoryType::Dvpp && stride.empty())
-    requested = backend::AclMemory::dvpp_stride(shape);
+    case MemoryType::Dvpp:
+      memory_stride = backend::AclMemory::dvpp_stride(shape);
+      break;
 #endif
-  auto resolved = memory::resolve_stride(shape, requested);
-  if (!resolved)
+    default:
+      memory_stride = contiguous_stride(shape);
+      break;
+    }
+  } else if (!memory::check_stride(shape, memory_stride)) {
     return nullptr;
+  }
   UniquePtr<Memory> memory;
   switch (type) {
   case MemoryType::Cpu:
-    memory = std::make_unique<memory::CpuMemory>(shape, *resolved);
+    memory = std::make_unique<memory::CpuMemory>(shape, memory_stride);
     break;
 #ifdef HRT_USE_CUDA
   case MemoryType::Cuda:
-    memory = std::make_unique<backend::CudaMemory>(shape, *resolved);
+    memory = std::make_unique<backend::CudaMemory>(shape, memory_stride);
     break;
 #endif
 #ifdef HRT_USE_DMA_BUFFER
   case MemoryType::DmaBuffer:
-    memory = std::make_unique<memory::DmaBufferMemory>(shape, *resolved);
+    memory = std::make_unique<memory::DmaBufferMemory>(shape, memory_stride);
     break;
 #endif
 #ifdef HRT_USE_CANN
   case MemoryType::Acl:
   case MemoryType::Dvpp:
-    memory = std::make_unique<backend::AclMemory>(type, shape, *resolved);
+    memory = std::make_unique<backend::AclMemory>(type, shape, memory_stride);
     break;
 #endif
   default:
@@ -110,23 +118,25 @@ auto Memory::create(MemoryType type, const Shape& shape, const Stride& stride) -
 auto Memory::wrap(MemoryType type, void* host, KZ_MAYBE_UNUSED std::uintptr_t device, std::size_t size,
                   const Shape& shape, const Stride& stride) -> UniquePtr<Memory> {
   auto view_shape = shape.empty() ? Shape{static_cast<std::int64_t>(size)} : shape;
-  auto resolved = memory::resolve_stride(view_shape, stride);
-  if (!resolved)
+  auto memory_stride = stride;
+  if (memory_stride.empty())
+    memory_stride = contiguous_stride(view_shape);
+  else if (!memory::check_stride(view_shape, memory_stride))
     return nullptr;
-  if (resolved->front() > size) {
-    KZ_LOG_ERROR("Memory: wrapped size {} is smaller than the shape needs ({})", size, resolved->front());
+  if (memory_stride.front() > size) {
+    KZ_LOG_ERROR("Memory: wrapped size {} is smaller than the shape needs ({})", size, memory_stride.front());
     return nullptr;
   }
   switch (type) {
   case MemoryType::Cpu:
     if (host == nullptr)
       break;
-    return std::make_unique<memory::CpuMemory>(host, size, view_shape, *resolved);
+    return std::make_unique<memory::CpuMemory>(host, size, view_shape, memory_stride);
 #ifdef HRT_USE_CUDA
   case MemoryType::Cuda:
     if (device == 0)
       break;
-    return std::make_unique<backend::CudaMemory>(device, size, view_shape, *resolved);
+    return std::make_unique<backend::CudaMemory>(device, size, view_shape, memory_stride);
 #endif
 #ifdef HRT_USE_DMA_BUFFER
   case MemoryType::DmaBuffer: {
@@ -134,7 +144,7 @@ auto Memory::wrap(MemoryType type, void* host, KZ_MAYBE_UNUSED std::uintptr_t de
     if (device == 0)
       break;
     auto memory =
-        std::make_unique<memory::DmaBufferMemory>(static_cast<int>(device), host, size, view_shape, *resolved);
+        std::make_unique<memory::DmaBufferMemory>(static_cast<int>(device), host, size, view_shape, memory_stride);
     if (!memory->have_cpu())
       return nullptr;
     return memory;
@@ -145,7 +155,7 @@ auto Memory::wrap(MemoryType type, void* host, KZ_MAYBE_UNUSED std::uintptr_t de
   case MemoryType::Dvpp:
     if (device == 0)
       break;
-    return std::make_unique<backend::AclMemory>(type, device, size, view_shape, *resolved);
+    return std::make_unique<backend::AclMemory>(type, device, size, view_shape, memory_stride);
 #endif
   default:
     break;

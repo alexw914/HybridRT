@@ -14,8 +14,8 @@
 namespace hrt::memory {
 
 // The axis above which both regions are contiguous: 0 when both are fully
-// packed. Empty when the regions have different ranks or more than one
-// padded axis.
+// packed. Both regions must have the same non-empty shape. Empty when their
+// padding axes cannot be handled by a single strided copy.
 auto contiguous_axis(const core::Memory& dst, const core::Memory& src) -> std::optional<std::size_t>;
 
 // Copies src into dst, which must already have src's shape.
