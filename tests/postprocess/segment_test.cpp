@@ -84,7 +84,7 @@ TEST(SegmentTest, DecodesInt8Detections) {
 
   // real = 0.1 * q: 8, 8, 8, 8, 0.9, 1, 0.
   auto detections = hrt::test::buffer_of<std::int8_t>(proto(DataType::Int8, {1, 7, 1}), {80, 80, 80, 80, 9, 10, 0});
-  detections->scale = 0.1F;
+  detections->set_quantization(0.1F, 0);
   hrt::postprocess::SegmentResultMap result;
   ASSERT_TRUE(postprocessor->process(
       result, {detections, hrt::test::buffer_of(proto(DataType::Float32, {1, 2, 4, 4}), prototypes())},
@@ -104,8 +104,7 @@ TEST(SegmentTest, AccumulatesInt8PrototypesWithZeroPoint) {
   for (const auto value : prototypes())
     quantized.push_back(static_cast<std::int8_t>(value * 2.0F + 40.0F));
   auto masks = hrt::test::buffer_of(proto(DataType::Int8, {1, 2, 4, 4}), quantized);
-  masks->scale = 0.5F;
-  masks->zero_point = 40;
+  masks->set_quantization(0.5F, 40);
   const hrt::Vector<float> detections{8, 8, 8, 8, 0.9F, 1, 1};
   hrt::postprocess::SegmentResultMap result;
   ASSERT_TRUE(postprocessor->process(result,
@@ -347,8 +346,7 @@ TEST(SegmentTest, DecodesInt8SemanticScoresWithoutDequantizing) {
                                                               90,
                                                               7, // class 2
                                                           });
-  buffer->scale = 0.1F;
-  buffer->zero_point = -100;
+  buffer->set_quantization(0.1F, -100);
   hrt::postprocess::SegmentResultMap result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(2, 2)));
   ASSERT_EQ(result.size(), 3U);

@@ -24,8 +24,7 @@ TEST(EmbeddingTest, ReturnsTheOutputAsFloat) {
   ASSERT_NE(postprocessor, nullptr);
 
   auto buffer = hrt::test::buffer_of<std::int8_t>(output, {0, 10, 20});
-  buffer->scale = 0.1F;
-  buffer->zero_point = 10;
+  buffer->set_quantization(0.1F, 10);
   hrt::postprocess::EmbeddingResult result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(8, 8)));
   ASSERT_EQ(result.size(), 3U);
@@ -47,7 +46,7 @@ TEST(EmbeddingTest, DequantizesStridedRowsInOrder) {
   ASSERT_FALSE(buffer->is_contiguous());
   const hrt::Array<std::int8_t, 8> bytes{1, 2, 3, 99, 4, 5, 6, 99};
   std::copy(bytes.begin(), bytes.end(), static_cast<std::int8_t*>(buffer->memory()->mutable_cpu()));
-  buffer->scale = 0.5F;
+  buffer->set_quantization(0.5F, 0);
   hrt::postprocess::EmbeddingResult result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(8, 8)));
   EXPECT_EQ(result, (hrt::Vector<float>{0.5F, 1.0F, 1.5F, 2.0F, 2.5F, 3.0F}));
@@ -67,8 +66,7 @@ TEST(EmbeddingTest, DequantizesEveryInt8ValueLikeTheScalarFormula) {
   for (std::size_t i = 0; i < values.size(); ++i)
     values[i] = static_cast<std::int8_t>(static_cast<int>(i % 256) - 128);
   auto buffer = hrt::test::buffer_of<std::int8_t>(output, values);
-  buffer->scale = 0.037F;
-  buffer->zero_point = -5;
+  buffer->set_quantization(0.037F, -5);
   hrt::postprocess::EmbeddingResult result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(8, 8)));
   ASSERT_EQ(result.size(), values.size());

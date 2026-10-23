@@ -71,13 +71,21 @@ public:
   static auto copy(Buffer& dst, Buffer& src, CopyPolicy policy, Stream* stream = nullptr) -> bool;
 
   // Affine quantization of the elements: real = scale * (q - zero_point).
-  float scale = 1.0F;
-  std::int32_t zero_point = 0;
+  KZ_NODISCARD auto scale() const -> float { return scale_; }
+
+  KZ_NODISCARD auto zero_point() const -> std::int32_t { return zero_point_; }
+
+  auto set_quantization(float scale, std::int32_t zero_point) -> void {
+    scale_ = scale;
+    zero_point_ = zero_point;
+  }
 
 private:
   SharedPtr<Memory> memory_;
   DataType data_type_ = DataType::Unknown;
   Shape shape_;
+  float scale_ = 1.0F;
+  std::int32_t zero_point_ = 0;
   bool valid_ = false;
 };
 

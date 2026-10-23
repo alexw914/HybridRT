@@ -124,7 +124,7 @@ TEST(DetectYoloV8Test, DecodesNhwcInt8) {
   for (const auto value : real)
     quantized.push_back(static_cast<std::int8_t>(value));
   auto buffer = hrt::test::buffer_of(output, quantized);
-  buffer->scale = 0.2F;
+  buffer->set_quantization(0.2F, 0);
 
   hrt::postprocess::DetectResultMap result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(16, 16)));
@@ -150,8 +150,7 @@ TEST(DetectYoloV8Test, FiltersInt8AtThreshold) {
   at(8, 1, 0) = 10;
   at(8, 0, 1) = 9;
   auto buffer = hrt::test::buffer_of(output, quantized);
-  buffer->scale = 0.2F;
-  buffer->zero_point = 10;
+  buffer->set_quantization(0.2F, 10);
 
   hrt::postprocess::DetectResultMap result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(16, 16)));
@@ -356,7 +355,7 @@ TEST(DetectGeneralTest, ScansScoreRowsAcrossBlocksAndTail) {
     // threshold and q = 2 passes.
     const auto box = [](std::int64_t i) -> std::int8_t { return static_cast<std::int8_t>(i < 0 ? 1 : 2 * i + 1); };
     auto buffer = hrt::test::buffer_of<std::int8_t>(output, rows(box, std::int8_t{1}, std::int8_t{2}));
-    buffer->scale = 0.5F;
+    buffer->set_quantization(0.5F, 0);
     hrt::postprocess::DetectResultMap result;
     ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(80, 80)));
     expect_hits(result, 0.25F, 1.0F);
@@ -372,8 +371,7 @@ TEST(DetectGeneralTest, DecodesInt8) {
 
   // real = 0.25 * (q - 4): cx, cy, w, h = 20, 20, 20, 20 and score 0.75.
   auto buffer = hrt::test::buffer_of<std::int8_t>(output, {84, 84, 84, 84, 7});
-  buffer->scale = 0.25F;
-  buffer->zero_point = 4;
+  buffer->set_quantization(0.25F, 4);
 
   hrt::postprocess::DetectResultMap result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(40, 40)));

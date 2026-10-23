@@ -53,8 +53,7 @@ TEST(GeneralKeypointTest, DequantizesInt8Points) {
 
   // real = (q + 100) / 200: (0.5, 0.25).
   auto buffer = hrt::test::buffer_of<std::int8_t>(output, {0, -50});
-  buffer->scale = 0.005F;
-  buffer->zero_point = -100;
+  buffer->set_quantization(0.005F, -100);
   hrt::postprocess::KeypointResultMap result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(16, 16)));
   ASSERT_EQ(result.at(0).size(), 1U);

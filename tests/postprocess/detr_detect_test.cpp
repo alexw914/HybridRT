@@ -55,7 +55,7 @@ TEST(DetrDetectTest, DequantizesAndClipsToSourceRegion) {
   FakeEngine engine({proto(DataType::Float32, {1, 3, 100, 100})}, {output});
   auto decoder = hrt::postprocess::create_detect_postprocessor("DetrDetect", Json::parse(R"({"class_num":2})"), engine);
   auto buffer = hrt::test::buffer_of<std::int8_t>(output, {50, 50, 100, 100, 10, 90});
-  buffer->scale = 0.01F;
+  buffer->set_quantization(0.01F, 0);
   hrt::postprocess::DetectResultMap result;
   const hrt::preprocess::ImageTransform transform{{0, 25, 100, 50}, {10, 20, 200, 100}, {100, 100}};
   ASSERT_TRUE(decoder->process(result, {buffer}, transform));

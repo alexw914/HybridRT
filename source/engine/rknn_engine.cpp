@@ -222,10 +222,8 @@ auto RknnEngine::inference(core::Stream* stream) -> bool {
     const auto& attr = output_attrs_[i];
     std::memcpy(output.memory()->mutable_cpu(stream), output_mems_[i]->virt_addr,
                 std::min<std::size_t>(output.byte_size(), output_mems_[i]->size));
-    if (attr.type == RKNN_TENSOR_INT8) {
-      output.scale = attr.scale;
-      output.zero_point = attr.zp;
-    }
+    if (attr.type == RKNN_TENSOR_INT8)
+      output.set_quantization(attr.scale, attr.zp);
   }
   return true;
 }

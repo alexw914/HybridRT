@@ -264,29 +264,29 @@ public:
 
   auto fill(hrt::core::Image& image, const hrt::core::Rect& roi, const hrt::Array<float, 3>& color,
             hrt::core::Stream* stream) -> bool override {
-    ++calls[0];
+    ++calls_[0];
     return device_->fill(image, roi, color, stream);
   }
 
   auto resize(hrt::core::Image& dst, const hrt::core::Rect& dst_roi, const hrt::core::Image& src,
               const hrt::core::Rect& src_roi, hrt::preprocess::InterpolationMode mode, hrt::core::Stream* stream)
       -> bool override {
-    ++calls[1];
+    ++calls_[1];
     return device_->resize(dst, dst_roi, src, src_roi, mode, stream);
   }
 
   auto convert(hrt::core::Image& dst, const hrt::core::Image& src, hrt::core::Stream* stream) -> bool override {
-    ++calls[2];
+    ++calls_[2];
     return device_->convert(dst, src, stream);
   }
 
   auto normalize(hrt::core::Image& image, const hrt::core::Rect& roi, const hrt::Array<float, 3>& mean,
                  const hrt::Array<float, 3>& stddev, hrt::core::Stream* stream) -> bool override {
-    ++calls[3];
+    ++calls_[3];
     return device_->normalize(image, roi, mean, stddev, stream);
   }
 
-  hrt::Array<unsigned int, 4> calls{};
+  hrt::Array<unsigned int, 4> calls_{};
 
 private:
   hrt::UniquePtr<ImagePreprocessor> device_;
@@ -332,9 +332,9 @@ TEST(ImagePreprocessorTest, KeepsCudaStagesOnDeviceAndPreservesUnsupportedFallba
             for (int x = 0; x < 8; ++x)
               ASSERT_NEAR(planar_at(host, c, x, y), planar_at(expected, c, x, y), 1.0e-5F);
       }
-      for (std::size_t i = 0; i < processor.calls.size(); ++i) {
+      for (std::size_t i = 0; i < processor.calls_.size(); ++i) {
         const auto runs_on_cpu = unsupported != ImageOperation::Fused;
-        EXPECT_EQ(processor.calls[i], runs_on_cpu ? 0U : 3U);
+        EXPECT_EQ(processor.calls_[i], runs_on_cpu ? 0U : 3U);
       }
     }
   }

@@ -40,8 +40,7 @@ auto PostprocessorBase::to_host(const core::Buffers& outputs, core::Stream* stre
       host_[i] = std::make_shared<core::Buffer>(core::MemoryType::Cpu);
     if (!core::Buffer::copy(*host_[i], *output, core::CopyPolicy::AutoDstStride, stream))
       return nullptr;
-    host_[i]->scale = output->scale;
-    host_[i]->zero_point = output->zero_point;
+    host_[i]->set_quantization(output->scale(), output->zero_point());
     view_[i] = host_[i];
     copied = true;
   }
@@ -94,7 +93,7 @@ auto head_stride(const core::BufferProto& proto, engine::DataLayout layout, core
 }
 
 HeadGridView::HeadGridView(const core::Buffer& buffer, std::optional<engine::DataLayout> layout)
-    : int8_(buffer.data_type() == core::DataType::Int8), scale_(buffer.scale), zero_point_(buffer.zero_point) {
+    : int8_(buffer.data_type() == core::DataType::Int8), scale_(buffer.scale()), zero_point_(buffer.zero_point()) {
   const auto& shape = buffer.shape();
   const auto& stride = buffer.stride();
   const auto dims = shape.size();
@@ -339,8 +338,8 @@ auto dequantize_buffer(const core::Buffer& output, core::Buffer& scratch) -> voi
   const auto* base = static_cast<const std::uint8_t*>(output.memory()->cpu());
   auto* out = static_cast<float*>(scratch.memory()->mutable_cpu());
   const auto convert = [&](const std::uint8_t* in, std::size_t count) -> void {
-    dequantize_values(static_cast<const std::int8_t*>(static_cast<const void*>(in)), count, output.scale,
-                      output.zero_point, out);
+    dequantize_values(static_cast<const std::int8_t*>(static_cast<const void*>(in)), count, output.scale(),
+                      output.zero_point(), out);
     out += count;
   };
   const auto count = static_cast<std::size_t>(output.volume());

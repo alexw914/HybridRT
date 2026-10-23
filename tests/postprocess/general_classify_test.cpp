@@ -39,8 +39,7 @@ TEST(GeneralClassifyTest, DequantizesInt8Scores) {
   ASSERT_NE(postprocessor, nullptr);
 
   auto buffer = hrt::test::buffer_of<std::int8_t>(output, {0, 10, 20});
-  buffer->scale = 0.1F;
-  buffer->zero_point = 10;
+  buffer->set_quantization(0.1F, 10);
   hrt::postprocess::ClassifyResult result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(8, 8)));
   ASSERT_EQ(result.at(0).size(), 3U);
