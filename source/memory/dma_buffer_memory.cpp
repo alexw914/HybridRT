@@ -91,11 +91,11 @@ auto allocate_from(const char* path, std::size_t size) -> int {
   return allocated < 0 ? -1 : static_cast<int>(request.fd);
 }
 
-auto dma_allocate(BasePointer& pointer, std::size_t size, DmaHeapUse use) -> bool {
+auto dma_allocate(BasePointer& pointer, std::size_t size, bool device32) -> bool {
   dma_release(pointer);
   if (size == 0)
     return true;
-  const auto& order = use == DmaHeapUse::Device32 ? kDevice32Order : kAnyOrder;
+  const auto& order = device32 ? kDevice32Order : kAnyOrder;
   Vector<String> tried;
   int error = ENOENT;
   for (const auto& heap : order) {
@@ -116,7 +116,7 @@ auto dma_allocate(BasePointer& pointer, std::size_t size, DmaHeapUse use) -> boo
       close(fd);
       continue;
     }
-    if (use == DmaHeapUse::Device32 && !heap.below_4gb) {
+    if (device32 && !heap.below_4gb) {
       static std::atomic<bool> warned{false};
       if (!warned.exchange(true))
         KZ_LOG_WARN("dma-buf: 32-bit DMA heaps are exhausted; using {}, where devices with 32-bit DMA (RGA2) "
@@ -157,18 +157,18 @@ auto DmaBufferMemory::aligned_stride(const core::Shape& shape) -> core::Stride {
   return stride;
 }
 
-DmaBufferMemory::DmaBufferMemory(const core::Shape& shape, const core::Stride& stride, DmaHeapUse use)
-    : core::Memory(core::MemoryType::DmaBuffer), use_(use) {
+DmaBufferMemory::DmaBufferMemory(const core::Shape& shape, const core::Stride& stride, bool device32)
+    : core::Memory(core::MemoryType::DmaBuffer), device32_(device32) {
   shape_ = shape;
   stride_ = stride;
   pointer_->owned_ = true;
   pointer_->release_ = dma_release;
-  dma_allocate(*pointer_, stride_.empty() ? 0 : stride_[0], use_);
+  dma_allocate(*pointer_, stride_.empty() ? 0 : stride_[0], device32_);
 }
 
 DmaBufferMemory::DmaBufferMemory(int fd, void* host, std::size_t size, const core::Shape& shape,
                                  const core::Stride& stride)
-    : core::Memory(core::MemoryType::DmaBuffer), use_(DmaHeapUse::Device32) {
+    : core::Memory(core::MemoryType::DmaBuffer), device32_(true) {
   shape_ = shape;
   stride_ = stride;
   pointer_->device_ = static_cast<std::uintptr_t>(fd);
@@ -187,15 +187,15 @@ DmaBufferMemory::DmaBufferMemory(int fd, void* host, std::size_t size, const cor
   pointer_->release_ = unmap_release;
 }
 
-DmaBufferMemory::DmaBufferMemory(SharedPtr<BasePointer> pointer, DmaHeapUse use, const core::Shape& shape,
+DmaBufferMemory::DmaBufferMemory(SharedPtr<BasePointer> pointer, bool device32, const core::Shape& shape,
                                  const core::Stride& stride)
-    : core::Memory(std::move(pointer)), use_(use) {
+    : core::Memory(std::move(pointer)), device32_(device32) {
   shape_ = shape;
   stride_ = stride;
 }
 
 auto DmaBufferMemory::ref() -> SharedPtr<core::Memory> {
-  return std::make_shared<DmaBufferMemory>(pointer_, use_, shape_, stride_);
+  return std::make_shared<DmaBufferMemory>(pointer_, device32_, shape_, stride_);
 }
 
 auto DmaBufferMemory::resize(const core::Shape& shape, const core::Stride& stride) -> bool {
@@ -215,7 +215,7 @@ auto DmaBufferMemory::resize(const core::Shape& shape, const core::Stride& strid
       KZ_LOG_ERROR("DmaBufferMemory: cannot grow wrapped memory from {} to {} bytes", pointer_->capacity_, size);
       return false;
     }
-    if (!dma_allocate(*pointer_, size, use_))
+    if (!dma_allocate(*pointer_, size, device32_))
       return false;
   }
   shape_ = shape;
@@ -227,7 +227,7 @@ auto DmaBufferMemory::shrink_to_fit() -> bool {
   const auto size = stride_.empty() ? 0 : stride_[0];
   if (!pointer_->owned_ || size == pointer_->capacity_)
     return true;
-  return dma_allocate(*pointer_, size, use_);
+  return dma_allocate(*pointer_, size, device32_);
 }
 
 auto DmaBufferMemory::below_4gb() const -> bool {

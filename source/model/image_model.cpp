@@ -174,7 +174,7 @@ auto make_buffers(const Vector<core::BufferProto>& protos, const engine::Engine*
 #ifdef HRT_USE_DMA_BUFFER
     if (buffer == nullptr && host_engine != nullptr && proto.memory_type == core::MemoryType::DmaBuffer) {
       buffer = std::make_shared<core::Buffer>(
-          std::make_shared<memory::DmaBufferMemory>(core::Shape{}, core::Stride{}, memory::DmaHeapUse::Any), proto);
+          std::make_shared<memory::DmaBufferMemory>(core::Shape{}, core::Stride{}, /*device32=*/false), proto);
       if (!buffer->valid())
         buffer.reset();
     }

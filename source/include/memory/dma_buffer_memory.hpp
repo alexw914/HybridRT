@@ -12,26 +12,20 @@
 
 namespace hrt::memory {
 
-// Which heaps a dma-buf may come from.
-enum class DmaHeapUse {
-  // Pages below 4 GB first (system-dma32, cma), for devices with 32-bit DMA such as RGA2; when those are exhausted
-  // the system heap is used and below_4gb() turns false.
-  Device32,
-  // Any pages (system heap first), for devices behind an IOMMU such as the RK3588 NPU.
-  Any,
-};
-
 // DmaBuffer memory: a dma-heap buffer mapped to the host; device() is the dma-buf fd. Without an explicit stride, rows
 // are aligned to 16 elements as media devices need.
 class DmaBufferMemory final : public core::Memory {
 public:
-  DmaBufferMemory(const core::Shape& shape, const core::Stride& stride, DmaHeapUse use = DmaHeapUse::Device32);
+  // `device32` takes pages below 4 GB first (system-dma32, cma) for devices with 32-bit DMA such as RGA2; when those
+  // are exhausted the system heap is used and below_4gb() turns false. Otherwise any pages are taken (system heap
+  // first), for devices behind an IOMMU such as the RK3588 NPU.
+  DmaBufferMemory(const core::Shape& shape, const core::Stride& stride, bool device32 = true);
 
   // Views a caller's dma-buf (decoder, camera, display) without owning `fd`, mapping it when `host` is null. Its
   // pages are taken to be reachable by 32-bit DMA, as media allocators provide.
   DmaBufferMemory(int fd, void* host, std::size_t size, const core::Shape& shape, const core::Stride& stride);
 
-  DmaBufferMemory(SharedPtr<BasePointer> pointer, DmaHeapUse use, const core::Shape& shape, const core::Stride& stride);
+  DmaBufferMemory(SharedPtr<BasePointer> pointer, bool device32, const core::Shape& shape, const core::Stride& stride);
 
   auto ref() -> SharedPtr<core::Memory> override;
 
@@ -50,7 +44,7 @@ protected:
   auto cpu_to_device(core::Stream* stream) -> bool override;
 
 private:
-  DmaHeapUse use_;
+  bool device32_;
 };
 
 // Whether this process can allocate from a dma-heap; probed once.
