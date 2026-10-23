@@ -103,6 +103,26 @@ in host/shared memory, so placement differs.
 | 3840 x 2160 | 640 x 640 | 0.794 | 1.278 | 0.046 |
 | 3840 x 2160 | 1280 x 1280 | 3.357 | 1.334 | 0.106 |
 
+### WSL2 RTX 3060: batched preprocessing
+
+2026-10-24, AMD Ryzen 5 5600X, RTX 3060 12 GiB, WSL2 Ubuntu 24.04, Release GCC 13,
+OpenCV 4.6.0, CUDA 13.0, commit `bedb888`. `BM_Batch/<batch>/<mode>` letterboxes distinct
+random 1920 x 1080 BGR frames into 640 x 640 planar RGB float32 with one batched
+`ImagePreprocessor::process` call and waits for the stream. Pinned to four cores
+(`taskset -c 2-5`); median of three runs of three repetitions of at least 0.5 s.
+
+| Mode | Batch 1, ms / frame | Batch 4, ms / frame | Batch 4, ms / batch |
+| --- | ---: | ---: | ---: |
+| CPU, one OpenCV thread | 0.574 | 0.908 | 3.630 |
+| CPU, four OpenCV threads | 0.335 | 0.513 | 2.052 |
+| CUDA, host frames | 0.614 | 0.632 | 2.529 |
+| CUDA, device frames | 0.078 | 0.042 | 0.167 |
+
+Batch 1 reuses one frame that stays in cache; four distinct frames (24 MB) do not, which is
+closer to a video stream. Four CPU threads run the samples in parallel but stay memory bound.
+Host-frame CUDA cases are limited by the pageable upload (about 0.53 ms per frame); device
+frames run one kernel launch per sample.
+
 ### Other platforms: historical measurements
 
 These are transcribed from [perf.md](perf.md#2026-10-13-fuse-cpu-tensor-conversion-and-normalization-26e8d66),
@@ -272,6 +292,10 @@ build/benchmarks/hybridrt_bench_postprocess \
   --benchmark_out=assets/test/benchmark_results/record_postprocess.json \
   --benchmark_out_format=json
 ```
+
+The batched preprocessing table uses
+`taskset -c 2-5 build/benchmarks/hybridrt_bench_preprocess --benchmark_filter=BM_Batch` with the same
+timing flags.
 
 Create `assets/test/benchmark_results/` before running. On macOS, preprocessing
 device argument `0` is CPU and `1` is Metal; Metal needs access to the GPU.
