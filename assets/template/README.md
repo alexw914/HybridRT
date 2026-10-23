@@ -42,7 +42,10 @@ most 64) to `ImageModel::create`.
 | `pad_scale` | `1.0` | Scale of `pad_outside` |
 
 Fused preprocessing is optional. A device without a fused implementation uses its
-independent operators when it supports every required stage (CUDA uses multi-stage NPP).
+independent operators when it supports every required stage. CUDA runs interleaved uint8
+BGR/RGB sources with `linear` or `nearest` interpolation into 3-channel planar or interleaved
+inputs in one kernel that follows OpenCV's uint8 sampling, so it matches the CPU result up to
+OpenCV's own rounding differences; NV12 sources and `cubic` use multi-stage NPP.
 For device-only memory, an unsupported stage retains the whole-call CPU fallback,
 including source download and result upload. Host-accessible buffers can use CPU operators
 directly. Fusion and fallback decisions do not change the model's preprocess parameters.
@@ -101,7 +104,7 @@ Per platform:
 | Engine | Preprocess and model inputs |
 | --- | --- |
 | `rknn` (RK3588) | `image_input: true` (default) feeds uint8 NHWC images and the runtime applies the mean, std and channel swap built into the `.rknn` (`strings model.rknn \| grep "'mean'"` shows them): use `dst_image_format: "inter_rgb"` and keep `mean`/`std` at their defaults. `false` feeds int8 or float32 tensors normalized by `preprocess`. `device: "auto"` uses the RGA. |
-| `trt` | `device: "auto"` preprocesses with CUDA (NPP) into the device input. |
+| `trt` | `device: "auto"` preprocesses with CUDA into the device input. |
 | `cann` | `device: "auto"` preprocesses with DVPP (VPC), which only crops, resizes and pads uint8 images: it has no normalization and no layout conversion, so the `.om` it feeds must do those in AIPP (`atc --insert_op_conf=<aipp.cfg>`, with `mean_chn_*`/`var_reci_chn_*` and `csc_switch`), as for RKNN's `image_input: true`. Use `dst_image_format: "inter_bgr"` or a YUV format, keep `mean`/`std` at their defaults, and give the model a width that is a multiple of 16, as VPC needs a row stride that is a multiple of 16 and at least 32. Engine inputs come from the DVPP memory pool, which VPC requires of the images it reads and writes, while outputs and staging use `aclrtMalloc`. An `.om` without AIPP takes float32, which VPC cannot write, so the CPU operators run the whole step; where VPC cannot run at all, such as a container without the media service, `device: "auto"` picks the CPU preprocessor outright. Only the steps VPC really runs get its even regions. ATC defaults to FP16: add `--precision_mode=must_keep_origin_dtype` to match an FP32 reference. |
 | `mnn` | `forward_type: "metal"` needs an SDK built with Metal; on Linux with RGA and a dma-heap `device: "auto"` uses the RGA, as for `ncnn`. |
 | `ort` | `execution_provider: "coreml"` needs a CoreML build; models with a dynamic batch need no `input_shapes`, other dynamic dims do. |
@@ -424,7 +427,7 @@ These are native batched networks. Their template algos end in `_batch4`.
 `ImageModelTest.MatchesBatchOneOnStaticBatchModels` compares four images and a partial batch
 against individual CPU calls. `MatchesBatchOneOnTensorRtStaticBatchModels` compares batched
 and individual calls on the same TensorRT model with CPU and CUDA preprocessing separately;
-OpenCV and NPP interpolation need not produce identical pixels. TensorRT fixtures are local
+the CUDA kernel may differ from OpenCV by one uint8 step in rare pixels. TensorRT fixtures are local
 `.engine` files beside the ONNX files, built with TensorRT 10.14.1, FP32, `--noTF32`.
 
 | Algo | ONNX file in `assets/test/onnx/` | Input NCHW | Outputs | Batch-1 SHA256 | Batch-4 SHA256 |

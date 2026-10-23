@@ -4,6 +4,55 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-24: replace staged NPP preprocessing with one fused CUDA kernel
+
+**Bottleneck.** For interleaved uint8 BGR/RGB sources, CUDA preprocessing ran NPP step by step:
+fill the uint8 input-sized scratch, resize into its region, convert the whole image to float,
+split it into planes and subtract and divide per plane, about ten launches with several full
+passes over float data. `BM_CudaResolution` with a device source showed 0.226 ms for
+1920 x 1080 to 640 x 640 and 0.643 ms to 1280 x 1280.
+
+**Change.** `CudaImagePreprocessor` implements the fused operator in
+`source/preprocess/cuda_image_kernels.cu`: one thread per input pixel writes the padding value
+or samples the source region, then applies the channel order and `value * alpha + beta` and
+stores planar or interleaved uint8 or float32. Sampling follows OpenCV: INTER_LINEAR with
+half-pixel centers and coordinates in double, its 11-bit fixed-point weights and the rounding
+of its vectorized vertical pass, and INTER_NEAREST with `floor(x * scale)` in double. Padding
+and normalization follow the CPU flow. Task descriptors are kernel parameters, at most 16 per
+launch, so no device copy has to outlive the call. NV12 sources and `cubic` keep the NPP flow.
+The kernel builds as a separate CUDA object library; `CMAKE_CUDA_ARCHITECTURES` defaults to
+`all-major`.
+
+**Measurement.** WSL2 Ubuntu 24.04, AMD Ryzen 5 5600X, RTX 3060 12 GiB, Release GCC 13, CUDA 13.0,
+`hybridrt_bench_preprocess` pinned with `taskset -c 4`. The baseline binary is commit `aa3f2d9`,
+whose CUDA path equals `18dcc22` for these integer-ratio cases. Both ran in alternating order
+for five rounds of three repetitions of at least 0.5 s after 0.2 s warm-up; numbers are the
+median of round medians in ms. Letterbox, linear, padding 114, planar RGB float32, mean 0,
+std 255; the host-source cases include the pageable upload and stream completion.
+
+| Case | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| 1920 x 1080 to 640 x 640, device source | 0.226 | 0.076 | -66% |
+| 1920 x 1080 to 1280 x 1280, device source | 0.643 | 0.151 | -77% |
+| 3840 x 2160 to 640 x 640, device source | 0.234 | 0.086 | -63% |
+| 1920 x 1080 to 640 x 640, host source | 0.758 | 0.597 | -21% |
+| 1920 x 1080 to 1280 x 1280, host source | 1.171 | 0.673 | -43% |
+| 3840 x 2160 to 640 x 640, host source | 2.258 | 2.059 | -9% |
+| 3840 x 2160 crop to 224 x 224, host source | 0.418 | 0.344 | -18% |
+| 1920 x 1080 upload only | 0.538 | 0.527 | noise |
+
+**Validation.** `CudaFusedKernelMatchesCpu` compares the kernel with the CPU on a random
+97 x 61 image for BGR and RGB sources, planar and interleaved RGB/BGR outputs, uint8 and
+float32, letterbox, normal and keep_ratio, linear and nearest, all normalize types,
+downscaling and upscaling, whole and cropped sources: every value is within one uint8 step
+and 99.87% of 18.8 million are identical; OpenCV's scalar row tails round differently from
+its vectorized loop.
+
+**Remaining.** With host sources the pageable upload now dominates (0.53 ms of 0.60 ms at
+1080p, 2.0 ms at 4K). Pinned staging, uploading only the source region and overlapping the
+upload of one sample with the kernel of another are the next steps, as is launching a whole
+batch at once. RKNN, Ascend, Metal and Windows were not measured.
+
 ## 2026-10-24: fuse CPU letterbox padding, conversion and normalization
 
 **Bottleneck.** For interleaved uint8 BGR/RGB sources and planar float32 inputs, the CPU flow

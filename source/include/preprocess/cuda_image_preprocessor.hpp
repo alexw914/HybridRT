@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/include/preprocess/cuda_image_preprocessor.hpp
-// Description: Declares the NPP-based CUDA image operators.
+// Description: Declares the CUDA image operators: a fused kernel and NPP steps.
 // -----------------------------------------------------------------------------
 
 #ifndef HRT_PREPROCESS_CUDA_IMAGE_PREPROCESSOR_HPP
@@ -28,6 +28,12 @@ public:
   auto normalize(core::Image& image, const core::Rect& roi, const Array<float, 3>& mean, const Array<float, 3>& stddev,
                  core::Stream* stream) -> bool override;
 
+  // Interleaved uint8 BGR/RGB to a 3-channel uint8 or float32 input in one
+  // kernel: resize (linear or nearest), padding, channel order and
+  // normalization.
+  auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
+             const ImagePreprocessorParam& param, core::Stream* stream) -> bool override;
+
   KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Cuda; }
 
   KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::Cuda; }
@@ -37,6 +43,9 @@ public:
   KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
 
 private:
+  KZ_NODISCARD auto supports_fused(const core::Image& dst, const core::Image& src,
+                                   const ImagePreprocessorParam& param) const -> bool override;
+
   // Changes only the data type; `dst` has the source format.
   auto convert_type(core::Image& dst, const core::Image& src, core::Stream* stream) -> bool;
 

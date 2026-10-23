@@ -102,12 +102,25 @@ if(HRT_USE_ORT)
 endif()
 
 if(HRT_USE_CUDA)
+    # Portable device code unless the caller picks architectures (e.g. native).
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+        set(CMAKE_CUDA_ARCHITECTURES all-major)
+    endif()
+    enable_language(CUDA)
+    # Kernels build apart from kitzoo, whose build-tree warning flags are for the host compiler only.
+    add_library(hybridrt_cuda_kernels OBJECT preprocess/cuda_image_kernels.cu)
+    target_include_directories(hybridrt_cuda_kernels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(hybridrt_cuda_kernels PRIVATE CUDA::cudart)
+    set_target_properties(hybridrt_cuda_kernels PROPERTIES
+        CUDA_STANDARD 20 CUDA_STANDARD_REQUIRED ON POSITION_INDEPENDENT_CODE ON)
+    hybridrt_apply_warnings(hybridrt_cuda_kernels)
     target_sources(hybridrt PRIVATE
         backend/cuda/cuda_common.cpp
         backend/cuda/cuda_context.cpp
         backend/cuda/cuda_memory.cpp
         backend/cuda/cuda_host_memory.cpp
-        preprocess/cuda_image_preprocessor.cpp)
+        preprocess/cuda_image_preprocessor.cpp
+        $<TARGET_OBJECTS:hybridrt_cuda_kernels>)
     target_link_libraries(hybridrt PRIVATE
         CUDA::cudart CUDA::nppc CUDA::nppial CUDA::nppicc CUDA::nppidei CUDA::nppig)
     target_compile_definitions(hybridrt PRIVATE HRT_USE_CUDA)

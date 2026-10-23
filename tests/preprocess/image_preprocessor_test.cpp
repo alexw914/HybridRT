@@ -475,6 +475,100 @@ TEST(ImagePreprocessorTest, CudaStagesOnlyTheCroppedHostRegion) {
   }
 }
 
+// Element (c, x, y) of a 3-channel planar or interleaved uint8 or float32 host
+// image; stride[i] steps dim i - 1 and the last dim is packed.
+auto value_at(const hrt::core::Image& image, int c, int x, int y) -> float {
+  const auto* base = static_cast<const std::byte*>(image.memory()->cpu());
+  const auto& stride = image.stride();
+  const auto element = image.data_type() == hrt::core::DataType::Float32 ? sizeof(float) : 1;
+  const auto planar =
+      image.format() == hrt::core::ImageFormat::PlanarRgb || image.format() == hrt::core::ImageFormat::PlanarBgr;
+  const auto offset = planar ? static_cast<std::size_t>(c) * stride[1] + static_cast<std::size_t>(y) * stride[2] +
+                                   static_cast<std::size_t>(x) * element
+                             : static_cast<std::size_t>(y) * stride[1] + static_cast<std::size_t>(x) * stride[2] +
+                                   static_cast<std::size_t>(c) * element;
+  if (image.data_type() == hrt::core::DataType::Float32)
+    return *reinterpret_cast<const float*>(base + offset);
+  return static_cast<float>(*reinterpret_cast<const std::uint8_t*>(base + offset));
+}
+
+TEST(ImagePreprocessorTest, CudaFusedKernelMatchesCpu) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto context = Context::create(DeviceType::Cuda);
+  if (!context)
+    GTEST_SKIP() << "CUDA unavailable";
+  context->set_current();
+  auto stream = context->create_stream();
+  auto cuda = ImagePreprocessor::create(ImagePreprocessorType::Cuda);
+  auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  ASSERT_TRUE(stream && cuda && cpu);
+  auto src = uniform_bgr(97, 61, {0, 0, 0}, 97 * 3 + 5);
+  for (std::size_t i = 0; i < src.pixels.size(); ++i)
+    src.pixels[i] = static_cast<std::uint8_t>((i * 7919 + i / 13) % 256);
+  const auto rgb =
+      Image::wrap(MemoryType::Cpu, src.pixels.data(), ImageFormat::InterRgb, {97, 61}, DataType::Uint8, 97 * 3 + 5);
+  ASSERT_TRUE(rgb);
+  std::size_t checked = 0;
+  std::size_t exact = 0;
+  for (const auto* source : hrt::Array<const Image*, 2>{&src.image, &*rgb}) {
+    for (const auto format : {ImageFormat::PlanarRgb, ImageFormat::PlanarBgr, ImageFormat::InterRgb}) {
+      for (const auto type : {DataType::Float32, DataType::Uint8}) {
+        for (const auto resize : {ResizeType::LetterBox, ResizeType::Normal, ResizeType::KeepRatio}) {
+          for (const auto mode : {InterpolationMode::Linear, InterpolationMode::Nearest}) {
+            for (const auto normalize : {NormalizeType::Full, NormalizeType::Roi, NormalizeType::None}) {
+              // Downscaling and upscaling, from the whole source and from a crop.
+              for (const auto size : {Size{40, 32}, Size{160, 128}}) {
+                for (const auto crop : {Rect{}, Rect{9, 5, 50, 41}}) {
+                  if (type == DataType::Uint8 && normalize != NormalizeType::None)
+                    continue;
+                  SCOPED_TRACE(testing::Message()
+                               << "format " << static_cast<int>(format) << " type " << static_cast<int>(type)
+                               << " resize " << static_cast<int>(resize) << " mode " << static_cast<int>(mode)
+                               << " normalize " << static_cast<int>(normalize) << " size " << size.width << " crop "
+                               << crop.width << " source " << static_cast<int>(source->format()));
+                  ImagePreprocessorParam param;
+                  param.resize_type = resize;
+                  param.interpolation_mode = mode;
+                  param.normalize_type = normalize;
+                  param.dst_image_format = format;
+                  param.mean = {3, 6, 9};
+                  param.std = {2, 4, 8};
+                  param.default_color = {114.4F, 20, 250};
+                  Image expected(MemoryType::Cpu, format, type, size);
+                  Image device(MemoryType::Cuda, format, type, size);
+                  Image actual(MemoryType::Cpu, format, type, size);
+                  ASSERT_TRUE(cpu->process(expected, *source, crop, param));
+                  ASSERT_TRUE(cuda->process(device, *source, crop, param, stream.get()));
+                  ASSERT_TRUE(Buffer::copy(*actual.buffer(), *device.buffer(), CopyPolicy::DirectCopy, stream.get()));
+                  stream->synchronize();
+                  for (int c = 0; c < 3; ++c) {
+                    // One uint8 step of rounding in the resize, scaled by normalization.
+                    const auto step =
+                        normalize == NormalizeType::None ? 1.0F : 1.0F / param.std[static_cast<std::size_t>(c)];
+                    for (int y = 0; y < size.height; ++y) {
+                      for (int x = 0; x < size.width; ++x) {
+                        const auto diff = std::abs(value_at(actual, c, x, y) - value_at(expected, c, x, y));
+                        ASSERT_LE(diff, step + 1.0e-4F)
+                            << "c " << c << " x " << x << " y " << y << " cpu " << value_at(expected, c, x, y)
+                            << " cuda " << value_at(actual, c, x, y);
+                        ++checked;
+                        exact += diff <= 1.0e-4F ? 1 : 0;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  // The kernel follows OpenCV's vectorized fixed-point rounding; OpenCV's scalar row tails round slightly differently.
+  EXPECT_GT(static_cast<double>(exact), 0.998 * static_cast<double>(checked)) << exact << " of " << checked;
+}
+
 TEST(ImagePreprocessorTest, RgaMatchesCpuForAlignedAndUnalignedRowStrides) {
   using namespace hrt::core;
   using namespace hrt::preprocess;

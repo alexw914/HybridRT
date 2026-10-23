@@ -1,14 +1,18 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/preprocess/cuda_image_preprocessor.cpp
-// Description: Implements the NPP-based CUDA image operators.
+// Description: Implements the CUDA image operators: a fused kernel and NPP steps.
 // -----------------------------------------------------------------------------
 
 #include "include/preprocess/cuda_image_preprocessor.hpp"
 
 #include <kitzoo/log/logger.hpp>
 
+#include <algorithm>
+#include <cmath>
+
 #include "include/backend/cuda/cuda_common.hpp"
+#include "include/preprocess/cuda_image_kernels.hpp"
 
 namespace hrt::preprocess {
 
@@ -102,6 +106,11 @@ auto planes_mut(const core::Image& image, bool swap, core::Stream* stream) -> Ar
 }
 
 constexpr int kSwapOrder[3] = {2, 1, 0};
+
+auto is_identity(const Array<float, 3>& mean, const Array<float, 3>& stddev) -> bool {
+  return std::all_of(mean.begin(), mean.end(), [](float v) -> bool { return v == 0.0F; }) &&
+         std::all_of(stddev.begin(), stddev.end(), [](float v) -> bool { return v == 1.0F; });
+}
 
 } // namespace
 
@@ -234,6 +243,63 @@ auto CudaImagePreprocessor::resize(core::Image& dst, const core::Rect& dst_roi, 
   default:
     return false;
   }
+}
+
+auto CudaImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
+                                           const ImagePreprocessorParam& param) const -> bool {
+  const auto normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
+  return layout_of(src.format()) == Layout::Inter3 && src.data_type() == core::DataType::Uint8 &&
+         (layout_of(dst.format()) == Layout::Inter3 || layout_of(dst.format()) == Layout::Planar3) &&
+         (dst.data_type() == core::DataType::Float32 || (dst.data_type() == core::DataType::Uint8 && !normalize)) &&
+         param.interpolation_mode != InterpolationMode::Cubic;
+}
+
+auto CudaImagePreprocessor::fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
+                                  const ImagePreprocessorParam& param, core::Stream* stream) -> bool {
+  const auto& roi = transform.dst_roi;
+  const auto& from = transform.src_roi;
+  const auto* source = at<std::uint8_t>(src, {from.y, from.x}, stream);
+  auto* target = at_mut<std::uint8_t>(dst, {0}, stream);
+  if (source == nullptr || target == nullptr || roi.empty() || from.empty())
+    return false;
+  const auto planar = layout_of(dst.format()) == Layout::Planar3;
+  CudaResizeTask task;
+  task.src = source;
+  task.src_pitch = pitch(src);
+  task.src_width = from.width;
+  task.src_height = from.height;
+  task.scale_x = 1.0 / (static_cast<double>(roi.width) / from.width);
+  task.scale_y = 1.0 / (static_cast<double>(roi.height) / from.height);
+  task.dst = target;
+  task.dst_pitch = pitch(dst);
+  task.dst_plane = planar ? static_cast<std::int64_t>(dst.stride()[1]) : 0;
+  task.dst_width = dst.size().width;
+  task.dst_height = dst.size().height;
+  task.roi_x = roi.x;
+  task.roi_y = roi.y;
+  task.roi_width = roi.width;
+  task.roi_height = roi.height;
+  task.float_output = dst.data_type() == core::DataType::Float32;
+  task.nearest = param.interpolation_mode == InterpolationMode::Nearest;
+  // As the CPU flow: padding is the default color as a uint8 pixel, normalized unless only the ROI is. That flow
+  // fills planar inputs in source channel order and interleaved ones in input channel order.
+  const auto normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
+  const auto swap = rgb_order(src.format()) != rgb_order(dst.format());
+  for (int i = 0; i < 3; ++i) {
+    const auto c = static_cast<std::size_t>(i);
+    const auto input = swap ? 2 - i : i;
+    const auto alpha = normalize ? 1.0 / static_cast<double>(param.std[c]) : 1.0;
+    const auto beta = normalize ? -static_cast<double>(param.mean[c]) * alpha : 0.0;
+    const auto color = param.default_color[static_cast<std::size_t>(planar ? input : i)];
+    const auto pad = std::clamp(std::nearbyint(static_cast<double>(color)), 0.0, 255.0);
+    task.channel[c] = input;
+    task.alpha[c] = static_cast<float>(alpha);
+    task.beta[c] = static_cast<float>(beta);
+    task.pad[c] = static_cast<float>(param.normalize_type == NormalizeType::Roi ? pad : pad * alpha + beta);
+  }
+  const auto status = launch_cuda_resize(&task, 1, backend::cuda_stream(stream));
+  KZ_CHECK_RETURN(status == cudaSuccess, false, "cuda: resize kernel failed: {}", cudaGetErrorString(status));
+  return true;
 }
 
 auto CudaImagePreprocessor::scratch(UniquePtr<core::Image>& slot, core::ImageFormat format, core::DataType data_type,
