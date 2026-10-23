@@ -83,7 +83,7 @@ struct OcrModel::Impl {
 auto OcrModel::Impl::host_image(const core::Image& src) -> const core::Image* {
   if (is_host_bgr(src))
     return &src;
-  detection->context()->make_current();
+  detection->context()->set_current();
   KZ_CHECK_RETURN(host.reshape(src.size()), nullptr, "OcrModel: cannot allocate host image");
   preprocess::ImagePreprocessorParam param;
   param.dst_image_format = core::ImageFormat::InterBgr;

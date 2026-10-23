@@ -96,7 +96,7 @@ auto load_first(const hrtc::AlgoParam& algo, core::DeviceType preprocess_device,
     } else if (device != core::DeviceType::Cpu && device != target->device_type()) {
       continue;
     }
-    target->make_current();
+    target->set_current();
     if (auto engine = load_engine(param))
       return LoadedEngine{std::move(target), std::move(engine), &param};
   }
@@ -237,7 +237,7 @@ ImageModel<Result>::ImageModel(SharedPtr<core::Context> context, const ImageMode
 // Device buffers and engines are freed under the model's context.
 template <typename Result>
 ImageModel<Result>::~ImageModel() {
-  context_->make_current();
+  context_->set_current();
 }
 
 template <typename Result>
@@ -285,7 +285,7 @@ template <typename Result>
 auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::Json& config,
                                const PostprocessorFactory& factory, UniquePtr<engine::Engine> first,
                                const hrtc::EngineParam& chosen) -> void {
-  context_->make_current();
+  context_->set_current();
   preprocessor_param_ =
       config.value("preprocess", kitzoo::json::Json::object()).get<preprocess::ImagePreprocessorParam>();
   const auto preprocess_num = options_.preprocess;
@@ -314,7 +314,7 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
   for (std::size_t i = 0; i < preprocess_num + engine_num; ++i) {
     auto buffers = make_buffers(engine.input_protos(), host_input_engine);
     KZ_CHECK_MSG(buffers && !buffers->empty(), "ImageModel: cannot allocate the inputs of algo {}", algo.name);
-    auto image = make_input_image(*buffers->front());
+    auto image = create_input_image(*buffers->front());
     KZ_CHECK_MSG(image.has_value(), "ImageModel: the engine input of algo {} does not fit the preprocess config",
                  algo.name);
     input_memory = buffers->front()->memory_type();
@@ -343,7 +343,7 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
 }
 
 template <typename Result>
-auto ImageModel<Result>::make_input_image(const core::Buffer& input) const -> std::optional<core::Image> {
+auto ImageModel<Result>::create_input_image(const core::Buffer& input) const -> std::optional<core::Image> {
   const auto format = preprocessor_param_.dst_image_format;
   const auto& shape = input.shape();
   const auto nchw = input_layout_ == engine::DataLayout::Nchw;
@@ -370,12 +370,12 @@ template <typename Result>
 auto ImageModel<Result>::process_sync(const core::Image& src, const core::Rect& src_rect) -> std::optional<Result> {
   KZ_CHECK_RETURN(src.valid() && src.size().width > 0 && src.size().height > 0, std::nullopt,
                   "ImageModel: invalid source image");
-  context_->make_current();
+  context_->set_current();
   auto stream_slot = stream_pool_.acquire();
   auto* stream = stream_slot->get();
   auto input = input_pool_.acquire();
   // Rebuilt per call: preprocess settings may change between frames of a stream.
-  auto image = make_input_image(*input->front());
+  auto image = create_input_image(*input->front());
   KZ_CHECK_RETURN(image.has_value(), std::nullopt, "ImageModel: cannot create input image view");
 
   std::optional<preprocess::ImageTransform> transform;

@@ -23,7 +23,7 @@ class CpuContext final : public Context {
 public:
   explicit CpuContext(int device_id) : Context(DeviceType::Cpu, device_id) {}
 
-  auto make_current() -> void override {}
+  auto set_current() -> void override {}
 
   auto create_stream() -> UniquePtr<Stream> override { return std::make_unique<CpuStream>(); }
 };

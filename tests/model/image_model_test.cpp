@@ -447,7 +447,7 @@ TEST_F(ImageModelTest, KeepsCudaPreprocessorScratchAliveUntilStreamCompletes) {
   auto first_context = hrt::core::Context::create(hrt::core::DeviceType::Cuda);
   if (first_context == nullptr)
     GTEST_SKIP() << "CUDA device is unavailable";
-  first_context->make_current();
+  first_context->set_current();
 
   TestLogger logger;
   hrt::UniquePtr<nvinfer1::IBuilder> builder(nvinfer1::createInferBuilder(logger));
@@ -506,7 +506,7 @@ TEST_F(ImageModelTest, KeepsCudaPreprocessorScratchAliveUntilStreamCompletes) {
       hrt::Vector<std::future<bool>> runs;
       for (int worker = 0; worker < 8; ++worker) {
         runs.push_back(std::async(std::launch::async, [&model, &context, worker]() -> bool {
-          context->make_current();
+          context->set_current();
           auto stream = context->create_stream();
           // Distinct frame values expose scratch reuse across streams.
           hrt::Vector<std::uint8_t> pixels(1024 * 1024 * 3, static_cast<std::uint8_t>(20 + worker * 20));
@@ -576,7 +576,7 @@ TEST_F(ImageModelTest, KeepsCudaPreprocessorScratchAliveUntilStreamCompletes) {
         EXPECT_TRUE(run.get()) << "device=" << device_id << ", preprocess=" << options.preprocess;
     }
   }
-  first_context->make_current();
+  first_context->set_current();
 }
 
 } // namespace

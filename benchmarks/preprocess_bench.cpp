@@ -254,7 +254,7 @@ auto BM_CudaResolution(benchmark::State& state) -> void {
     state.SkipWithMessage("CUDA device is unavailable");
     return;
   }
-  context->make_current();
+  context->set_current();
   auto stream = context->create_stream();
   const Size source_size{static_cast<int>(state.range(0)), static_cast<int>(state.range(1))};
   const Size target_size{static_cast<int>(state.range(2)), static_cast<int>(state.range(3))};

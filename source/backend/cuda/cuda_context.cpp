@@ -35,7 +35,7 @@ auto CudaContext::available(int device_id) -> bool {
   return cudaGetDeviceCount(&count) == cudaSuccess && device_id >= 0 && device_id < count;
 }
 
-auto CudaContext::make_current() -> void {
+auto CudaContext::set_current() -> void {
   int device = 0;
   KZ_CHECK_RETURN(cudaGetDevice(&device) == cudaSuccess, , "cuda: cudaGetDevice failed: {}",
                   cudaGetErrorString(cudaGetLastError()));
@@ -44,7 +44,7 @@ auto CudaContext::make_current() -> void {
 }
 
 auto CudaContext::create_stream() -> UniquePtr<core::Stream> {
-  make_current();
+  set_current();
   return std::make_unique<CudaStream>();
 }
 

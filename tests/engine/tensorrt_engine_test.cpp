@@ -23,7 +23,7 @@ TEST(TensorrtEngineTest, CreatesPinnedHostMemory) {
   auto context = hrt::core::Context::create(hrt::core::DeviceType::Cuda);
   if (context == nullptr)
     GTEST_SKIP() << "CUDA device is unavailable";
-  context->make_current();
+  context->set_current();
   auto engine = hrt::engine::Engine::create(hrt::engine::EngineType::TensorRt);
   ASSERT_NE(engine, nullptr);
 

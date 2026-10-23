@@ -36,7 +36,7 @@ public:
   AclContext(AclContext&&) = delete;
   auto operator=(AclContext&&) -> AclContext& = delete;
 
-  auto make_current() -> void override;
+  auto set_current() -> void override;
 
   auto create_stream() -> UniquePtr<core::Stream> override;
 };

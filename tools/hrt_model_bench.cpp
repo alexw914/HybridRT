@@ -51,7 +51,7 @@ auto bench(const hrt::hrtc::AlgoParam& algo, const hrt::hrtc::EngineParam& param
     KZ_LOG_WARN("{}: skipped, not available in this build or on this machine", name);
     return true;
   }
-  context->make_current();
+  context->set_current();
   if (!engine->initialize(param)) {
     KZ_LOG_ERROR("{}: the model did not load", name);
     return false;

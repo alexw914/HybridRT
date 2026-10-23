@@ -16,7 +16,7 @@ TEST(ImageTest, ReleasesCudaImageStorageWithSharedOwnership) {
   auto context = hrt::core::Context::create(hrt::core::DeviceType::Cuda);
   if (context == nullptr)
     GTEST_SKIP() << "CUDA device is unavailable";
-  context->make_current();
+  context->set_current();
 
   ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
   std::size_t free_before = 0;

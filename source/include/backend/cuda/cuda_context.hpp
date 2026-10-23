@@ -31,7 +31,7 @@ public:
 
   explicit CudaContext(int device_id) : core::Context(core::DeviceType::Cuda, device_id) {}
 
-  auto make_current() -> void override;
+  auto set_current() -> void override;
 
   auto create_stream() -> UniquePtr<core::Stream> override;
 };

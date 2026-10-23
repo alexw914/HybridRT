@@ -299,7 +299,7 @@ TEST(ImagePreprocessorTest, KeepsCudaStagesOnDeviceAndPreservesUnsupportedFallba
   auto context = Context::create(DeviceType::Cuda);
   if (!context)
     GTEST_SKIP() << "CUDA unavailable";
-  context->make_current();
+  context->set_current();
   auto stream = context->create_stream();
   ASSERT_TRUE(stream);
   auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
@@ -550,7 +550,7 @@ TEST(ImagePreprocessorTest, DvppMatchesCpuForCropsAndResizes) {
   auto context = Context::create(DeviceType::Ascend);
   if (context == nullptr)
     GTEST_SKIP() << "Ascend device unavailable";
-  context->make_current();
+  context->set_current();
   auto dvpp = ImagePreprocessor::create(ImagePreprocessorType::Dvpp);
   if (!dvpp)
     GTEST_SKIP() << "DVPP unavailable";

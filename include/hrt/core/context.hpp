@@ -52,7 +52,7 @@ public:
   Context(Context&&) = delete;
   auto operator=(Context&&) -> Context& = delete;
 
-  virtual auto make_current() -> void = 0;
+  virtual auto set_current() -> void = 0;
 
   virtual auto create_stream() -> UniquePtr<Stream> = 0;
 

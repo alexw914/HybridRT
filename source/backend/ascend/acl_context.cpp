@@ -44,7 +44,7 @@ AclContext::~AclContext() {
     KZ_LOG_ERROR("acl: aclrtDestroyContext failed: {}", aclGetRecentErrMsg());
 }
 
-auto AclContext::make_current() -> void {
+auto AclContext::set_current() -> void {
   aclrtContext current = nullptr;
   const auto status = aclrtGetCurrentContext(&current);
   if (status == ACL_SUCCESS && current == handle_)
@@ -56,7 +56,7 @@ auto AclContext::make_current() -> void {
 }
 
 auto AclContext::create_stream() -> UniquePtr<core::Stream> {
-  make_current();
+  set_current();
   return std::make_unique<AclStream>();
 }
 

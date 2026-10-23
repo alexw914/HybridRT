@@ -184,7 +184,7 @@ TEST(MemoryTest, CopiesThroughAscendDeviceMemory) {
   auto context = hrt::core::Context::create(hrt::core::DeviceType::Ascend);
   if (context == nullptr)
     GTEST_SKIP() << "Ascend device unavailable";
-  context->make_current();
+  context->set_current();
   // Acl comes from aclrtMalloc and Dvpp from the media allocator VPC needs.
   for (const auto type : {hrt::core::MemoryType::Acl, hrt::core::MemoryType::Dvpp}) {
     SCOPED_TRACE(hrt::core::to_string(type));
