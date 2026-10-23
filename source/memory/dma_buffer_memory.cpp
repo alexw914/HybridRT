@@ -145,7 +145,7 @@ auto dma_sync(const BasePointer& pointer, __u64 flags) -> bool {
 
 } // namespace
 
-auto DmaBufferMemory::aligned_stride(const core::Shape& shape) -> core::Stride {
+auto DmaBufferMemory::aligned_stride(const core::Shape& shape) const -> core::Stride {
   auto stride = core::contiguous_stride(shape);
   if (shape.size() < 2)
     return stride;
@@ -159,11 +159,9 @@ auto DmaBufferMemory::aligned_stride(const core::Shape& shape) -> core::Stride {
 
 DmaBufferMemory::DmaBufferMemory(const core::Shape& shape, const core::Stride& stride, bool device32)
     : core::Memory(core::MemoryType::DmaBuffer), device32_(device32) {
-  shape_ = shape;
-  stride_ = stride;
   pointer_->owned_ = true;
   pointer_->release_ = dma_release;
-  dma_allocate(*pointer_, stride_.empty() ? 0 : stride_[0], device32_);
+  resize(shape, stride);
 }
 
 DmaBufferMemory::DmaBufferMemory(int fd, void* host, std::size_t size, const core::Shape& shape,
@@ -187,46 +185,11 @@ DmaBufferMemory::DmaBufferMemory(int fd, void* host, std::size_t size, const cor
   pointer_->release_ = unmap_release;
 }
 
-DmaBufferMemory::DmaBufferMemory(SharedPtr<BasePointer> pointer, bool device32, const core::Shape& shape,
-                                 const core::Stride& stride)
-    : core::Memory(std::move(pointer)), device32_(device32) {
-  shape_ = shape;
-  stride_ = stride;
-}
-
 auto DmaBufferMemory::ref() -> SharedPtr<core::Memory> {
-  return std::make_shared<DmaBufferMemory>(pointer_, device32_, shape_, stride_);
+  return std::make_shared<DmaBufferMemory>(*this);
 }
 
-auto DmaBufferMemory::resize(const core::Shape& shape, const core::Stride& stride) -> bool {
-  core::Stride memory_stride;
-  if (stride.empty()) {
-    memory_stride = aligned_stride(shape);
-  } else {
-    if (shape == shape_ && stride == stride_ && stride.front() <= pointer_->capacity_)
-      return true;
-    if (!check_stride(shape, stride))
-      return false;
-    memory_stride = stride;
-  }
-  const auto size = memory_stride.front();
-  if (size > pointer_->capacity_) {
-    if (!pointer_->owned_) {
-      KZ_LOG_ERROR("DmaBufferMemory: cannot grow wrapped memory from {} to {} bytes", pointer_->capacity_, size);
-      return false;
-    }
-    if (!dma_allocate(*pointer_, size, device32_))
-      return false;
-  }
-  shape_ = shape;
-  stride_ = std::move(memory_stride);
-  return true;
-}
-
-auto DmaBufferMemory::shrink_to_fit() -> bool {
-  const auto size = stride_.empty() ? 0 : stride_[0];
-  if (!pointer_->owned_ || size == pointer_->capacity_)
-    return true;
+auto DmaBufferMemory::reallocate(std::size_t size) -> bool {
   return dma_allocate(*pointer_, size, device32_);
 }
 

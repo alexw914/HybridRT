@@ -14,18 +14,15 @@ namespace hrt::backend {
 // Device-only memory; host access goes through copies to host memory.
 class CudaMemory final : public core::Memory {
 public:
-  // Owning; `stride` must already be validated.
-  CudaMemory(const core::Shape& shape, const core::Stride& stride);
+  // Owning; an empty stride takes aligned_stride().
+  explicit CudaMemory(const core::Shape& shape = {}, const core::Stride& stride = {});
 
   CudaMemory(std::uintptr_t device, std::size_t size, const core::Shape& shape, const core::Stride& stride);
 
-  CudaMemory(SharedPtr<memory::BasePointer> pointer, const core::Shape& shape, const core::Stride& stride);
-
   auto ref() -> SharedPtr<core::Memory> override;
 
-  auto resize(const core::Shape& shape, const core::Stride& stride) -> bool override;
-
-  auto shrink_to_fit() -> bool override;
+protected:
+  auto reallocate(std::size_t size) -> bool override;
 };
 
 // Copies between any of host and CUDA memory on `stream`; one side must be

@@ -15,21 +15,19 @@ namespace hrt::backend {
 // requires and, without an explicit stride, pads rows to 16 elements.
 class AclMemory final : public core::Memory {
 public:
-  AclMemory(core::MemoryType type, const core::Shape& shape, const core::Stride& stride);
+  // Owning; an empty stride takes aligned_stride().
+  explicit AclMemory(core::MemoryType type, const core::Shape& shape = {}, const core::Stride& stride = {});
 
   AclMemory(core::MemoryType type, std::uintptr_t device, std::size_t size, const core::Shape& shape,
             const core::Stride& stride);
 
-  AclMemory(SharedPtr<memory::BasePointer> pointer, const core::Shape& shape, const core::Stride& stride);
-
   auto ref() -> SharedPtr<core::Memory> override;
 
-  auto resize(const core::Shape& shape, const core::Stride& stride) -> bool override;
+  // Dvpp rows are padded to 16 elements, which VPC requires of the images it reads and writes.
+  KZ_NODISCARD auto aligned_stride(const core::Shape& shape) const -> core::Stride override;
 
-  auto shrink_to_fit() -> bool override;
-
-  // Rows padded to 16 elements, which VPC requires of the images it reads and writes.
-  static auto dvpp_stride(const core::Shape& shape) -> core::Stride;
+protected:
+  auto reallocate(std::size_t size) -> bool override;
 };
 
 // Copies between host, Acl and Dvpp memory on `stream`; one side must be

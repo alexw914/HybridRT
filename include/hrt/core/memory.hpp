@@ -73,7 +73,6 @@ public:
 
   virtual ~Memory();
 
-  Memory(const Memory&) = delete;
   auto operator=(const Memory&) -> Memory& = delete;
   Memory(Memory&&) = delete;
   auto operator=(Memory&&) -> Memory& = delete;
@@ -104,10 +103,14 @@ public:
 
   KZ_NODISCARD auto is_contiguous() const -> bool;
 
-  // Keeps the allocation when it is large enough; wrapped memory cannot grow.
-  virtual auto resize(const Shape& shape, const Stride& stride = {}) -> bool = 0;
+  // Default stride of this memory type: packed, or rows padded to what its devices address.
+  KZ_NODISCARD virtual auto aligned_stride(const Shape& shape) const -> Stride;
 
-  virtual auto shrink_to_fit() -> bool = 0;
+  // An empty stride takes aligned_stride(). Keeps the allocation when it is large enough; wrapped memory cannot
+  // grow. Contents are undefined after the allocation grows or shrinks.
+  auto resize(const Shape& shape, const Stride& stride = {}) -> bool;
+
+  auto shrink_to_fit() -> bool;
 
   KZ_NODISCARD auto memory_type() const -> MemoryType;
 
@@ -120,7 +123,11 @@ public:
 protected:
   explicit Memory(MemoryType type);
 
-  explicit Memory(SharedPtr<memory::BasePointer> pointer);
+  // Copies share the allocation and its sync state, as ref() views do.
+  Memory(const Memory&) = default;
+
+  // Replaces owned storage with exactly `size` bytes.
+  virtual auto reallocate(std::size_t size) -> bool = 0;
 
   virtual auto device_to_cpu(Stream* stream) -> bool;
 

@@ -42,11 +42,9 @@ auto address(core::Memory& memory, bool write, core::Stream* stream) -> void* {
 } // namespace
 
 CudaMemory::CudaMemory(const core::Shape& shape, const core::Stride& stride) : core::Memory(core::MemoryType::Cuda) {
-  shape_ = shape;
-  stride_ = stride;
   pointer_->owned_ = true;
   pointer_->release_ = cuda_release;
-  cuda_allocate(*pointer_, stride_.empty() ? 0 : stride_[0]);
+  resize(shape, stride);
 }
 
 CudaMemory::CudaMemory(std::uintptr_t device, std::size_t size, const core::Shape& shape, const core::Stride& stride)
@@ -57,45 +55,11 @@ CudaMemory::CudaMemory(std::uintptr_t device, std::size_t size, const core::Shap
   pointer_->capacity_ = size;
 }
 
-CudaMemory::CudaMemory(SharedPtr<memory::BasePointer> pointer, const core::Shape& shape, const core::Stride& stride)
-    : core::Memory(std::move(pointer)) {
-  shape_ = shape;
-  stride_ = stride;
-}
-
 auto CudaMemory::ref() -> SharedPtr<core::Memory> {
-  return std::make_shared<CudaMemory>(pointer_, shape_, stride_);
+  return std::make_shared<CudaMemory>(*this);
 }
 
-auto CudaMemory::resize(const core::Shape& shape, const core::Stride& stride) -> bool {
-  core::Stride memory_stride;
-  if (stride.empty()) {
-    memory_stride = core::contiguous_stride(shape);
-  } else {
-    if (shape == shape_ && stride == stride_ && stride.front() <= pointer_->capacity_)
-      return true;
-    if (!memory::check_stride(shape, stride))
-      return false;
-    memory_stride = stride;
-  }
-  const auto size = memory_stride.front();
-  if (size > pointer_->capacity_) {
-    if (!pointer_->owned_) {
-      KZ_LOG_ERROR("CudaMemory: cannot grow wrapped memory from {} to {} bytes", pointer_->capacity_, size);
-      return false;
-    }
-    if (!cuda_allocate(*pointer_, size))
-      return false;
-  }
-  shape_ = shape;
-  stride_ = std::move(memory_stride);
-  return true;
-}
-
-auto CudaMemory::shrink_to_fit() -> bool {
-  const auto size = stride_.empty() ? 0 : stride_[0];
-  if (!pointer_->owned_ || size == pointer_->capacity_)
-    return true;
+auto CudaMemory::reallocate(std::size_t size) -> bool {
   return cuda_allocate(*pointer_, size);
 }
 

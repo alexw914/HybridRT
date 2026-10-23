@@ -13,18 +13,15 @@ namespace hrt::memory {
 
 class CpuMemory final : public core::Memory {
 public:
-  // Owning; `stride` must already be validated.
-  CpuMemory(const core::Shape& shape, const core::Stride& stride);
+  // Owning; an empty stride takes aligned_stride().
+  explicit CpuMemory(const core::Shape& shape = {}, const core::Stride& stride = {});
 
   CpuMemory(void* data, std::size_t size, const core::Shape& shape, const core::Stride& stride);
 
-  CpuMemory(SharedPtr<BasePointer> pointer, const core::Shape& shape, const core::Stride& stride);
-
   auto ref() -> SharedPtr<core::Memory> override;
 
-  auto resize(const core::Shape& shape, const core::Stride& stride) -> bool override;
-
-  auto shrink_to_fit() -> bool override;
+protected:
+  auto reallocate(std::size_t size) -> bool override;
 };
 
 auto copy_cpu_to_cpu(core::Memory& dst, core::Memory& src, std::size_t axis) -> bool;

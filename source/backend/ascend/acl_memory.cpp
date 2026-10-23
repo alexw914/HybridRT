@@ -60,8 +60,8 @@ auto address(core::Memory& memory, bool write, core::Stream* stream) -> void* {
 
 } // namespace
 
-auto AclMemory::dvpp_stride(const core::Shape& shape) -> core::Stride {
-  if (shape.size() < 2)
+auto AclMemory::aligned_stride(const core::Shape& shape) const -> core::Stride {
+  if (memory_type() != core::MemoryType::Dvpp || shape.size() < 2)
     return core::contiguous_stride(shape);
   // Width is the second axis, or the third when the first is a single plane.
   auto aligned = shape;
@@ -71,11 +71,9 @@ auto AclMemory::dvpp_stride(const core::Shape& shape) -> core::Stride {
 }
 
 AclMemory::AclMemory(core::MemoryType type, const core::Shape& shape, const core::Stride& stride) : core::Memory(type) {
-  shape_ = shape;
-  stride_ = stride;
   pointer_->owned_ = true;
   pointer_->release_ = type == core::MemoryType::Dvpp ? dvpp_release : acl_release;
-  ascend_allocate(*pointer_, stride_.empty() ? 0 : stride_[0]);
+  resize(shape, stride);
 }
 
 AclMemory::AclMemory(core::MemoryType type, std::uintptr_t device, std::size_t size, const core::Shape& shape,
@@ -87,45 +85,11 @@ AclMemory::AclMemory(core::MemoryType type, std::uintptr_t device, std::size_t s
   pointer_->capacity_ = size;
 }
 
-AclMemory::AclMemory(SharedPtr<memory::BasePointer> pointer, const core::Shape& shape, const core::Stride& stride)
-    : core::Memory(std::move(pointer)) {
-  shape_ = shape;
-  stride_ = stride;
-}
-
 auto AclMemory::ref() -> SharedPtr<core::Memory> {
-  return std::make_shared<AclMemory>(pointer_, shape_, stride_);
+  return std::make_shared<AclMemory>(*this);
 }
 
-auto AclMemory::resize(const core::Shape& shape, const core::Stride& stride) -> bool {
-  core::Stride memory_stride;
-  if (stride.empty()) {
-    memory_stride = memory_type() == core::MemoryType::Dvpp ? dvpp_stride(shape) : core::contiguous_stride(shape);
-  } else {
-    if (shape == shape_ && stride == stride_ && stride.front() <= pointer_->capacity_)
-      return true;
-    if (!memory::check_stride(shape, stride))
-      return false;
-    memory_stride = stride;
-  }
-  const auto size = memory_stride.front();
-  if (size > pointer_->capacity_) {
-    if (!pointer_->owned_) {
-      KZ_LOG_ERROR("AclMemory: cannot grow wrapped memory from {} to {} bytes", pointer_->capacity_, size);
-      return false;
-    }
-    if (!ascend_allocate(*pointer_, size))
-      return false;
-  }
-  shape_ = shape;
-  stride_ = std::move(memory_stride);
-  return true;
-}
-
-auto AclMemory::shrink_to_fit() -> bool {
-  const auto size = stride_.empty() ? 0 : stride_[0];
-  if (!pointer_->owned_ || size == pointer_->capacity_)
-    return true;
+auto AclMemory::reallocate(std::size_t size) -> bool {
   return ascend_allocate(*pointer_, size);
 }
 

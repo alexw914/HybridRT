@@ -19,26 +19,22 @@ public:
   // `device32` takes pages below 4 GB first (system-dma32, cma) for devices with 32-bit DMA such as RGA2; when those
   // are exhausted the system heap is used and below_4gb() turns false. Otherwise any pages are taken (system heap
   // first), for devices behind an IOMMU such as the RK3588 NPU.
-  DmaBufferMemory(const core::Shape& shape, const core::Stride& stride, bool device32 = true);
+  explicit DmaBufferMemory(const core::Shape& shape = {}, const core::Stride& stride = {}, bool device32 = true);
 
   // Views a caller's dma-buf (decoder, camera, display) without owning `fd`, mapping it when `host` is null. Its
   // pages are taken to be reachable by 32-bit DMA, as media allocators provide.
   DmaBufferMemory(int fd, void* host, std::size_t size, const core::Shape& shape, const core::Stride& stride);
 
-  DmaBufferMemory(SharedPtr<BasePointer> pointer, bool device32, const core::Shape& shape, const core::Stride& stride);
-
   auto ref() -> SharedPtr<core::Memory> override;
-
-  auto resize(const core::Shape& shape, const core::Stride& stride) -> bool override;
-
-  auto shrink_to_fit() -> bool override;
 
   // Whether every page lies below 4 GB, so devices with 32-bit DMA can address the buffer.
   KZ_NODISCARD auto below_4gb() const -> bool;
 
-  static auto aligned_stride(const core::Shape& shape) -> core::Stride;
+  KZ_NODISCARD auto aligned_stride(const core::Shape& shape) const -> core::Stride override;
 
 protected:
+  auto reallocate(std::size_t size) -> bool override;
+
   auto device_to_cpu(core::Stream* stream) -> bool override;
 
   auto cpu_to_device(core::Stream* stream) -> bool override;

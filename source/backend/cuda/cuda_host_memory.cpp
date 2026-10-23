@@ -42,36 +42,10 @@ public:
     pointer_->release_ = host_release;
   }
 
-  CudaHostMemory(SharedPtr<memory::BasePointer> pointer, const core::Shape& shape, const core::Stride& stride)
-      : core::Memory(std::move(pointer)) {
-    shape_ = shape;
-    stride_ = stride;
-  }
+  auto ref() -> SharedPtr<core::Memory> override { return std::make_shared<CudaHostMemory>(*this); }
 
-  auto ref() -> SharedPtr<core::Memory> override { return std::make_shared<CudaHostMemory>(pointer_, shape_, stride_); }
-
-  auto resize(const core::Shape& shape, const core::Stride& stride) -> bool override {
-    core::Stride memory_stride;
-    if (stride.empty()) {
-      memory_stride = core::contiguous_stride(shape);
-    } else {
-      if (shape == shape_ && stride == stride_ && stride.front() <= pointer_->capacity_)
-        return true;
-      if (!memory::check_stride(shape, stride))
-        return false;
-      memory_stride = stride;
-    }
-    if (memory_stride.front() > pointer_->capacity_ && !host_allocate(*pointer_, memory_stride.front()))
-      return false;
-    shape_ = shape;
-    stride_ = std::move(memory_stride);
-    return true;
-  }
-
-  auto shrink_to_fit() -> bool override {
-    const auto size = stride_.empty() ? 0 : stride_.front();
-    return size == pointer_->capacity_ || host_allocate(*pointer_, size);
-  }
+protected:
+  auto reallocate(std::size_t size) -> bool override { return host_allocate(*pointer_, size); }
 };
 
 } // namespace

@@ -64,54 +64,32 @@ auto Memory::create(MemoryType type, std::size_t size) -> UniquePtr<Memory> {
 }
 
 auto Memory::create(MemoryType type, const Shape& shape, const Stride& stride) -> UniquePtr<Memory> {
-  // Media memory needs row-aligned buffers unless the caller fixes the stride.
-  auto memory_stride = stride;
-  if (memory_stride.empty()) {
-    switch (type) {
-#ifdef HRT_USE_DMA_BUFFER
-    case MemoryType::DmaBuffer:
-      memory_stride = memory::DmaBufferMemory::aligned_stride(shape);
-      break;
-#endif
-#ifdef HRT_USE_CANN
-    case MemoryType::Dvpp:
-      memory_stride = backend::AclMemory::dvpp_stride(shape);
-      break;
-#endif
-    case MemoryType::Cpu:
-    default:
-      memory_stride = contiguous_stride(shape);
-      break;
-    }
-  } else if (!memory::check_stride(shape, memory_stride)) {
-    return nullptr;
-  }
   UniquePtr<Memory> memory;
   switch (type) {
   case MemoryType::Cpu:
-    memory = std::make_unique<memory::CpuMemory>(shape, memory_stride);
+    memory = std::make_unique<memory::CpuMemory>();
     break;
 #ifdef HRT_USE_CUDA
   case MemoryType::Cuda:
-    memory = std::make_unique<backend::CudaMemory>(shape, memory_stride);
+    memory = std::make_unique<backend::CudaMemory>();
     break;
 #endif
 #ifdef HRT_USE_DMA_BUFFER
   case MemoryType::DmaBuffer:
-    memory = std::make_unique<memory::DmaBufferMemory>(shape, memory_stride);
+    memory = std::make_unique<memory::DmaBufferMemory>();
     break;
 #endif
 #ifdef HRT_USE_CANN
   case MemoryType::Acl:
   case MemoryType::Dvpp:
-    memory = std::make_unique<backend::AclMemory>(type, shape, memory_stride);
+    memory = std::make_unique<backend::AclMemory>(type);
     break;
 #endif
   default:
     KZ_LOG_ERROR("Memory: type {} is not supported in this build", to_string(type));
     return nullptr;
   }
-  if (memory->bytes() > 0 && !memory->have_cpu() && !memory->have_device())
+  if (!memory->resize(shape, stride))
     return nullptr;
   return memory;
 }
@@ -192,8 +170,6 @@ auto Memory::copy(Memory& dst, Memory& src, CopyPolicy policy, Stream* stream) -
 
 Memory::Memory(MemoryType type) : pointer_(std::make_shared<memory::BasePointer>(type)) {}
 
-Memory::Memory(SharedPtr<memory::BasePointer> pointer) : pointer_(std::move(pointer)) {}
-
 Memory::~Memory() = default;
 
 auto Memory::have_cpu() const -> bool {
@@ -232,6 +208,41 @@ auto Memory::mutable_device(Stream* stream) -> std::uintptr_t {
 
 auto Memory::bytes() const -> std::size_t {
   return stride_.empty() ? 0 : stride_.front();
+}
+
+auto Memory::aligned_stride(const Shape& shape) const -> Stride {
+  return contiguous_stride(shape);
+}
+
+auto Memory::resize(const Shape& shape, const Stride& stride) -> bool {
+  Stride memory_stride;
+  if (stride.empty()) {
+    memory_stride = aligned_stride(shape);
+  } else {
+    if (shape == shape_ && stride == stride_ && stride.front() <= pointer_->capacity_)
+      return true;
+    if (!memory::check_stride(shape, stride))
+      return false;
+    memory_stride = stride;
+  }
+  const auto size = memory_stride.empty() ? 0 : memory_stride.front();
+  if (size > pointer_->capacity_) {
+    if (!pointer_->owned_) {
+      KZ_LOG_ERROR("Memory: cannot grow wrapped {} memory from {} to {} bytes", to_string(memory_type()),
+                   pointer_->capacity_, size);
+      return false;
+    }
+    if (!reallocate(size))
+      return false;
+  }
+  shape_ = shape;
+  stride_ = std::move(memory_stride);
+  return true;
+}
+
+auto Memory::shrink_to_fit() -> bool {
+  const auto size = bytes();
+  return !pointer_->owned_ || size == pointer_->capacity_ || reallocate(size);
 }
 
 auto Memory::is_contiguous() const -> bool {
