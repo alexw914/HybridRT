@@ -116,13 +116,6 @@ auto argmax_channels(const T* data, int channels, std::size_t plane, std::uint16
 // [1, 1, H, W] / [1, H, W], at any resolution covering the network input.
 class SemanticSegment final : public SegmentPostprocessor {
 public:
-  // No parameters besides num and type.
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_json(config, kitzoo::json::Json::object(), "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& /*config*/, const engine::Engine& engine) -> bool override {
     const auto& outputs = engine.output_protos();
     if (engine.proto().output_layout != engine::DataLayout::Nchw || outputs.size() != 1 ||
@@ -140,6 +133,13 @@ public:
     if (type == core::DataType::Int8 && (channels == 1 || !outputs[0].stride.empty()))
       scratch_[0].reshape(outputs[0].shape);
     return true;
+  }
+
+  // No parameters besides num and type.
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_json(config, kitzoo::json::Json::object(), "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

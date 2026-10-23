@@ -29,7 +29,7 @@ auto make_input(const hrt::core::BufferProto& proto, std::mt19937& random) -> hr
   if (proto.data_type == hrt::core::DataType::Float32) {
     std::uniform_real_distribution<float> uniform(0.0F, 1.0F);
     auto* values = static_cast<float*>(data);
-    for (std::int64_t i = 0; i < host.get_volume(); ++i)
+    for (std::int64_t i = 0; i < host.volume(); ++i)
       values[i] = uniform(random);
   } else {
     std::memset(data, 0, host.bytes());
@@ -64,7 +64,8 @@ auto bench(const hrt::hrtc::AlgoParam& algo, const hrt::hrtc::EngineParam& param
   for (const auto& proto : engine->output_protos())
     outputs.push_back(std::make_shared<hrt::core::Buffer>(proto));
   const auto allocated = [](const hrt::core::Buffers& buffers) -> bool {
-    return std::all_of(buffers.begin(), buffers.end(), [](const auto& b) { return b != nullptr && b->valid(); });
+    return std::all_of(buffers.begin(), buffers.end(),
+                       [](const auto& b) -> bool { return b != nullptr && b->valid(); });
   };
   if (!allocated(inputs) || !allocated(outputs) || !engine->set_inputs(inputs) || !engine->set_outputs(outputs)) {
     KZ_LOG_ERROR("{}: cannot allocate or bind the engine IO", name);

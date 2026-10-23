@@ -22,18 +22,18 @@ namespace hrt::postprocess {
 // reusable host buffers first, others are synced through Memory.
 class PostprocessorBase {
 public:
-  virtual ~PostprocessorBase();
-
   PostprocessorBase(const PostprocessorBase&) = delete;
   auto operator=(const PostprocessorBase&) -> PostprocessorBase& = delete;
   PostprocessorBase(PostprocessorBase&&) = delete;
   auto operator=(PostprocessorBase&&) -> PostprocessorBase& = delete;
 
+  virtual ~PostprocessorBase();
+
+  virtual auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool = 0;
+
   // Problems in `config` (the "postprocess" section) that init() would
   // misread; never throws.
   KZ_NODISCARD virtual auto check_config(const kitzoo::json::Json& config) const -> Vector<String> = 0;
-
-  virtual auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool = 0;
 
 protected:
   PostprocessorBase() = default;

@@ -120,7 +120,7 @@ auto OcrModel::create(const hrtc::AlgoParam& detection, const hrtc::AlgoParam& r
   // CPU engines run under any context, so engines of other devices are dropped first.
   const auto& context = model->impl_->detection->context();
   auto same_device = recognition;
-  std::erase_if(same_device.engines, [&](const auto& param) {
+  std::erase_if(same_device.engines, [&](const auto& param) -> bool {
     return engine::device_type_of(engine::engine_type_from(param.engine_type)) != context->device_type();
   });
   KZ_CHECK_MSG(!same_device.engines.empty(), "OcrModel: algo {} has no engine on the device of algo {}",

@@ -31,12 +31,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2ESegmentParam, class_num, conf
 // score 0.
 class E2ESegment final : public SegmentPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<E2ESegmentParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "e2e_segment"))
       return false;
@@ -55,6 +49,12 @@ public:
                     false, "e2e_segment: outputs must be [1, N, 6 + masks] and [1, masks, h, w]");
     mask_logit_ = core::logit(param_.mask_threshold);
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<E2ESegmentParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

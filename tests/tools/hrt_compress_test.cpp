@@ -27,12 +27,13 @@ protected:
 
   void TearDown() override { std::filesystem::remove_all(dir_); }
 
-  auto run(std::initializer_list<hrt::String> args) const -> hrt::test::ToolResult {
+  KZ_NODISCARD auto run(std::initializer_list<hrt::String> args) const -> hrt::test::ToolResult {
     return hrt::test::run_tool(HRT_COMPRESS, args, dir_ / "log.txt");
   }
 
   // A manifest with one algo `name` whose ncnn engine reads `net.bin`.
-  auto write_manifest(const hrt::String& file, const hrt::String& name, const Json& preprocess) const -> hrt::String {
+  KZ_NODISCARD auto write_manifest(const hrt::String& file, const hrt::String& name, const Json& preprocess) const
+      -> hrt::String {
     auto manifest = Json::parse(R"({
       "name": "demo",
       "version": "1.0.0",

@@ -21,12 +21,6 @@ namespace {
 // one score per class.
 class GeneralDetect final : public DetectPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<GeneralDetectParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "general_detect"))
       return false;
@@ -42,6 +36,12 @@ public:
       return false;
     }
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<GeneralDetectParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

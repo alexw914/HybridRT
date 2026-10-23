@@ -14,6 +14,6 @@ namespace hrt::core {
 
 inline constexpr std::string_view kVersion = "@PROJECT_VERSION@";
 
-} // namespace hrt::core::core
+} // namespace hrt::core
 
 #endif // HRT_CORE_VERSION_HPP

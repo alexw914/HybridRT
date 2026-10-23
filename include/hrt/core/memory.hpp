@@ -49,17 +49,9 @@ public:
 
   static auto copy(Memory& dst, Memory& src, CopyPolicy policy, Stream* stream = nullptr) -> bool;
 
-  virtual ~Memory();
-
   auto operator=(const Memory&) -> Memory& = delete;
   Memory(Memory&&) = delete;
   auto operator=(Memory&&) -> Memory& = delete;
-
-  virtual auto ref() -> SharedPtr<Memory> = 0;
-
-  KZ_NODISCARD auto have_cpu() const -> bool;
-
-  KZ_NODISCARD auto have_device() const -> bool;
 
   // Accessors sync the requested side first; mutable access marks it newest.
   // They return null (0) when that side does not exist.
@@ -70,6 +62,24 @@ public:
   auto device(Stream* stream = nullptr) -> std::uintptr_t;
 
   auto mutable_device(Stream* stream = nullptr) -> std::uintptr_t;
+
+  // An empty stride takes aligned_stride(). Keeps the allocation when it is large enough; wrapped memory cannot
+  // grow. Contents are undefined after the allocation grows or shrinks.
+  auto resize(const Shape& shape, const Stride& stride = {}) -> bool;
+
+  auto shrink_to_fit() -> bool;
+
+  auto sync_to_cpu(Stream* stream = nullptr) -> bool;
+
+  auto sync_to_device(Stream* stream = nullptr) -> bool;
+
+  virtual ~Memory();
+
+  virtual auto ref() -> SharedPtr<Memory> = 0;
+
+  KZ_NODISCARD auto have_cpu() const -> bool;
+
+  KZ_NODISCARD auto have_device() const -> bool;
 
   KZ_NODISCARD auto bytes() const -> std::size_t;
 
@@ -84,25 +94,15 @@ public:
   // Default stride of this memory type: packed, or rows padded to what its devices address.
   KZ_NODISCARD virtual auto aligned_stride(const Shape& shape) const -> Stride;
 
-  // An empty stride takes aligned_stride(). Keeps the allocation when it is large enough; wrapped memory cannot
-  // grow. Contents are undefined after the allocation grows or shrinks.
-  auto resize(const Shape& shape, const Stride& stride = {}) -> bool;
-
-  auto shrink_to_fit() -> bool;
-
   KZ_NODISCARD auto memory_type() const -> MemoryType;
 
   KZ_NODISCARD auto head() const -> SyncedHead;
 
-  auto sync_to_cpu(Stream* stream = nullptr) -> bool;
-
-  auto sync_to_device(Stream* stream = nullptr) -> bool;
-
 protected:
-  explicit Memory(MemoryType type);
-
   // Copies share the allocation and its sync state, as ref() views do.
   Memory(const Memory&) = default;
+
+  explicit Memory(MemoryType type);
 
   // Replaces owned storage with exactly `size` bytes.
   virtual auto reallocate(std::size_t size) -> bool = 0;

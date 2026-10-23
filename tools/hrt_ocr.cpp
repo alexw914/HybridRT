@@ -103,8 +103,9 @@ auto main(int argc, char** argv) -> int {
   if (args.count("engine") != 0U) {
     const auto type = hrt::engine::engine_type_from(args["engine"].as<hrt::String>());
     for (auto& algo : algos) {
-      std::erase_if(algo.engines,
-                    [&](const auto& param) { return hrt::engine::engine_type_from(param.engine_type) != type; });
+      std::erase_if(algo.engines, [&](const auto& param) -> bool {
+        return hrt::engine::engine_type_from(param.engine_type) != type;
+      });
       if (algo.engines.empty()) {
         KZ_LOG_ERROR("algo {} has no {} engine", algo.name, args["engine"].as<hrt::String>());
         return 1;
@@ -123,8 +124,9 @@ auto main(int argc, char** argv) -> int {
     KZ_LOG_ERROR("{} is not a directory", input.string());
     return 1;
   }
-  std::erase_if(paths,
-                [](const auto& path) { return !kitzoo::os::is_regular(path) || !cv::haveImageReader(path.string()); });
+  std::erase_if(paths, [](const auto& path) -> bool {
+    return !kitzoo::os::is_regular(path) || !cv::haveImageReader(path.string());
+  });
   std::ranges::sort(paths);
 
   // OcrModel is not thread-safe; images run one after another.

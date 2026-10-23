@@ -17,12 +17,6 @@ namespace {
 
 class Embedding final : public EmbeddingPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_json(config, kitzoo::json::Json::object(), "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& /*config*/, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "embedding"))
       return false;
@@ -30,6 +24,12 @@ public:
                     engine.output_protos().size());
     scratch_ = create_scratch(engine);
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_json(config, kitzoo::json::Json::object(), "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:
@@ -41,7 +41,7 @@ protected:
       floats = &scratch_[0];
     }
     const auto* data = static_cast<const float*>(floats->memory()->cpu());
-    result.assign(data, data + floats->get_volume());
+    result.assign(data, data + floats->volume());
     return true;
   }
 

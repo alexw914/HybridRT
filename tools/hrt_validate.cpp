@@ -108,7 +108,7 @@ auto to_json(const hrt::postprocess::ClassifyResult& result, const hrt::core::Re
     std::iota(order.begin(), order.end(), 0U);
     const auto k = std::min(kTopK, order.size());
     std::partial_sort(order.begin(), order.begin() + static_cast<std::ptrdiff_t>(k), order.end(),
-                      [&](std::size_t a, std::size_t b) { return scores[a] > scores[b]; });
+                      [&](std::size_t a, std::size_t b) -> bool { return scores[a] > scores[b]; });
     Json topk = Json::array();
     for (std::size_t i = 0; i < k; ++i)
       topk.push_back({order[i], round4(scores[order[i]])});
@@ -178,8 +178,9 @@ auto validate(const hrt::hrtc::AlgoParam& algo, const hrt::model::ImageModelOpti
     KZ_LOG_ERROR("cannot list {}: {}", dir.string(), ec.message());
     return false;
   }
-  std::erase_if(paths,
-                [](const auto& path) { return !kitzoo::os::is_regular(path) || !cv::haveImageReader(path.string()); });
+  std::erase_if(paths, [](const auto& path) -> bool {
+    return !kitzoo::os::is_regular(path) || !cv::haveImageReader(path.string());
+  });
 
   KZ_LOG_INFO("total images: {}", paths.size());
   std::atomic<std::size_t> done = 0;
@@ -227,7 +228,7 @@ auto validate(const hrt::hrtc::AlgoParam& algo, const hrt::model::ImageModelOpti
   for (const auto& path : paths)
     pending.push_back(pool.submit_task(run, path));
   kitzoo::time::Stopwatch tick;
-  const auto progress = [&] {
+  const auto progress = [&]() -> void {
     if (tick.elapsed() < std::chrono::seconds(1))
       return;
     KZ_LOG_INFO("task {}/{}", done.load(), paths.size());
@@ -298,7 +299,7 @@ auto main(int argc, char** argv) -> int {
   if (args.count("engine") != 0U) {
     const auto type = hrt::engine::engine_type_from(args["engine"].as<hrt::String>());
     std::erase_if(algo.engines,
-                  [&](const auto& param) { return hrt::engine::engine_type_from(param.engine_type) != type; });
+                  [&](const auto& param) -> bool { return hrt::engine::engine_type_from(param.engine_type) != type; });
     if (algo.engines.empty()) {
       KZ_LOG_ERROR("algo {} has no {} engine", name, args["engine"].as<hrt::String>());
       return 1;

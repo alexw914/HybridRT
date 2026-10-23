@@ -9,7 +9,9 @@ AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 AllowShortEnumsOnASingleLine: false
+EnumTrailingComma: Insert
 MaxEmptyLinesToKeep: 1
+InsertNewlineAtEOF: true
 AlwaysBreakTemplateDeclarations: Yes
 BreakBeforeBraces: Attach
 PointerAlignment: Left

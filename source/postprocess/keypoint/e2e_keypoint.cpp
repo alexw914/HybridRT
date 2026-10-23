@@ -32,12 +32,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2EKeypointParam, class_num, key
 // them. Rows are already deduplicated; unused rows score 0.
 class E2EKeypoint final : public KeypointPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<E2EKeypointParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "e2e_keypoint"))
       return false;
@@ -52,6 +46,12 @@ public:
     KZ_CHECK_RETURN(outputs[0].shape[2] == 6 + static_cast<std::int64_t>(param_.keypoint_num * kKeypointValues), false,
                     "e2e_keypoint: output columns do not match keypoint_num");
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<E2EKeypointParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

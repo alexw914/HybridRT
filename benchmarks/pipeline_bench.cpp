@@ -49,14 +49,14 @@ auto BM_Pooled(benchmark::State& state) -> void {
   using Model = hrt::model::ImageModel<hrt::postprocess::DetectResultMap>;
   static std::mutex mutex;
   static hrt::Map<hrt::Array<std::int64_t, 3>, hrt::UniquePtr<Model>> models;
-  static const auto bgr = hrt::bench::task_image(0);
-  static const auto image = hrt::bench::wrap_bgr(bgr);
+  static const auto kBgr = hrt::bench::task_image(0);
+  static const auto kImage = hrt::bench::wrap_bgr(kBgr);
   Model* model = nullptr;
   {
     const std::lock_guard lock(mutex);
     auto& slot = models[{state.range(0), state.range(1), state.range(2)}];
     const auto entry = hrt::bench::algo_entry(0);
-    if (slot == nullptr && entry.is_object() && image) {
+    if (slot == nullptr && entry.is_object() && kImage) {
       slot = Model::create(entry, {.preprocess = static_cast<std::size_t>(state.range(0)),
                                    .engine = static_cast<std::size_t>(state.range(1)),
                                    .postprocess = static_cast<std::size_t>(state.range(2))});
@@ -68,7 +68,7 @@ auto BM_Pooled(benchmark::State& state) -> void {
     return;
   }
   for (auto _ : state)
-    benchmark::DoNotOptimize(model->process_sync(*image));
+    benchmark::DoNotOptimize(model->process_sync(*kImage));
   state.SetItemsProcessed(state.iterations());
 }
 

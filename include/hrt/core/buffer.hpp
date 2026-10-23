@@ -27,6 +27,16 @@ struct BufferProto {
 // dimension is the buffer's last dimension times the element size.
 class Buffer {
 public:
+  static auto copy(Buffer& dst, Buffer& src, CopyPolicy policy, Stream* stream = nullptr) -> bool;
+
+  auto reshape(const Shape& shape, const Stride& stride = {}) -> bool;
+  auto reshape(DataType data_type, const Shape& shape, const Stride& stride = {}) -> bool;
+
+  auto set_quantization(float scale, std::int32_t zero_point) -> void {
+    scale_ = scale;
+    zero_point_ = zero_point;
+  }
+
   explicit Buffer(MemoryType memory_type, DataType data_type = DataType::Uint8, const Shape& shape = {},
                   const Stride& stride = {});
   explicit Buffer(SharedPtr<Memory> memory, DataType data_type = DataType::Uint8, const Shape& shape = {},
@@ -48,7 +58,7 @@ public:
 
   KZ_NODISCARD auto shape() const -> const Shape& { return shape_; }
 
-  KZ_NODISCARD auto get_volume() const -> std::int64_t { return hrt::core::get_volume(shape_); }
+  KZ_NODISCARD auto volume() const -> std::int64_t { return hrt::core::volume(shape_); }
 
   KZ_NODISCARD auto stride() const -> const Stride& { return memory_->stride(); }
 
@@ -58,23 +68,13 @@ public:
 
   KZ_NODISCARD auto proto() const -> BufferProto;
 
-  auto reshape(const Shape& shape, const Stride& stride = {}) -> bool;
-  auto reshape(DataType data_type, const Shape& shape, const Stride& stride = {}) -> bool;
-
   // Byte offset of the element at the leading `index` coordinates.
   KZ_NODISCARD auto offset(std::initializer_list<std::int64_t> index) const -> std::size_t;
-
-  static auto copy(Buffer& dst, Buffer& src, CopyPolicy policy, Stream* stream = nullptr) -> bool;
 
   // Affine quantization of the elements: real = scale * (q - zero_point).
   KZ_NODISCARD auto scale() const -> float { return scale_; }
 
   KZ_NODISCARD auto zero_point() const -> std::int32_t { return zero_point_; }
-
-  auto set_quantization(float scale, std::int32_t zero_point) -> void {
-    scale_ = scale;
-    zero_point_ = zero_point;
-  }
 
 private:
   SharedPtr<Memory> memory_;

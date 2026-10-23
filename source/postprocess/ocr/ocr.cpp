@@ -58,38 +58,6 @@ auto ordered_points(const cv::RotatedRect& rect) -> Array<cv::Point2f, 4> {
 
 class Ocr final : public OcrPostprocessor {
 public:
-  auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    if (!config.is_object() || !config.contains("stage") || !config["stage"].is_string())
-      return {"postprocess.stage: expected detection or recognition"};
-    if (config["stage"] == "detection") {
-      core::Problems problems;
-      core::check_param<DetectionParam>(config, "postprocess", {"type"}, problems);
-      if (!problems.empty())
-        return problems;
-      const auto param = config.get<DetectionParam>();
-      if (param.decoder != "db")
-        problems.emplace_back("postprocess.decoder: detection requires db");
-      if (!(param.threshold >= 0 && param.threshold <= 1 && param.box_threshold >= 0 && param.box_threshold <= 1))
-        problems.emplace_back("postprocess: thresholds must be in [0, 1]");
-      if (!(param.unclip_ratio >= 0 && param.unclip_ratio <= 10 && param.min_size > 0 && param.min_size <= 1000 &&
-            param.max_candidates > 0 && param.max_candidates <= 10000))
-        problems.emplace_back("postprocess: invalid DB size, unclip ratio or candidate limit");
-      return problems;
-    }
-    if (config["stage"] != "recognition")
-      return {"postprocess.stage: expected detection or recognition"};
-    core::Problems problems;
-    core::check_param<RecognitionParam>(config, "postprocess", {"type"}, problems);
-    if (!problems.empty())
-      return problems;
-    const auto param = config.get<RecognitionParam>();
-    if (param.decoder != "ctc")
-      problems.emplace_back("postprocess.decoder: recognition requires ctc");
-    if (!param.dictionary.starts_with("string:") || param.dictionary.size() == 7)
-      problems.emplace_back("postprocess.dictionary: expected packaged string: dictionary text");
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "ocr"))
       return false;
@@ -123,6 +91,38 @@ public:
                         shape_[2] == static_cast<std::int64_t>(characters_.size()),
                     false, "Ocr CTC: expected [1, T, dictionary + blank + optional space]");
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    if (!config.is_object() || !config.contains("stage") || !config["stage"].is_string())
+      return {"postprocess.stage: expected detection or recognition"};
+    if (config["stage"] == "detection") {
+      core::Problems problems;
+      core::check_param<DetectionParam>(config, "postprocess", {"type"}, problems);
+      if (!problems.empty())
+        return problems;
+      const auto param = config.get<DetectionParam>();
+      if (param.decoder != "db")
+        problems.emplace_back("postprocess.decoder: detection requires db");
+      if (!(param.threshold >= 0 && param.threshold <= 1 && param.box_threshold >= 0 && param.box_threshold <= 1))
+        problems.emplace_back("postprocess: thresholds must be in [0, 1]");
+      if (!(param.unclip_ratio >= 0 && param.unclip_ratio <= 10 && param.min_size > 0 && param.min_size <= 1000 &&
+            param.max_candidates > 0 && param.max_candidates <= 10000))
+        problems.emplace_back("postprocess: invalid DB size, unclip ratio or candidate limit");
+      return problems;
+    }
+    if (config["stage"] != "recognition")
+      return {"postprocess.stage: expected detection or recognition"};
+    core::Problems problems;
+    core::check_param<RecognitionParam>(config, "postprocess", {"type"}, problems);
+    if (!problems.empty())
+      return problems;
+    const auto param = config.get<RecognitionParam>();
+    if (param.decoder != "ctc")
+      problems.emplace_back("postprocess.decoder: recognition requires ctc");
+    if (!param.dictionary.starts_with("string:") || param.dictionary.size() == 7)
+      problems.emplace_back("postprocess.dictionary: expected packaged string: dictionary text");
+    return problems;
   }
 
 protected:

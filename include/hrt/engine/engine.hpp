@@ -51,8 +51,6 @@ public:
   static auto create(EngineType type) -> UniquePtr<Engine>;
   static auto create(std::string_view name) -> UniquePtr<Engine>;
 
-  virtual ~Engine();
-
   Engine(const Engine&) = delete;
   auto operator=(const Engine&) -> Engine& = delete;
   Engine(Engine&&) = delete;
@@ -62,9 +60,17 @@ public:
   // object or holds settings the backend does not know.
   auto initialize(const hrtc::EngineParam& param) -> bool;
 
+  auto release() -> void;
+
+  virtual ~Engine();
+
   virtual auto inference(core::Stream* stream = nullptr) -> bool = 0;
 
-  auto release() -> void;
+  // Binds buffers matching the protos in count, data type and shape; backends
+  // with stricter memory needs override.
+  virtual auto set_inputs(const core::Buffers& inputs) -> bool;
+
+  virtual auto set_outputs(const core::Buffers& outputs) -> bool;
 
   KZ_NODISCARD auto proto() const -> const EngineProto& { return proto_; }
 
@@ -83,12 +89,6 @@ public:
   KZ_NODISCARD auto inputs() const -> const core::Buffers& { return inputs_; }
 
   KZ_NODISCARD auto outputs() const -> const core::Buffers& { return outputs_; }
-
-  // Binds buffers matching the protos in count, data type and shape; backends
-  // with stricter memory needs override.
-  virtual auto set_inputs(const core::Buffers& inputs) -> bool;
-
-  virtual auto set_outputs(const core::Buffers& outputs) -> bool;
 
   // Empty host memory that this backend copies to and from fastest (e.g.
   // CUDA-pinned), for IO the host writes or reads; null when plain host memory

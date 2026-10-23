@@ -19,14 +19,6 @@ namespace hrt::preprocess {
 // into dma-bufs first.
 class RgaImagePreprocessor final : public ImagePreprocessor {
 public:
-  KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Rga; }
-
-  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::DmaBuffer; }
-
-  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override;
-
-  KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
-
   // RGA rejects region offsets of exactly 1.
   auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst, const core::Image& src) const
       -> void override;
@@ -42,6 +34,14 @@ public:
 
   auto normalize(core::Image& image, const core::Rect& roi, const Array<float, 3>& mean, const Array<float, 3>& stddev,
                  core::Stream* stream) -> bool override;
+
+  KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Rga; }
+
+  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::DmaBuffer; }
+
+  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override;
+
+  KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
 
 private:
   CpuImagePreprocessor cpu_;

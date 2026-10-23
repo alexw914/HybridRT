@@ -30,12 +30,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralYoloSegmentParam, class_n
 // [1, masks, mh, mw], identified by rank.
 class GeneralYoloSegment final : public SegmentPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<GeneralYoloSegmentParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "general_yolo_segment"))
       return false;
@@ -59,6 +53,12 @@ public:
     }
     mask_logit_ = core::logit(param_.mask_threshold);
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<GeneralYoloSegmentParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

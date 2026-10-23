@@ -20,12 +20,6 @@ namespace {
 // YOLO26 model emits them before decoding. NMS still runs.
 class Yolo26Detect final : public DetectPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<Yolo26Param>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "yolo26_detect"))
       return false;
@@ -38,6 +32,12 @@ public:
                    core::logit);
     layout_ = engine.proto().output_layout;
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<Yolo26Param>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

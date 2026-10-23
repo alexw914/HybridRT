@@ -251,17 +251,6 @@ public:
   CountingCudaPreprocessor(hrt::UniquePtr<ImagePreprocessor> device, hrt::preprocess::ImageOperation unsupported)
       : device_(std::move(device)), unsupported_(unsupported) {}
 
-  auto type() const -> hrt::preprocess::ImagePreprocessorType override { return device_->type(); }
-
-  auto memory_type() const -> hrt::core::MemoryType override { return device_->memory_type(); }
-
-  auto accepts(hrt::core::MemoryType type) const -> bool override { return device_->accepts(type); }
-
-  auto supports(hrt::preprocess::ImageOperation op, const hrt::core::Image& dst, const hrt::core::Image& src) const
-      -> bool override {
-    return op != unsupported_ && device_->supports(op, dst, src);
-  }
-
   auto fill(hrt::core::Image& image, const hrt::core::Rect& roi, const hrt::Array<float, 3>& color,
             hrt::core::Stream* stream) -> bool override {
     ++calls_[0];
@@ -284,6 +273,17 @@ public:
                  const hrt::Array<float, 3>& stddev, hrt::core::Stream* stream) -> bool override {
     ++calls_[3];
     return device_->normalize(image, roi, mean, stddev, stream);
+  }
+
+  KZ_NODISCARD auto type() const -> hrt::preprocess::ImagePreprocessorType override { return device_->type(); }
+
+  KZ_NODISCARD auto memory_type() const -> hrt::core::MemoryType override { return device_->memory_type(); }
+
+  KZ_NODISCARD auto accepts(hrt::core::MemoryType type) const -> bool override { return device_->accepts(type); }
+
+  KZ_NODISCARD auto supports(hrt::preprocess::ImageOperation op, const hrt::core::Image& dst,
+                             const hrt::core::Image& src) const -> bool override {
+    return op != unsupported_ && device_->supports(op, dst, src);
   }
 
   hrt::Array<unsigned int, 4> calls_{};

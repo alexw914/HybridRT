@@ -35,12 +35,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Yolo26SegmentParam, class_num, c
 // [1, masks, mh, mw] in any output position. NMS still runs.
 class Yolo26Segment final : public SegmentPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<Yolo26SegmentParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "yolo26_segment"))
       return false;
@@ -61,6 +55,12 @@ public:
     mask_logit_ = core::logit(param_.mask_threshold);
     layout_ = engine.proto().output_layout;
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<Yolo26SegmentParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

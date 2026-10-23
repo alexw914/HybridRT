@@ -134,15 +134,15 @@ TEST(HrtTest, ReportsModelErrorsWithoutAborting) {
 TEST(HrtTest, LogsFromThreadsWhileTheCallbackChanges) {
   // Two callbacks in turn keep the console quiet while threads log errors and warnings.
   std::atomic<int> received{0};
-  const auto count = [](HrtLogLevel /*level*/, const char* /*message*/, std::size_t /*length*/, void* user_data) {
-    static_cast<std::atomic<int>*>(user_data)->fetch_add(1);
-  };
-  const auto other = [](HrtLogLevel /*level*/, const char* /*message*/, std::size_t /*length*/, void* /*user_data*/) {};
+  const auto count = [](HrtLogLevel /*level*/, const char* /*message*/, std::size_t /*length*/,
+                        void* user_data) -> void { static_cast<std::atomic<int>*>(user_data)->fetch_add(1); };
+  const auto other = [](HrtLogLevel /*level*/, const char* /*message*/, std::size_t /*length*/,
+                        void* /*user_data*/) -> void {};
   hrt_set_log_callback(count, &received);
   const auto missing = (temp_dir() / "missing.hrtc").string();
   hrt::Vector<std::thread> threads;
   for (int i = 0; i < 4; ++i) {
-    threads.emplace_back([&missing] {
+    threads.emplace_back([&missing]() -> void {
       for (int round = 0; round < 200; ++round) {
         HrtPackage* package = nullptr;
         EXPECT_EQ(hrt_package_load(missing.c_str(), &package), HRT_STATUS_NOT_FOUND);
@@ -257,7 +257,7 @@ TEST(HrtTest, ReportsProcessErrorsAndForwardsLogs) {
 
   hrt::Vector<hrt::String> errors;
   hrt_set_log_callback(
-      [](HrtLogLevel level, const char* message, std::size_t length, void* user_data) {
+      [](HrtLogLevel level, const char* message, std::size_t length, void* user_data) -> void {
         if (level >= HRT_LOG_LEVEL_ERROR)
           static_cast<hrt::Vector<hrt::String>*>(user_data)->emplace_back(message, length);
       },

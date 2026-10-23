@@ -19,14 +19,6 @@ public:
 
   ~MetalImagePreprocessor() override;
 
-  auto type() const -> ImagePreprocessorType override;
-
-  auto memory_type() const -> core::MemoryType override;
-
-  auto accepts(core::MemoryType type) const -> bool override;
-
-  auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
-
   auto fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color, core::Stream* stream)
       -> bool override;
 
@@ -41,9 +33,17 @@ public:
   auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
              const ImagePreprocessorParam& param, core::Stream* stream) -> bool override;
 
+  KZ_NODISCARD auto type() const -> ImagePreprocessorType override;
+
+  KZ_NODISCARD auto memory_type() const -> core::MemoryType override;
+
+  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override;
+
+  KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
+
 private:
-  auto supports_fused(const core::Image& dst, const core::Image& src, const ImagePreprocessorParam& param) const
-      -> bool override;
+  KZ_NODISCARD auto supports_fused(const core::Image& dst, const core::Image& src,
+                                   const ImagePreprocessorParam& param) const -> bool override;
 
   struct State;
   UniquePtr<State> state_;

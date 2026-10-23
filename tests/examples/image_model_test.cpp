@@ -43,7 +43,7 @@ protected:
 
   void TearDown() override { std::filesystem::remove_all(dir_); }
 
-  auto run(std::initializer_list<hrt::String> args) const -> hrt::test::ToolResult {
+  KZ_NODISCARD auto run(std::initializer_list<hrt::String> args) const -> hrt::test::ToolResult {
     return hrt::test::run_tool(HRT_EXAMPLE_IMAGE_MODEL, args, dir_ / "log.txt");
   }
 

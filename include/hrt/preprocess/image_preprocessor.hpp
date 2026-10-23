@@ -130,8 +130,6 @@ public:
   static auto create(ImagePreprocessorType type, core::MemoryType target = core::MemoryType::Cpu)
       -> UniquePtr<ImagePreprocessor>;
 
-  virtual ~ImagePreprocessor();
-
   ImagePreprocessor(const ImagePreprocessor&) = delete;
   auto operator=(const ImagePreprocessor&) -> ImagePreprocessor& = delete;
   ImagePreprocessor(ImagePreprocessor&&) = delete;
@@ -143,16 +141,7 @@ public:
   auto process(core::Image& dst, const core::Image& src, const core::Rect& src_rect,
                const ImagePreprocessorParam& param, core::Stream* stream = nullptr) -> std::optional<ImageTransform>;
 
-  KZ_NODISCARD virtual auto type() const -> ImagePreprocessorType = 0;
-
-  // Memory type of scratch images.
-  KZ_NODISCARD virtual auto memory_type() const -> core::MemoryType = 0;
-
-  KZ_NODISCARD virtual auto accepts(core::MemoryType type) const -> bool = 0;
-
-  // For Fill and Normalize, `dst` and `src` are the same image.
-  KZ_NODISCARD virtual auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const
-      -> bool = 0;
+  virtual ~ImagePreprocessor();
 
   // Narrows the regions to what this device can address, for the images it would run on.
   virtual auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst,
@@ -175,17 +164,21 @@ public:
   virtual auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
                      const ImagePreprocessorParam& param, core::Stream* stream) -> bool;
 
+  KZ_NODISCARD virtual auto type() const -> ImagePreprocessorType = 0;
+
+  // Memory type of scratch images.
+  KZ_NODISCARD virtual auto memory_type() const -> core::MemoryType = 0;
+
+  KZ_NODISCARD virtual auto accepts(core::MemoryType type) const -> bool = 0;
+
+  // For Fill and Normalize, `dst` and `src` are the same image.
+  KZ_NODISCARD virtual auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const
+      -> bool = 0;
+
 protected:
   ImagePreprocessor();
 
 private:
-  virtual auto supports_fused(const core::Image& dst, const core::Image& src, const ImagePreprocessorParam& param) const
-      -> bool;
-
-  virtual auto convert_normalize(core::Image& dst, const core::Image& src, const core::Rect& roi,
-                                 const Array<float, 3>& mean, const Array<float, 3>& stddev, core::Stream* stream)
-      -> bool;
-
   auto cpu() -> ImagePreprocessor*;
 
   auto scratch(UniquePtr<core::Image>& slot, core::MemoryType memory_type, core::ImageFormat format,
@@ -193,6 +186,13 @@ private:
 
   auto run(core::Image& dst, const core::Image& src, const ImageTransform& transform,
            const ImagePreprocessorParam& param, core::Stream* stream) -> bool;
+
+  virtual auto convert_normalize(core::Image& dst, const core::Image& src, const core::Rect& roi,
+                                 const Array<float, 3>& mean, const Array<float, 3>& stddev, core::Stream* stream)
+      -> bool;
+
+  KZ_NODISCARD virtual auto supports_fused(const core::Image& dst, const core::Image& src,
+                                           const ImagePreprocessorParam& param) const -> bool;
 
   UniquePtr<ImagePreprocessor> cpu_;
   UniquePtr<core::Image> staged_src_;

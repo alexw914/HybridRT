@@ -35,12 +35,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8SegmentParam, class_num, r
 // decoding, plus the prototypes [1, masks, mh, mw] in any output position.
 class YoloV8Segment final : public SegmentPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<YoloV8SegmentParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "yolov8_segment"))
       return false;
@@ -65,6 +59,12 @@ public:
     mask_logit_ = core::logit(param_.mask_threshold);
     layout_ = engine.proto().output_layout;
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<YoloV8SegmentParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

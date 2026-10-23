@@ -35,7 +35,7 @@ namespace {
 auto coreml_flags(const Map<String, String>& options, core::Problems& problems) -> std::uint32_t {
   std::uint32_t flags = COREML_FLAG_USE_NONE;
   for (const auto& [key, value] : options) {
-    const auto bad = [&] {
+    const auto bad = [&]() -> void {
       problems.push_back("config.provider_options." + key + ": unknown value \"" + value + "\"");
     };
     if (key == "ModelFormat") {
@@ -232,8 +232,7 @@ auto OrtEngine::resolve_outputs() -> bool {
     void* data = nullptr;
     failure = error(api_->GetTensorMutableData(inputs[i], &data));
     KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
-    std::memset(data, 0,
-                static_cast<std::size_t>(core::get_volume(proto.shape)) * core::data_type_size(proto.data_type));
+    std::memset(data, 0, static_cast<std::size_t>(core::volume(proto.shape)) * core::data_type_size(proto.data_type));
     input_names.push_back(input_names_[i].c_str());
   }
   for (const auto& name : output_names_)

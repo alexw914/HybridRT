@@ -34,9 +34,9 @@ public:
 
   auto set_outputs(const core::Buffers& outputs) -> bool override;
 
-  KZ_NODISCARD auto create_host_memory() const -> SharedPtr<core::Memory> override;
-
   auto inference(core::Stream* stream) -> bool override;
+
+  KZ_NODISCARD auto create_host_memory() const -> SharedPtr<core::Memory> override;
 
 protected:
   auto do_initialize(const hrtc::EngineParam& param, const kitzoo::json::Json& config) -> bool override;

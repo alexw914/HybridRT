@@ -62,6 +62,11 @@ public:
   Image(SharedPtr<Buffer> buffer, ImageFormat format, DataType data_type = DataType::Uint8, Size size = {},
         const Stride& stride = {});
 
+  // Unknown data_type keeps the current one.
+  auto reshape(Size size, DataType data_type = DataType::Unknown, const Stride& stride = {}) -> bool;
+  auto reshape(ImageFormat format, Size size, DataType data_type = DataType::Unknown, const Stride& stride = {})
+      -> bool;
+
   KZ_NODISCARD auto valid() const -> bool { return valid_ && buffer_->valid(); }
 
   KZ_NODISCARD auto size() const -> Size { return size_; }
@@ -79,11 +84,6 @@ public:
   KZ_NODISCARD auto buffer() const -> const SharedPtr<Buffer>& { return buffer_; }
 
   KZ_NODISCARD auto memory() const -> const SharedPtr<Memory>& { return buffer_->memory(); }
-
-  // Unknown data_type keeps the current one.
-  auto reshape(Size size, DataType data_type = DataType::Unknown, const Stride& stride = {}) -> bool;
-  auto reshape(ImageFormat format, Size size, DataType data_type = DataType::Unknown, const Stride& stride = {})
-      -> bool;
 
 private:
   ImageFormat format_ = ImageFormat::Unknown;

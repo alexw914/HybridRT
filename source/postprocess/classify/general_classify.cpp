@@ -38,18 +38,18 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralClassifyParam, classify_p
 
 class GeneralClassify final : public ClassifyPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<GeneralClassifyParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "general_classify"))
       return false;
     activation_ = config.get<GeneralClassifyParam>().classify_postprocess_type;
     scratch_ = create_scratch(engine);
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<GeneralClassifyParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:
@@ -62,7 +62,7 @@ protected:
         floats = &scratch_[i];
       }
       const auto* data = static_cast<const float*>(floats->memory()->cpu());
-      auto& scores = result.emplace_back(data, data + floats->get_volume());
+      auto& scores = result.emplace_back(data, data + floats->volume());
       if (activation_ == ClassifyActivation::Sigmoid) {
         std::transform(scores.begin(), scores.end(), scores.begin(), core::sigmoid);
       } else if (activation_ == ClassifyActivation::Softmax && !scores.empty()) {

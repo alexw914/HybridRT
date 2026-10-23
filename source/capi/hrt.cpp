@@ -119,7 +119,7 @@ auto route_log() -> bool {
   kitzoo::log::init({.console = false});
   auto& logger = kitzoo::log::default_logger();
   logger.add_sink(route.console);
-  logger.add_sink(std::make_shared<kitzoo::log::CallbackSink>([&route](const spdlog::details::log_msg& record) {
+  logger.add_sink(std::make_shared<kitzoo::log::CallbackSink>([&route](const spdlog::details::log_msg& record) -> void {
     if (record.level >= spdlog::level::err)
       logged_error().assign(record.payload.data(), record.payload.size());
     const std::lock_guard lock(route.mutex);
@@ -475,7 +475,7 @@ auto hrt_model_create(const HrtPackage* package, const char* algo, const HrtMode
   auto created = std::make_unique<HrtModel>();
   created->algo = param->name;
   created->task = static_cast<HrtTask>(*task);
-  const auto make = [&]<typename Result>() {
+  const auto make = [&]<typename Result>() -> auto {
     created->model = model::ImageModel<Result>::create(*param, image_options);
   };
   switch (*task) {

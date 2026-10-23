@@ -23,16 +23,16 @@ enum class DeviceType {
 // synchronous host execution.
 class Stream {
 public:
-  virtual ~Stream();
-
   Stream(const Stream&) = delete;
   auto operator=(const Stream&) -> Stream& = delete;
   Stream(Stream&&) = delete;
   auto operator=(Stream&&) -> Stream& = delete;
 
-  KZ_NODISCARD auto handle() const -> void* { return handle_; }
+  virtual ~Stream();
 
   virtual auto synchronize() -> void;
+
+  KZ_NODISCARD auto handle() const -> void* { return handle_; }
 
 protected:
   Stream() = default;
@@ -45,22 +45,22 @@ public:
   // Returns nullptr when the device is not compiled in or not usable.
   static auto create(DeviceType device_type = DeviceType::Cpu, int device_id = 0) -> UniquePtr<Context>;
 
-  virtual ~Context();
-
   Context(const Context&) = delete;
   auto operator=(const Context&) -> Context& = delete;
   Context(Context&&) = delete;
   auto operator=(Context&&) -> Context& = delete;
+
+  virtual ~Context();
+
+  virtual auto make_current() -> void = 0;
+
+  virtual auto create_stream() -> UniquePtr<Stream> = 0;
 
   KZ_NODISCARD auto device_type() const -> DeviceType { return device_type_; }
 
   KZ_NODISCARD auto device_id() const -> int { return device_id_; }
 
   KZ_NODISCARD auto handle() const -> void* { return handle_; }
-
-  virtual auto make_current() -> void = 0;
-
-  virtual auto create_stream() -> UniquePtr<Stream> = 0;
 
 protected:
   Context(DeviceType device_type, int device_id) : device_type_(device_type), device_id_(device_id) {}

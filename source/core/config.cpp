@@ -20,8 +20,9 @@ using kitzoo::json::Json;
 
 auto is_numbers(const Json& value) -> bool {
   return value.is_array() && std::all_of(value.begin(), value.end(), [](const Json& item) -> bool {
-           return item.is_number() || (item.is_array() && std::all_of(item.begin(), item.end(),
-                                                                      [](const Json& x) { return x.is_number(); }));
+           return item.is_number() ||
+                  (item.is_array() &&
+                   std::all_of(item.begin(), item.end(), [](const Json& x) -> bool { return x.is_number(); }));
          });
 }
 
@@ -170,7 +171,8 @@ auto read(const Json& object, std::string_view key, String& value, std::string_v
 auto read(const Json& object, std::string_view key, Vector<String>& value, std::string_view section, Problems& problems)
     -> void {
   if (const auto* found = find(object, key, "an array of strings", section, problems, [](const Json& j) -> bool {
-        return j.is_array() && std::all_of(j.begin(), j.end(), [](const Json& item) { return item.is_string(); });
+        return j.is_array() &&
+               std::all_of(j.begin(), j.end(), [](const Json& item) -> bool { return item.is_string(); });
       }))
     value = found->get<Vector<String>>();
 }
@@ -178,7 +180,8 @@ auto read(const Json& object, std::string_view key, Vector<String>& value, std::
 auto read(const Json& object, std::string_view key, Map<String, String>& value, std::string_view section,
           Problems& problems) -> void {
   if (const auto* found = find(object, key, "an object of strings", section, problems, [](const Json& j) -> bool {
-        return j.is_object() && std::all_of(j.begin(), j.end(), [](const Json& item) { return item.is_string(); });
+        return j.is_object() &&
+               std::all_of(j.begin(), j.end(), [](const Json& item) -> bool { return item.is_string(); });
       }))
     value = found->get<Map<String, String>>();
 }
@@ -187,7 +190,7 @@ auto read(const Json& object, std::string_view key, Map<String, Vector<std::int6
           Problems& problems) -> void {
   const auto shape = [](const Json& j) -> bool {
     return j.is_array() && !j.empty() &&
-           std::all_of(j.begin(), j.end(), [](const Json& dim) { return dim.is_number_integer() && dim > 0; });
+           std::all_of(j.begin(), j.end(), [](const Json& dim) -> bool { return dim.is_number_integer() && dim > 0; });
   };
   if (const auto* found = find(object, key, "an object of shapes", section, problems, [&](const Json& j) -> bool {
         return j.is_object() && std::all_of(j.begin(), j.end(), shape);
@@ -210,9 +213,9 @@ auto fix_shapes(const Map<String, Vector<std::int64_t>>& fixed, const Vector<Str
       continue;
     }
     const auto& want = it->second;
-    const auto fits =
-        want.size() == shape.size() && std::equal(shape.begin(), shape.end(), want.begin(),
-                                                  [](auto model, auto dim) { return model < 0 || model == dim; });
+    const auto fits = want.size() == shape.size() &&
+                      std::equal(shape.begin(), shape.end(), want.begin(),
+                                 [](auto model, auto dim) -> bool { return model < 0 || model == dim; });
     if (fits)
       shape = want;
     else

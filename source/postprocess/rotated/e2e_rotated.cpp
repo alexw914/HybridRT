@@ -31,12 +31,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2ERotatedParam, class_num, conf
 // deduplicated; unused rows score 0.
 class E2ERotated final : public RotatedPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<E2ERotatedParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "e2e_rotated"))
       return false;
@@ -48,6 +42,12 @@ public:
                         outputs[0].shape[0] == 1 && outputs[0].shape[1] > 0 && outputs[0].shape[2] == 7,
                     false, "e2e_rotated: needs one input and one [1, N, 7] output");
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<E2ERotatedParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

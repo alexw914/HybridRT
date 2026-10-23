@@ -28,13 +28,13 @@ using Json = kitzoo::json::Json;
 
 TEST(Yolo26KeypointTest, DecodesDistancesAndKeypointOffsets) {
   // Distances in cells and keypoints at (raw + cell + 0.5).
-  constexpr int channels = 4 + 1 + 2 * 3;
-  const auto output = proto(DataType::Float32, {1, channels, 4, 4});
+  constexpr int kChannels = 4 + 1 + 2 * 3;
+  const auto output = proto(DataType::Float32, {1, kChannels, 4, 4});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 32, 32})}, {output});
   const auto config = Json::parse(R"({"class_num": 1, "keypoint_num": 2,
                                       "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
   auto decoder = hrt::postprocess::create_keypoint_postprocessor("Yolo26Keypoint", config, engine);
-  hrt::Vector<float> values(channels * 16, 0.0F);
+  hrt::Vector<float> values(kChannels * 16, 0.0F);
   auto at = [&](int channel, int y, int x) -> float& {
     return values[static_cast<std::size_t>(channel * 16 + y * 4 + x)];
   };

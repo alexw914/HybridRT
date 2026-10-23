@@ -22,12 +22,6 @@ namespace {
 // head of a YOLO26 OBB model emits them. NMS still runs.
 class Yolo26Rotated final : public RotatedPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<Yolo26Param>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "yolo26_rotated"))
       return false;
@@ -39,6 +33,12 @@ public:
                    core::logit);
     layout_ = engine.proto().output_layout;
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<Yolo26Param>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

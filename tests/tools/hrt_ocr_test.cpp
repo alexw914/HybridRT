@@ -26,11 +26,11 @@ protected:
 
   void TearDown() override { std::filesystem::remove_all(dir_); }
 
-  auto run(std::initializer_list<hrt::String> args) const -> hrt::test::ToolResult {
+  KZ_NODISCARD auto run(std::initializer_list<hrt::String> args) const -> hrt::test::ToolResult {
     return hrt::test::run_tool(HRT_OCR, args, dir_ / "log.txt");
   }
 
-  auto write_manifest(const Json& algos) const -> hrt::String {
+  KZ_NODISCARD auto write_manifest(const Json& algos) const -> hrt::String {
     const auto path = dir_ / "manifest.json";
     kitzoo::os::write_file(path, Json{{"name", "ocr"}, {"version", "1.0.0"}, {"algos", algos}}.dump());
     return path.string();

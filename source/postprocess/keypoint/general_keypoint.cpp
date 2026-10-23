@@ -77,12 +77,6 @@ auto argmax(const float* begin, std::int64_t count) -> std::int64_t {
 
 class GeneralKeypoint final : public KeypointPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<GeneralKeypointParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "general_keypoint"))
       return false;
@@ -135,6 +129,12 @@ public:
     scratch_ = create_scratch(engine);
     data_.resize(outputs.size());
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<GeneralKeypointParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:
@@ -198,6 +198,40 @@ protected:
   }
 
 private:
+  static auto decode_simcc(Vector<Keypoint>& points, const Vector<const float*>& data, const core::Buffers& outputs)
+      -> void {
+    const auto count = outputs[0]->shape()[1];
+    const auto x_bins = outputs[0]->shape()[2];
+    const auto y_bins = outputs[1]->shape()[2];
+    for (std::int64_t k = 0; k < count; ++k) {
+      const auto* xs = data[0] + k * x_bins;
+      const auto* ys = data[1] + k * y_bins;
+      const auto x = argmax(xs, x_bins);
+      const auto y = argmax(ys, y_bins);
+      points.push_back(
+          {{static_cast<float>(x) / static_cast<float>(x_bins), static_cast<float>(y) / static_cast<float>(y_bins)},
+           KeypointVisible::Visible,
+           std::min(xs[x], ys[y])});
+    }
+  }
+
+  static auto decode_point_with_visible(Vector<Keypoint>& points, const Vector<const float*>& data,
+                                        const core::Buffers& outputs) -> void {
+    const auto count = outputs[0]->shape()[1];
+    const auto x_bins = outputs[0]->shape()[2];
+    const auto y_bins = outputs[1]->shape()[2];
+    const auto v_bins = outputs[2]->shape()[2];
+    for (std::int64_t k = 0; k < count; ++k) {
+      const auto x = argmax(data[0] + k * x_bins, x_bins);
+      const auto y = argmax(data[1] + k * y_bins, y_bins);
+      const auto v = argmax(data[2] + k * v_bins, v_bins);
+      points.push_back(
+          {{static_cast<float>(x) / static_cast<float>(x_bins), static_cast<float>(y) / static_cast<float>(y_bins)},
+           static_cast<KeypointVisible>(v),
+           data[2][k * v_bins + 2]});
+    }
+  }
+
   // Argmax per map; peak cells normalized by the map size, as the MSRA codec
   // scales them by input / heatmap size, or by size - 1 for UDP, whose codec
   // scales them by input / (heatmap - 1).
@@ -293,39 +327,6 @@ private:
 
   // Bins normalized by the bin count, as mmpose divides them by the split
   // ratio (bins = input size * ratio); score min(max x, max y).
-  static auto decode_simcc(Vector<Keypoint>& points, const Vector<const float*>& data, const core::Buffers& outputs)
-      -> void {
-    const auto count = outputs[0]->shape()[1];
-    const auto x_bins = outputs[0]->shape()[2];
-    const auto y_bins = outputs[1]->shape()[2];
-    for (std::int64_t k = 0; k < count; ++k) {
-      const auto* xs = data[0] + k * x_bins;
-      const auto* ys = data[1] + k * y_bins;
-      const auto x = argmax(xs, x_bins);
-      const auto y = argmax(ys, y_bins);
-      points.push_back(
-          {{static_cast<float>(x) / static_cast<float>(x_bins), static_cast<float>(y) / static_cast<float>(y_bins)},
-           KeypointVisible::Visible,
-           std::min(xs[x], ys[y])});
-    }
-  }
-
-  static auto decode_point_with_visible(Vector<Keypoint>& points, const Vector<const float*>& data,
-                                        const core::Buffers& outputs) -> void {
-    const auto count = outputs[0]->shape()[1];
-    const auto x_bins = outputs[0]->shape()[2];
-    const auto y_bins = outputs[1]->shape()[2];
-    const auto v_bins = outputs[2]->shape()[2];
-    for (std::int64_t k = 0; k < count; ++k) {
-      const auto x = argmax(data[0] + k * x_bins, x_bins);
-      const auto y = argmax(data[1] + k * y_bins, y_bins);
-      const auto v = argmax(data[2] + k * v_bins, v_bins);
-      points.push_back(
-          {{static_cast<float>(x) / static_cast<float>(x_bins), static_cast<float>(y) / static_cast<float>(y_bins)},
-           static_cast<KeypointVisible>(v),
-           data[2][k * v_bins + 2]});
-    }
-  }
 
   GeneralKeypointParam param_;
   Vector<core::Buffer> scratch_;

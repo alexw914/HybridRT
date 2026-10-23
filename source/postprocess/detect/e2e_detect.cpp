@@ -29,12 +29,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(E2EDetectParam, class_num, confi
 // Rows are already deduplicated; unused rows score 0.
 class E2EDetect final : public DetectPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<E2EDetectParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "e2e_detect"))
       return false;
@@ -46,6 +40,12 @@ public:
                         outputs[0].shape[0] == 1 && outputs[0].shape[1] > 0 && outputs[0].shape[2] == 6,
                     false, "e2e_detect: needs one input and one [1, N, 6] output");
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<E2EDetectParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

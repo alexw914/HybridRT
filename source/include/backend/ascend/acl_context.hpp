@@ -27,8 +27,6 @@ public:
 
 class AclContext final : public core::Context {
 public:
-  explicit AclContext(int device_id);
-
   ~AclContext() override;
 
   AclContext(const AclContext&) = delete;
@@ -39,6 +37,8 @@ public:
   auto make_current() -> void override;
 
   auto create_stream() -> UniquePtr<core::Stream> override;
+
+  explicit AclContext(int device_id);
 };
 
 } // namespace hrt::backend

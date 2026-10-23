@@ -18,12 +18,6 @@ namespace {
 // Channels per anchor: x, y, w, h, theta, objectness, classes.
 class YoloV5Rotated final : public RotatedPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<YoloV5Param>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "yolov5_rotated"))
       return false;
@@ -35,6 +29,12 @@ public:
     min_objectness_logit_ = core::logit(min_threshold);
     layout_ = engine.proto().output_layout;
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<YoloV5Param>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

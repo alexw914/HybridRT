@@ -17,12 +17,6 @@ namespace {
 
 class YoloV8Detect final : public DetectPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<YoloV8Param>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "yolov8_detect"))
       return false;
@@ -36,6 +30,12 @@ public:
                    core::logit);
     layout_ = engine.proto().output_layout;
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<YoloV8Param>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

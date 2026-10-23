@@ -20,12 +20,6 @@ namespace {
 
 class DetrDetect final : public DetectPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<DetrParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "detr_detect"))
       return false;
@@ -53,6 +47,12 @@ public:
     }
     count_ = static_cast<std::size_t>(outputs[0].shape[1]);
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<DetrParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

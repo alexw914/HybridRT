@@ -112,7 +112,7 @@ private:
   auto build(const hrtc::AlgoParam& algo, const kitzoo::json::Json& config, const PostprocessorFactory& factory,
              UniquePtr<engine::Engine> first, const hrtc::EngineParam& chosen) -> void;
 
-  auto make_input_image(const core::Buffer& input) const -> std::optional<core::Image>;
+  KZ_NODISCARD auto make_input_image(const core::Buffer& input) const -> std::optional<core::Image>;
 
   SharedPtr<core::Context> context_;
   ImageModelOptions options_;

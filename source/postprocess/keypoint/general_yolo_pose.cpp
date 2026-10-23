@@ -32,12 +32,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralYoloPoseParam, class_num,
 // keypoint, all in network-input pixels.
 class GeneralYoloPose final : public KeypointPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<GeneralYoloPoseParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "general_yolo_pose"))
       return false;
@@ -54,6 +48,12 @@ public:
                         static_cast<std::int64_t>(4 + param_.class_num + param_.keypoint_num * kKeypointValues),
                     false, "general_yolo_pose: output rows do not match class_num and keypoint_num");
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<GeneralYoloPoseParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

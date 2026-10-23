@@ -88,22 +88,17 @@
   ```
 
 - Python 文件使用相同内容的 `#` 注释文件头，Rust 文件使用相同的 `//` 文件头。
-- 使用 include guard，禁止 pragma once。宏名 `HRT_<目录>_<文件名>_HPP`，全大写、点换下划线，
-  冲突时增加一级目录；末尾 endif 注释标明宏名。.hpp.in 按生成的 .hpp 命名，
-  保持 `@变量@` 完整，必要时用 clang-format off/on。
-- 遵循根目录 `.clang-format`，clang-format >=19，检查用 `--dry-run --Werror`；
-  静态检查用 `.clang-tidy` 和 build/ 下的 compile_commands.json。
-  include 顺序为 hrt、kitzoo、其他尖括号头、双引号头；限定符在类型左侧。
-  非 C++ 文本用 LF，.bat、.cmd 用 CRLF。
+- include guard 宏名 `HRT_<目录>_<文件名>_HPP`，全大写、点换下划线，冲突时增加一级目录；
+  末尾 endif 注释标明宏名。.hpp.in 按生成的 .hpp 命名，保持 `@变量@` 完整，必要时用 clang-format off/on。
+- 格式和可自动检查的规则以根目录 `.clang-format`（>=21，检查用 `--dry-run --Werror`）和 `.clang-tidy`
+  （配合 build/ 下的 compile_commands.json）为准，本文件不重复。非 C++ 文本用 LF，.bat、.cmd 用 CRLF。
 - 命名空间按模块：`hrt::core`、engine、preprocess、postprocess、model、hrtc；
   内部另有 memory、backend。跨模块写模块前缀（如 `core::Image`），不用 detail，
   文件内私有代码放匿名命名空间。
-- 类型大驼峰，函数和变量小写下划线，常量 `kName`，宏 `HRT_` 前缀；第三方接口沿用原约定。
-  class 及自定义构造或析构的 struct（如 `BasePointer`）的成员变量以 `_` 结尾（如 `host_storage_`），
-  与局部变量区分；纯数据 struct（参数、结果、JSON 映射、公开值类型、C API 结构体）成员不加。
-- 枚举用 enum class，枚举项大驼峰，最后一项保留逗号；只在序列化、ABI 等必要场景指定底层类型和数值。
-  日志需要枚举名时用 `to_string` 重载返回枚举项同名的 `std::string_view`，只为实际用到的枚举添加。
-  每个枚举项单独一行；枚举项和结构体成员的简短说明只写在声明后的行尾，不另起一行写在上方：
+- 第三方接口沿用原约定。自定义构造或析构的 struct（如 `BasePointer`）的成员变量也以 `_` 结尾，
+  纯数据 struct（参数、结果、JSON 映射、公开值类型、C API 结构体）成员不加。
+- 只在序列化、ABI 等必要场景给枚举指定底层类型和数值。日志需要枚举名时用 `to_string` 重载返回枚举项同名的
+  `std::string_view`，只为实际用到的枚举添加。枚举项和结构体成员的简短说明只写在声明后的行尾，不另起一行写在上方：
 
   ```cpp
   enum class CopyPolicy {
@@ -126,9 +121,12 @@
 
 ## 函数与错误处理
 
-- 头文件只声明，实现放 .cpp，模板和 constexpr 除外。函数声明间空一行，同名重载（含构造函数）连续声明、不空行；
-  函数和有返回值的 lambda 用尾置返回类型。
+- 头文件只声明，实现放 .cpp，模板和 constexpr 除外。函数声明间空一行，同名重载（含构造函数）连续声明、不空行。
 - 转发给成员的方法与被调方法同名（如 `Buffer::bytes()` 返回 `memory_->bytes()`），不另起名字造成歧义。
+- 类的每个访问区段（public、protected、private）内依次放：静态成员函数；前面没有任何关键词和属性宏的成员函数
+  （含构造函数和 `= delete` 的拷贝、移动操作）；以 `virtual`、`explicit`、`constexpr`、`inline` 或 `KZ_NODISCARD`
+  等属性宏开头的成员函数（含 virtual 析构函数）。同名重载按首个声明归组。
+- 修改状态的函数不加 `KZ_NODISCARD`，返回值是否检查由调用方决定。
 - 只读大对象传 `const T&`，修改调用方对象传 `T&`，转移所有权按值或 `T&&`；
   数值、指针、std::string_view、std::span 按值传递。
 - 所有代码（含工具、示例、测试）不抛异常、不用 try/catch：

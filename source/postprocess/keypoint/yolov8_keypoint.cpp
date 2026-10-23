@@ -37,12 +37,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(YoloV8KeypointParam, class_num, 
 // A keypoint at cell (x, y) lies at ((raw * 2 + x) * stride.x, (raw * 2 + y) * stride.y).
 class YoloV8Keypoint final : public KeypointPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<YoloV8KeypointParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "yolov8_keypoint"))
       return false;
@@ -61,6 +55,12 @@ public:
                    core::logit);
     layout_ = engine.proto().output_layout;
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<YoloV8KeypointParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

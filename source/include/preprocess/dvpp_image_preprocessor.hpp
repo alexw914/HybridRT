@@ -30,14 +30,6 @@ public:
   DvppImagePreprocessor(DvppImagePreprocessor&&) = delete;
   auto operator=(DvppImagePreprocessor&&) -> DvppImagePreprocessor& = delete;
 
-  KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Dvpp; }
-
-  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::Dvpp; }
-
-  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override { return type == core::MemoryType::Dvpp; }
-
-  KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
-
   // VPC needs even region offsets and sizes; other images keep theirs, as the CPU
   // operators take any region and rounding costs accuracy on cascaded crops.
   auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst, const core::Image& src) const
@@ -56,6 +48,14 @@ public:
 
   auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
              const ImagePreprocessorParam& param, core::Stream* stream) -> bool override;
+
+  KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Dvpp; }
+
+  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::Dvpp; }
+
+  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override { return type == core::MemoryType::Dvpp; }
+
+  KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
 
 private:
   int channel_ = -1;

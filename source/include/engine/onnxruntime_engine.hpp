@@ -46,9 +46,6 @@ protected:
   auto do_release() -> void override;
 
 private:
-  // Message of a failed call, releasing its status; empty on success.
-  auto error(OrtStatus* status) const -> String;
-
   auto read_io(bool input) -> bool;
 
   auto resolve_outputs() -> bool;
@@ -56,6 +53,9 @@ private:
   auto bind(const core::Buffers& buffers, bool input) -> bool;
 
   auto release_values(Vector<OrtValue*>& values) -> void;
+
+  // Message of a failed call, releasing its status; empty on success.
+  KZ_NODISCARD auto error(OrtStatus* status) const -> String;
 
   const OrtApi* api_;
   OrtEnv* env_ = nullptr;

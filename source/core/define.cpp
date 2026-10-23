@@ -73,7 +73,7 @@ auto is_dynamic(const Shape& shape) -> bool {
   return std::any_of(shape.begin(), shape.end(), [](std::int64_t dim) -> bool { return dim < 0; });
 }
 
-auto get_volume(const Shape& shape) -> std::int64_t {
+auto volume(const Shape& shape) -> std::int64_t {
   if (is_dynamic(shape))
     return -1;
   std::int64_t count = 1;

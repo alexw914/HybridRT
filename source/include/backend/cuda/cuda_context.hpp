@@ -27,13 +27,13 @@ public:
 
 class CudaContext final : public core::Context {
 public:
-  explicit CudaContext(int device_id) : core::Context(core::DeviceType::Cuda, device_id) {}
-
   static auto available(int device_id) -> bool;
 
   auto make_current() -> void override;
 
   auto create_stream() -> UniquePtr<core::Stream> override;
+
+  explicit CudaContext(int device_id) : core::Context(core::DeviceType::Cuda, device_id) {}
 };
 
 } // namespace hrt::backend

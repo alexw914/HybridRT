@@ -17,14 +17,6 @@ namespace hrt::preprocess {
 // conversion source.
 class CudaImagePreprocessor final : public ImagePreprocessor {
 public:
-  KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Cuda; }
-
-  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::Cuda; }
-
-  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override { return type == core::MemoryType::Cuda; }
-
-  KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
-
   auto fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color, core::Stream* stream)
       -> bool override;
 
@@ -35,6 +27,14 @@ public:
 
   auto normalize(core::Image& image, const core::Rect& roi, const Array<float, 3>& mean, const Array<float, 3>& stddev,
                  core::Stream* stream) -> bool override;
+
+  KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Cuda; }
+
+  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::Cuda; }
+
+  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override { return type == core::MemoryType::Cuda; }
+
+  KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
 
 private:
   // Changes only the data type; `dst` has the source format.

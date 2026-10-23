@@ -31,12 +31,6 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(RtmoKeypointParam, confidence_th
 // for the M highest-scoring candidates before NMS (see assets/template/rtmo_fix_outputs.py).
 class RtmoKeypoint final : public KeypointPostprocessor {
 public:
-  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
-    core::Problems problems;
-    core::check_param<RtmoKeypointParam>(config, "postprocess", {"type"}, problems);
-    return problems;
-  }
-
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
     if (!is_float_outputs(engine, "rtmo_keypoint"))
       return false;
@@ -54,6 +48,12 @@ public:
                         keypoints[0] == 1 && keypoints[1] == boxes[1] && keypoints[2] > 0 && keypoints[3] == 3,
                     false, "rtmo_keypoint: needs [1, M, 5] boxes and [1, M, K, 3] keypoints");
     return true;
+  }
+
+  KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
+    core::Problems problems;
+    core::check_param<RtmoKeypointParam>(config, "postprocess", {"type"}, problems);
+    return problems;
   }
 
 protected:

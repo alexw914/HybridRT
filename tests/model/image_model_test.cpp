@@ -118,7 +118,7 @@ TEST_F(ImageModelTest, ServesConcurrentCallsFromPools) {
 
     hrt::Vector<std::future<bool>> runs;
     for (int t = 0; t < 4; ++t) {
-      runs.push_back(std::async(std::launch::async, [&model, t] {
+      runs.push_back(std::async(std::launch::async, [&model, t]() -> bool {
         hrt::Vector<std::uint8_t> pixels;
         const auto value = static_cast<std::uint8_t>(40 * t);
         for (int i = 0; i < 20; ++i) {
