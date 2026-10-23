@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <opencv2/core/utility.hpp>
 
 #include "include/preprocess/cpu_image_preprocessor.hpp"
 
@@ -277,6 +278,38 @@ auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const 
   if (!direct && !core::Buffer::copy(*dst.buffer(), *output->buffer(), core::CopyPolicy::DirectCopy, stream))
     return std::nullopt;
   return transform;
+}
+
+auto ImagePreprocessor::process(std::span<core::Image> dsts, std::span<const core::Image> srcs,
+                                std::span<const core::Rect> src_rects, const ImagePreprocessorParam& param,
+                                core::Stream* stream) -> std::optional<Vector<ImageTransform>> {
+  KZ_CHECK_RETURN(!srcs.empty() && dsts.size() == srcs.size() && (src_rects.empty() || src_rects.size() == srcs.size()),
+                  std::nullopt, "ImagePreprocessor: got {} targets and {} source rects for {} sources", dsts.size(),
+                  src_rects.size(), srcs.size());
+  Vector<std::optional<ImageTransform>> done(srcs.size());
+  auto run_sample = [&](ImagePreprocessor& processor, std::size_t i) -> void {
+    done[i] = processor.process(dsts[i], srcs[i], src_rects.empty() ? core::Rect{} : src_rects[i], param, stream);
+  };
+  if (type() == ImagePreprocessorType::Cpu && srcs.size() > 1) {
+    while (lanes_.size() + 1 < srcs.size())
+      lanes_.push_back(create(ImagePreprocessorType::Cpu));
+    cv::parallel_for_(cv::Range(0, static_cast<int>(srcs.size())), [&](const cv::Range& range) -> void {
+      for (auto i = static_cast<std::size_t>(range.start); i < static_cast<std::size_t>(range.end); ++i)
+        run_sample(i == 0 ? *this : *lanes_[i - 1], i);
+    });
+  } else {
+    // Device samples run in stream order and reuse one set of scratch images.
+    for (std::size_t i = 0; i < srcs.size(); ++i)
+      run_sample(*this, i);
+  }
+  Vector<ImageTransform> transforms;
+  transforms.reserve(srcs.size());
+  for (const auto& transform : done) {
+    if (!transform)
+      return std::nullopt;
+    transforms.push_back(*transform);
+  }
+  return transforms;
 }
 
 auto ImageTransform::to_source(const core::Rect2f& rect) const -> core::Rect2f {

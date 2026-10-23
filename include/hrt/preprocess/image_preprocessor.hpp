@@ -14,6 +14,7 @@
 #include <kitzoo/json/reader.hpp>
 
 #include <optional>
+#include <span>
 
 namespace hrt::preprocess {
 
@@ -142,6 +143,12 @@ public:
   // `src_rect`, so clip boxes for the others with core::intersect.
   auto process(core::Image& dst, const core::Image& src, const core::Rect& src_rect,
                const ImagePreprocessorParam& param, core::Stream* stream = nullptr) -> std::optional<ImageTransform>;
+  // srcs[i] into dsts[i], typically the samples of one batched input; an
+  // empty `src_rects` selects whole sources. On the CPU separate samples run
+  // on OpenCV's threads. Fails as a whole when one sample fails.
+  auto process(std::span<core::Image> dsts, std::span<const core::Image> srcs, std::span<const core::Rect> src_rects,
+               const ImagePreprocessorParam& param, core::Stream* stream = nullptr)
+      -> std::optional<Vector<ImageTransform>>;
 
   // Narrows the regions to what this device can address, for the images it would run on.
   virtual auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst,
@@ -195,6 +202,7 @@ private:
                                            const ImagePreprocessorParam& param) const -> bool;
 
   UniquePtr<ImagePreprocessor> cpu_;
+  Vector<UniquePtr<ImagePreprocessor>> lanes_; // CPU preprocessors with own scratch for samples after the first.
   UniquePtr<core::Image> staged_src_;
   UniquePtr<core::Image> staged_dst_;
   UniquePtr<core::Image> host_src_;

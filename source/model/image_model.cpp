@@ -444,27 +444,27 @@ auto ImageModel<Result>::run_batch(std::span<const core::Image> srcs, std::span<
   // Only the given images are preprocessed, each straight into its own sample;
   // the samples after them keep stale data and are not decoded.
   Vector<preprocess::ImageTransform> transforms;
-  transforms.reserve(srcs.size());
   decltype(output_pool_.acquire()) output;
   {
     auto input = input_pool_.acquire();
     {
-      auto preprocessor = preprocessor_pool_.acquire();
+      // Rebuilt per call: preprocess settings may change between frames of a stream.
+      Vector<core::Image> images;
+      images.reserve(srcs.size());
       for (std::size_t i = 0; i < srcs.size(); ++i) {
-        // Rebuilt per call: preprocess settings may change between frames of a stream.
         auto image = input_image(*input, i);
-        const auto src_rect = src_rects.empty() ? core::Rect{} : src_rects[i];
-        auto transform =
-            image ? (*preprocessor)->process(*image, srcs[i], src_rect, preprocessor_param_, stream) : std::nullopt;
-        if (!transform)
-          break;
-        transforms.push_back(*transform);
+        if (!image)
+          return false;
+        images.push_back(std::move(*image));
       }
+      auto preprocessor = preprocessor_pool_.acquire();
+      auto done = (*preprocessor)->process(images, srcs, src_rects, preprocessor_param_, stream);
       // Scratch buffers may be reused on another stream only after this completes.
       stream->synchronize();
+      if (!done)
+        return false;
+      transforms = std::move(*done);
     }
-    if (transforms.size() != srcs.size())
-      return false;
 
     output = output_pool_.acquire();
     auto engine = engine_pool_.acquire();

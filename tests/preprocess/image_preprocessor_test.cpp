@@ -10,7 +10,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <gtest/gtest.h>
+#include <opencv2/core/utility.hpp>
 
 namespace {
 
@@ -364,6 +366,61 @@ TEST(ImagePreprocessorTest, CropsTheSourceRect) {
     EXPECT_EQ(out[i * 3 + 0], 255);
     EXPECT_EQ(out[i * 3 + 2], 0);
   }
+}
+
+TEST(ImagePreprocessorTest, ProcessesABatchLikeSingleCalls) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  // Several OpenCV threads let the CPU run the samples in parallel.
+  const auto threads = cv::getNumThreads();
+  cv::setNumThreads(4);
+  hrt::Vector<HostImage> sources;
+  sources.push_back(uniform_bgr(16, 8, {10, 20, 30}));
+  sources.push_back(uniform_bgr(9, 13, {40, 50, 60}, 32));
+  sources.push_back(uniform_bgr(20, 20, {70, 80, 90}));
+  sources.push_back(uniform_bgr(7, 3, {100, 110, 120}));
+  hrt::Vector<Image> srcs;
+  for (const auto& source : sources)
+    srcs.push_back(source.image);
+  const hrt::Vector<Rect> rects{{}, {1, 2, 6, 9}, {4, 4, 12, 8}, {}};
+  ImagePreprocessorParam param;
+  param.resize_type = ResizeType::LetterBox;
+  param.mean = {1, 2, 3};
+  param.std = {2, 4, 8};
+  param.default_color = {114, 114, 114};
+  auto make = []() -> hrt::Vector<Image> {
+    hrt::Vector<Image> images;
+    for (int i = 0; i < 4; ++i)
+      images.emplace_back(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, Size{12, 10});
+    return images;
+  };
+  auto batched = make();
+  auto single = make();
+  auto processor = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  for (int run = 0; run < 2; ++run) {
+    const auto transforms = processor->process(batched, srcs, rects, param);
+    ASSERT_TRUE(transforms);
+    ASSERT_EQ(transforms->size(), srcs.size());
+    auto reference = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+    for (std::size_t i = 0; i < srcs.size(); ++i) {
+      SCOPED_TRACE(i);
+      const auto expected = reference->process(single[i], srcs[i], rects[i], param);
+      ASSERT_TRUE(expected);
+      EXPECT_EQ((*transforms)[i].dst_roi, expected->dst_roi);
+      EXPECT_EQ((*transforms)[i].src_roi, expected->src_roi);
+      const auto bytes = batched[i].buffer()->bytes();
+      EXPECT_EQ(std::memcmp(batched[i].memory()->cpu(), single[i].memory()->cpu(), bytes), 0);
+    }
+  }
+
+  // Mismatched counts and a failing sample fail the whole batch.
+  EXPECT_FALSE(processor->process(std::span(batched).first(3), srcs, {}, param));
+  EXPECT_FALSE(processor->process(batched, srcs, std::span(rects).first(2), param));
+  EXPECT_FALSE(processor->process(std::span<Image>{}, std::span<const Image>{}, {}, param));
+  auto outside = rects;
+  outside[2] = {10, 10, 20, 20};
+  EXPECT_FALSE(processor->process(batched, srcs, outside, param));
+  cv::setNumThreads(threads);
 }
 
 TEST(ImagePreprocessorTest, CudaStagesOnlyTheCroppedHostRegion) {
