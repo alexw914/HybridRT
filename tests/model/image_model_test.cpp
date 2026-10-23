@@ -540,12 +540,13 @@ auto expect_same(const Map& batched, const Map& single) -> void {
   }
 }
 
-// Runs bus.jpg and zidane.jpg through the static batch-2 copy of `name` in one
-// batch and expects the results of the batch-1 model, image by image.
+// Runs bus.jpg and zidane.jpg through the static batch-4 copy of `name` in a
+// full and a partial batch and expects the results of the batch-1 model,
+// image by image.
 template <typename Result>
-auto expect_batch_matches_single(std::string_view name) -> void {
+auto expect_batch_matches_single(std::string_view name, std::string_view device = "cpu") -> void {
   const auto single_algo = hrt::test::template_algo(name);
-  const auto batch_algo = hrt::test::template_algo(hrt::String(name) + "_batch2");
+  auto batch_algo = hrt::test::template_algo(hrt::String(name) + "_batch4");
   const auto images_dir = hrt::test::source_root() / "assets/test/images";
   hrt::Vector<cv::Mat> frames{cv::imread((images_dir / "bus.jpg").string()),
                               cv::imread((images_dir / "zidane.jpg").string())};
@@ -553,16 +554,33 @@ auto expect_batch_matches_single(std::string_view name) -> void {
       !std::filesystem::is_regular_file(hrt::test::template_model(single_algo)) ||
       !std::filesystem::is_regular_file(hrt::test::template_model(batch_algo)) || frames[0].empty() ||
       frames[1].empty())
-    GTEST_SKIP() << name << " batch-2 fixture, its batch-1 model or the test images are unavailable";
+    GTEST_SKIP() << name << " batch-4 fixture, its batch-1 model or the test images are unavailable";
 
   hrt::Vector<hrt::core::Image> images;
   for (auto& frame : frames) {
     images.push_back(*hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, frame.data, hrt::core::ImageFormat::InterBgr,
                                              {frame.cols, frame.rows}, hrt::core::DataType::Uint8, frame.step));
   }
-  const auto single = hrt::model::ImageModel<Result>::create(single_algo);
-  const auto batched = hrt::model::ImageModel<Result>::create(batch_algo);
-  ASSERT_EQ(batched->batch(), 2U);
+  images.push_back(images[1]);
+  images.push_back(images[0]);
+  auto single = hrt::model::ImageModel<Result>::create(single_algo);
+  hrt::SharedPtr<hrt::core::Context> context;
+  if (device != "cpu") {
+    context = hrt::core::Context::create(hrt::core::DeviceType::Cuda);
+    if (context == nullptr)
+      GTEST_SKIP() << "CUDA device is unavailable";
+    auto engine_path = hrt::test::template_model(batch_algo);
+    engine_path.replace_extension("engine");
+    if (!std::filesystem::is_regular_file(engine_path))
+      GTEST_SKIP() << "TensorRT batch-4 fixture is unavailable: " << engine_path;
+    batch_algo["config"]["engine"]["backends"] = {{{"engine_type", "trt"}, {"data", engine_path.string()}}};
+    batch_algo["config"]["preprocess"]["device"] = device == "trt_cpu" ? "cpu" : "cuda";
+    single = hrt::model::ImageModel<Result>::create(batch_algo, context);
+  }
+  const auto batched = context ? hrt::model::ImageModel<Result>::create(batch_algo, context)
+                               : hrt::model::ImageModel<Result>::create(batch_algo);
+  ASSERT_NE(batched, nullptr);
+  ASSERT_EQ(batched->batch(), 4U);
   const auto results = batched->process_sync(images);
   ASSERT_TRUE(results);
   ASSERT_EQ(results->size(), images.size());
@@ -573,6 +591,12 @@ auto expect_batch_matches_single(std::string_view name) -> void {
     EXPECT_FALSE(expected->empty());
     expect_same((*results)[i], *expected);
   }
+  images.pop_back();
+  const auto partial = batched->process_sync(images);
+  ASSERT_TRUE(partial);
+  ASSERT_EQ(partial->size(), images.size());
+  for (std::size_t i = 0; i < images.size(); ++i)
+    expect_same((*partial)[i], (*results)[i]);
 }
 
 TEST_F(ImageModelTest, MatchesBatchOneOnStaticBatchModels) {
@@ -581,6 +605,19 @@ TEST_F(ImageModelTest, MatchesBatchOneOnStaticBatchModels) {
   expect_batch_matches_single<hrt::postprocess::KeypointResultMap>("yolov8n_pose");
   expect_batch_matches_single<hrt::postprocess::SegmentResultMap>("yolov8n_segment");
 }
+
+#ifdef HRT_TEST_TENSORRT
+TEST_F(ImageModelTest, MatchesBatchOneOnTensorRtStaticBatchModels) {
+  for (const auto device : {"trt_cpu", "trt_cuda"}) {
+    SCOPED_TRACE(device);
+    expect_batch_matches_single<hrt::postprocess::ClassifyResult>("yolov8n_classify", device);
+    expect_batch_matches_single<hrt::postprocess::DetectResultMap>("yolov8n_detect", device);
+    expect_batch_matches_single<hrt::postprocess::KeypointResultMap>("yolov8n_pose", device);
+    expect_batch_matches_single<hrt::postprocess::SegmentResultMap>("yolov8n_segment", device);
+  }
+}
+
+#endif
 #endif
 
 } // namespace

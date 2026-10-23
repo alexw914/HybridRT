@@ -363,7 +363,7 @@ backend in `hrtc_device_config.json` therefore uses `NeuralNetwork`.
 
 Template model files live in `assets/test/onnx/`, named after their postprocessor.
 All external input/output dimensions are positive, fixed integers; batch is 1 except in the
-static batch-2 fixtures below. `Ocr` has
+static batch-4 fixtures below. `Ocr` has
 separate `OcrDetection.onnx`, `OcrRecognition.onnx` (tiny) and `OcrRecognitionSmall.onnx`
 files because detection and recognition need different networks. `Embedding.onnx` is a
 copy of the classifier and returns its 1000 class scores as an example vector.
@@ -395,40 +395,43 @@ Single-thread timing results and reproduction commands are in [benchmark.md](../
 | `yolov5_detect` | `YoloV5Detect.onnx` | `1 x 3 x 640 x 640` | `968d45c63e7bf811a7fe0e6e73c0740afd079996985608714b79d39faffc6fd3` |
 | `rtdetr_l_detect` | `DetrDetect.onnx` | `1 x 3 x 640 x 640` | `89e10a08e26eb872fa9cd6d0397b2eb9569fa2df5d1d37653ae5fa36fc08e862` |
 | `yolo26n_e2e_detect` | `E2EDetect.onnx` | `1 x 3 x 640 x 640` | `cc54c1e9bfc069212f274d07ca10450ad08b83f078ac8e09cd1e532eeeb1a100` |
-| `yolov8n_detect` | `GeneralDetect.onnx` | `1 x 3 x 640 x 640` | `c8ed00825b62420ebf5c834bcd1ae802035e70a398af7ec656348c569d38967d` |
+| `yolov8n_detect` | `GeneralDetect.onnx` | `1 x 3 x 480 x 640` | `a8ede0ffb077b655aa2d1be3044298f4374d1d278d84f6d87ab2cd404895d071` |
 | `yolo26n_e2e_obb` | `E2ERotated.onnx` | `1 x 3 x 640 x 640` | `13476c2bb3d7966df6c880036ecc4a3cdf41318e3d2e6bca483f4306ef691f63` |
 | `yolov8n_obb_raw` | `YoloV8Rotated.onnx` | `1 x 3 x 480 x 640` | `36223a5306c60c620186aa58a5a9c9bdcd34ad181c119d096edb8c2d30089a4a` |
 | `yolo26n_obb_raw` | `Yolo26Rotated.onnx` | `1 x 3 x 640 x 640` | `9393f99be7ee049e797b77032e6b9d95dc07ff5d6ba275cf626b9bda5d0a494c` |
 | `yolov5_rotated` | `YoloV5Rotated.onnx` | `1 x 3 x 1280 x 1280` | `afffc7a2813e15e9137648bc7655155827b1cdace2a0999b1919d1196be57dfb` |
 | `yolov8n_obb` | `GeneralRotated.onnx` | `1 x 3 x 1024 x 1024` | `c207d49b65f8173265f2e2ff66f59bfef54b0b6d6da578a31c223b190e13dd60` |
-| `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 224 x 224` | `b3b8c37ac7d6bfe052fcc17e4d018bd79a68f354bee845e9073f080b3705ce95` |
+| `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 224 x 224` | `12b84b2d5f63b9e5a7d8122643d61051810dffad6642bee875c4cd4f24d79a87` |
 | `yolov8n_classify_embedding` | `Embedding.onnx` | `1 x 3 x 224 x 224` | `b3b8c37ac7d6bfe052fcc17e4d018bd79a68f354bee845e9073f080b3705ce95` |
-| `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 640 x 640` | `09ecef03a3b398c2d40a6435acb2fe94bfc5185306605b7e6ad65b0b2f2ef14d` |
+| `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 640 x 640` | `de42e8e71ff022fe44287e6723fbf6429d1fee84084e63fd19630e1d6496785d` |
 | `yolov8n_face` | `YoloV8Keypoint.onnx` | `1 x 3 x 640 x 640` | `af09683be4937ebe23e9da0346cbf46cd937b73ed5fac986e6205e6c7cdd2c25` |
 | `yolo26n_pose_raw` | `Yolo26Keypoint.onnx` | `1 x 3 x 640 x 640` | `0c0b46ec46f05727218ee2431942e02f40d9f928a4a12d720ccadfba715fd59a` |
 | `yolo26n_e2e_pose` | `E2EKeypoint.onnx` | `1 x 3 x 640 x 640` | `18be1d966c3c0c5c38a81fc301933ec94bb2633313e2806f14999de3001a2f8f` |
 | `rtmo_s_pose` | `RtmoKeypoint.onnx` | `1 x 3 x 640 x 640` | `f686d078c403183ebb428fc7b3818bc7ebb838fd8486423dc20688a1f8079c31` |
 | `rtmpose_m_pose` | `GeneralKeypoint.onnx` | `1 x 3 x 256 x 192` | `204ed5161fc30dd26f1af8e40d87426a2f5885828840e4abdad2e22b77d487d7` |
-| `yolov8n_segment` | `GeneralYoloSegment.onnx` | `1 x 3 x 480 x 640` | `37209133b802f353f854803e87dd32ca33c0c651fd223bd9d69f189850b954cb` |
-| `yolov8n_segment_raw` | `YoloV8Segment.onnx` | `1 x 3 x 480 x 640` | `9cd15a87c38249f003f7830f084a3fdffcdc3c56b4ca42b18252faf41b340c2a` |
+| `yolov8n_segment` | `GeneralYoloSegment.onnx` | `1 x 3 x 480 x 640` | `1f05bc76e1a542931f9a4b0c21f9d281ff4a8136a3cf8d03869996b0b9a5d124` |
+| `yolov8n_segment_raw` | `YoloV8Segment.onnx` | `1 x 3 x 480 x 640` | `fdbd46dc0a5ae4bb1cb1b32010fa131a43f370043077555f921890bcd2880494` |
 | `yolo26n_segment_raw` | `Yolo26Segment.onnx` | `1 x 3 x 640 x 640` | `52f066c5e682fddf899466d975d4f7c0bc727fb49424072fc7d986f9d09b8ed8` |
 | `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `78cb9fff568e1a006523a54ae96c1f43ea6b376e93dd637e10eede16128335f4` |
 | `lraspp_voc_segment` | `SemanticSegment.onnx` | `1 x 3 x 512 x 512` | `70e2c6d571872208589c43a491fde37fbf73376481343119a5c67dfd55df8c6f` |
 
-Static batch-2 fixtures, named `<base>Batch2.onnx`, are built by local
-`assets/test/scripts/make_batch.py` from the batch-1 files: the input is sliced into its two samples,
-each runs through its own copy of the graph with shared weights, and the outputs are concatenated on
-dim 0. Their template algos add `_batch2` to the base algo name. Built on 2026-10-23 with ONNX 1.23.2
-from the local base files listed below; with ONNX Runtime 1.23.2 CPU each sample's outputs equal the
-base model's on random inputs (maximum difference 0), and `ImageModelTest.MatchesBatchOneOnStaticBatchModels`
-checks that one batch of bus.jpg and zidane.jpg gives the per-image results of the base algo.
+Static batch-4 fixtures are exported directly from official [Ultralytics weights](https://github.com/ultralytics/assets/releases/tag/v8.3.0),
+using local `assets/test/scripts/export_batch4.py`: Ultralytics 8.4.8, PyTorch 2.9.1,
+ONNX 1.20.1, opset 17, `batch=4`, `imgsz=[480,640]`, `dynamic=False`,
+`simplify=False`, FP32. Batch-1 reference models are exported from the same weights.
+These are native batched networks. Their template algos end in `_batch4`.
+`ImageModelTest.MatchesBatchOneOnStaticBatchModels` compares four images and a partial batch
+against individual CPU calls. `MatchesBatchOneOnTensorRtStaticBatchModels` compares batched
+and individual calls on the same TensorRT model with CPU and CUDA preprocessing separately;
+OpenCV and NPP interpolation need not produce identical pixels. TensorRT fixtures are local
+`.engine` files beside the ONNX files, built with TensorRT 10.14.1, FP32, `--noTF32`.
 
-| Algo | ONNX file in `assets/test/onnx/` | Input NCHW | Outputs | Base file SHA256 | SHA256 |
+| Algo | ONNX file in `assets/test/onnx/` | Input NCHW | Outputs | Batch-1 SHA256 | Batch-4 SHA256 |
 | --- | --- | --- | --- | --- | --- |
-| `yolov8n_classify_batch2` | `GeneralClassifyBatch2.onnx` | `2 x 3 x 480 x 640` | `2 x 1000` | `29e1963b77c3d1e38d3c8772ecbce294e48aa3287c3f703c39bc4e8d0b1a0f1c` | `31531b92ed0e4a989fc51464fa8ed81c8cd8eef01f5d334166bbf679d7296673` |
-| `yolov8n_detect_batch2` | `GeneralDetectBatch2.onnx` | `2 x 3 x 480 x 640` | `2 x 84 x 6300` | `fa2c856b0effedce4f49fffd121f438247a64c8f633bf0e6d5e5960e869ccc5a` | `cbdeab2964cca82dcea5668b3870e2de6da4685824ffd8ebfb17d29feb57ad45` |
-| `yolov8n_pose_batch2` | `GeneralYoloPoseBatch2.onnx` | `2 x 3 x 480 x 640` | `2 x 56 x 6300` | `6fc546ff26e38b25e29c047fcacd71d3607705c0b5a590f0bd97492aed459f94` | `d073f0f9a72b62143653f5e090d7133a74ec02583cf9b69f6d6acecb91fe032e` |
-| `yolov8n_segment_batch2` | `GeneralYoloSegmentBatch2.onnx` | `2 x 3 x 480 x 640` | `2 x 116 x 6300`, `2 x 32 x 120 x 160` | `9373c971598d799b54e6911e5a665b99653eb0be611471c28ae9dc3676a6a995` | `5ef132c211a65a594fb4c0f41ad4659c1bd6de63f013f49500d6f8076a20a04a` |
+| `yolov8n_classify_batch4` | `GeneralClassifyBatch4.onnx` | `4 x 3 x 480 x 640` | `4 x 1000` | `12b84b2d5f63b9e5a7d8122643d61051810dffad6642bee875c4cd4f24d79a87` | `7d6383b06d8574a40a437b0d92c2a431fa1e1dc41ec24f89af1f712f0a3907fa` |
+| `yolov8n_detect_batch4` | `GeneralDetectBatch4.onnx` | `4 x 3 x 480 x 640` | `4 x 84 x 6300` | `a8ede0ffb077b655aa2d1be3044298f4374d1d278d84f6d87ab2cd404895d071` | `2a186204dc8f28e1cf2e77441193661fdf2ae3071f63c969c6cc1cd8fcadfe2c` |
+| `yolov8n_pose_batch4` | `GeneralYoloPoseBatch4.onnx` | `4 x 3 x 480 x 640` | `4 x 56 x 6300` | `de42e8e71ff022fe44287e6723fbf6429d1fee84084e63fd19630e1d6496785d` | `5673504bafdac64d9f90775c061011319625fa6d45dc084990e6460d728ee9ab` |
+| `yolov8n_segment_batch4` | `GeneralYoloSegmentBatch4.onnx` | `4 x 3 x 480 x 640` | `4 x 116 x 6300; 4 x 32 x 120 x 160` | `1f05bc76e1a542931f9a4b0c21f9d281ff4a8136a3cf8d03869996b0b9a5d124` | `9baa669e562fd20ebbf74744d185dda7777b52dee02c81ba77c4c871c238995c` |
 
 Additional OCR fixtures use official PaddlePaddle ONNX weights. The `ppocrv6_tiny_det`,
 `ppocrv6_tiny_rec` and `ppocrv6_small_rec` template algos run through `OcrModel`.
