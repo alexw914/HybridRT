@@ -59,20 +59,20 @@ auto align(std::size_t value, std::size_t alignment) -> std::size_t {
 }
 
 auto dma_release(BasePointer& pointer) -> void {
-  if (pointer.cpu != nullptr)
-    munmap(pointer.cpu, pointer.capacity);
-  if (pointer.device != 0)
-    close(static_cast<int>(pointer.device));
-  pointer.cpu = nullptr;
-  pointer.device = 0;
-  pointer.capacity = 0;
+  if (pointer.cpu_ != nullptr)
+    munmap(pointer.cpu_, pointer.capacity_);
+  if (pointer.device_ != 0)
+    close(static_cast<int>(pointer.device_));
+  pointer.cpu_ = nullptr;
+  pointer.device_ = 0;
+  pointer.capacity_ = 0;
 }
 
 // Wrapped dma-bufs keep the caller's fd and drop only a mapping made here.
 auto unmap_release(BasePointer& pointer) -> void {
-  if (pointer.cpu != nullptr)
-    munmap(pointer.cpu, pointer.capacity);
-  pointer.cpu = nullptr;
+  if (pointer.cpu_ != nullptr)
+    munmap(pointer.cpu_, pointer.capacity_);
+  pointer.cpu_ = nullptr;
 }
 
 // Returns the dma-buf fd, or -1 with errno set.
@@ -123,10 +123,10 @@ auto dma_allocate(BasePointer& pointer, std::size_t size, DmaHeapUse use) -> boo
                     "leave the work to the CPU",
                     heap.path);
     }
-    pointer.cpu = mapped;
-    pointer.device = static_cast<std::uintptr_t>(fd);
-    pointer.capacity = size;
-    pointer.below_4gb = heap.below_4gb;
+    pointer.cpu_ = mapped;
+    pointer.device_ = static_cast<std::uintptr_t>(fd);
+    pointer.capacity_ = size;
+    pointer.below_4gb_ = heap.below_4gb;
     return true;
   }
   KZ_LOG_ERROR("dma-buf: allocation of {} bytes failed in every dma-heap: {}", size, std::strerror(error));
@@ -134,10 +134,10 @@ auto dma_allocate(BasePointer& pointer, std::size_t size, DmaHeapUse use) -> boo
 }
 
 auto dma_sync(const BasePointer& pointer, __u64 flags) -> bool {
-  if (pointer.device == 0)
+  if (pointer.device_ == 0)
     return true;
   DmaBufferSync sync{flags | kSyncReadWrite};
-  if (ioctl(static_cast<int>(pointer.device), kDmaBufferSync, &sync) == 0)
+  if (ioctl(static_cast<int>(pointer.device_), kDmaBufferSync, &sync) == 0)
     return true;
   KZ_LOG_ERROR("dma-buf: sync failed: {}", std::strerror(errno));
   return false;
@@ -161,8 +161,8 @@ DmaBufferMemory::DmaBufferMemory(const core::Shape& shape, const core::Stride& s
     : core::Memory(core::MemoryType::DmaBuffer), use_(use) {
   shape_ = shape;
   stride_ = stride;
-  pointer_->owned = true;
-  pointer_->release = dma_release;
+  pointer_->owned_ = true;
+  pointer_->release_ = dma_release;
   dma_allocate(*pointer_, stride_.empty() ? 0 : stride_[0], use_);
 }
 
@@ -171,11 +171,11 @@ DmaBufferMemory::DmaBufferMemory(int fd, void* host, std::size_t size, const cor
     : core::Memory(core::MemoryType::DmaBuffer), use_(DmaHeapUse::Device32) {
   shape_ = shape;
   stride_ = stride;
-  pointer_->device = static_cast<std::uintptr_t>(fd);
-  pointer_->capacity = size;
-  pointer_->below_4gb = true;
+  pointer_->device_ = static_cast<std::uintptr_t>(fd);
+  pointer_->capacity_ = size;
+  pointer_->below_4gb_ = true;
   if (host != nullptr) {
-    pointer_->cpu = host;
+    pointer_->cpu_ = host;
     return;
   }
   auto* mapped = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
@@ -183,8 +183,8 @@ DmaBufferMemory::DmaBufferMemory(int fd, void* host, std::size_t size, const cor
     KZ_LOG_ERROR("dma-buf: cannot map fd {}: {}", fd, std::strerror(errno));
     return;
   }
-  pointer_->cpu = mapped;
-  pointer_->release = unmap_release;
+  pointer_->cpu_ = mapped;
+  pointer_->release_ = unmap_release;
 }
 
 DmaBufferMemory::DmaBufferMemory(SharedPtr<BasePointer> pointer, DmaHeapUse use, const core::Shape& shape,
@@ -203,16 +203,16 @@ auto DmaBufferMemory::resize(const core::Shape& shape, const core::Stride& strid
   if (stride.empty()) {
     memory_stride = aligned_stride(shape);
   } else {
-    if (shape == shape_ && stride == stride_ && stride.front() <= pointer_->capacity)
+    if (shape == shape_ && stride == stride_ && stride.front() <= pointer_->capacity_)
       return true;
     if (!check_stride(shape, stride))
       return false;
     memory_stride = stride;
   }
   const auto size = memory_stride.front();
-  if (size > pointer_->capacity) {
-    if (!pointer_->owned) {
-      KZ_LOG_ERROR("DmaBufferMemory: cannot grow wrapped memory from {} to {} bytes", pointer_->capacity, size);
+  if (size > pointer_->capacity_) {
+    if (!pointer_->owned_) {
+      KZ_LOG_ERROR("DmaBufferMemory: cannot grow wrapped memory from {} to {} bytes", pointer_->capacity_, size);
       return false;
     }
     if (!dma_allocate(*pointer_, size, use_))
@@ -225,13 +225,13 @@ auto DmaBufferMemory::resize(const core::Shape& shape, const core::Stride& strid
 
 auto DmaBufferMemory::shrink_to_fit() -> bool {
   const auto size = stride_.empty() ? 0 : stride_[0];
-  if (!pointer_->owned || size == pointer_->capacity)
+  if (!pointer_->owned_ || size == pointer_->capacity_)
     return true;
   return dma_allocate(*pointer_, size, use_);
 }
 
 auto DmaBufferMemory::below_4gb() const -> bool {
-  return pointer_->below_4gb;
+  return pointer_->below_4gb_;
 }
 
 // CPU access starts a dma-buf access window; device access ends it.

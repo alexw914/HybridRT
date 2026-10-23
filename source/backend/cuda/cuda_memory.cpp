@@ -15,10 +15,10 @@ namespace hrt::backend {
 namespace {
 
 auto cuda_release(memory::BasePointer& pointer) -> void {
-  if (pointer.device != 0 && cudaFree(reinterpret_cast<void*>(pointer.device)) != cudaSuccess)
+  if (pointer.device_ != 0 && cudaFree(reinterpret_cast<void*>(pointer.device_)) != cudaSuccess)
     KZ_LOG_ERROR("cuda: cudaFree failed: {}", cudaGetErrorString(cudaGetLastError()));
-  pointer.device = 0;
-  pointer.capacity = 0;
+  pointer.device_ = 0;
+  pointer.capacity_ = 0;
 }
 
 auto cuda_allocate(memory::BasePointer& pointer, std::size_t size) -> bool {
@@ -28,8 +28,8 @@ auto cuda_allocate(memory::BasePointer& pointer, std::size_t size) -> bool {
   void* device = nullptr;
   KZ_CHECK_RETURN(cudaMalloc(&device, size) == cudaSuccess, false, "cuda: cudaMalloc({}) failed: {}", size,
                   cudaGetErrorString(cudaGetLastError()));
-  pointer.device = reinterpret_cast<std::uintptr_t>(device);
-  pointer.capacity = size;
+  pointer.device_ = reinterpret_cast<std::uintptr_t>(device);
+  pointer.capacity_ = size;
   return true;
 }
 
@@ -44,8 +44,8 @@ auto address(core::Memory& memory, bool write, core::Stream* stream) -> void* {
 CudaMemory::CudaMemory(const core::Shape& shape, const core::Stride& stride) : core::Memory(core::MemoryType::Cuda) {
   shape_ = shape;
   stride_ = stride;
-  pointer_->owned = true;
-  pointer_->release = cuda_release;
+  pointer_->owned_ = true;
+  pointer_->release_ = cuda_release;
   cuda_allocate(*pointer_, stride_.empty() ? 0 : stride_[0]);
 }
 
@@ -53,8 +53,8 @@ CudaMemory::CudaMemory(std::uintptr_t device, std::size_t size, const core::Shap
     : core::Memory(core::MemoryType::Cuda) {
   shape_ = shape;
   stride_ = stride;
-  pointer_->device = device;
-  pointer_->capacity = size;
+  pointer_->device_ = device;
+  pointer_->capacity_ = size;
 }
 
 CudaMemory::CudaMemory(SharedPtr<memory::BasePointer> pointer, const core::Shape& shape, const core::Stride& stride)
@@ -72,16 +72,16 @@ auto CudaMemory::resize(const core::Shape& shape, const core::Stride& stride) ->
   if (stride.empty()) {
     memory_stride = core::contiguous_stride(shape);
   } else {
-    if (shape == shape_ && stride == stride_ && stride.front() <= pointer_->capacity)
+    if (shape == shape_ && stride == stride_ && stride.front() <= pointer_->capacity_)
       return true;
     if (!memory::check_stride(shape, stride))
       return false;
     memory_stride = stride;
   }
   const auto size = memory_stride.front();
-  if (size > pointer_->capacity) {
-    if (!pointer_->owned) {
-      KZ_LOG_ERROR("CudaMemory: cannot grow wrapped memory from {} to {} bytes", pointer_->capacity, size);
+  if (size > pointer_->capacity_) {
+    if (!pointer_->owned_) {
+      KZ_LOG_ERROR("CudaMemory: cannot grow wrapped memory from {} to {} bytes", pointer_->capacity_, size);
       return false;
     }
     if (!cuda_allocate(*pointer_, size))
@@ -94,7 +94,7 @@ auto CudaMemory::resize(const core::Shape& shape, const core::Stride& stride) ->
 
 auto CudaMemory::shrink_to_fit() -> bool {
   const auto size = stride_.empty() ? 0 : stride_[0];
-  if (!pointer_->owned || size == pointer_->capacity)
+  if (!pointer_->owned_ || size == pointer_->capacity_)
     return true;
   return cuda_allocate(*pointer_, size);
 }

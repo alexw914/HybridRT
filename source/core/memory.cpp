@@ -197,37 +197,37 @@ Memory::Memory(SharedPtr<memory::BasePointer> pointer) : pointer_(std::move(poin
 Memory::~Memory() = default;
 
 auto Memory::have_cpu() const -> bool {
-  return pointer_->cpu != nullptr;
+  return pointer_->cpu_ != nullptr;
 }
 
 auto Memory::have_device() const -> bool {
-  return pointer_->device != 0;
+  return pointer_->device_ != 0;
 }
 
 auto Memory::cpu(Stream* stream) -> const void* {
-  if (!have_cpu() || (pointer_->head == SyncedHead::AtDevice && !sync_to_cpu(stream)))
+  if (!have_cpu() || (pointer_->head_ == SyncedHead::AtDevice && !sync_to_cpu(stream)))
     return nullptr;
-  return pointer_->cpu;
+  return pointer_->cpu_;
 }
 
 auto Memory::mutable_cpu(Stream* stream) -> void* {
   if (cpu(stream) == nullptr)
     return nullptr;
-  pointer_->head = SyncedHead::AtCpu;
-  return pointer_->cpu;
+  pointer_->head_ = SyncedHead::AtCpu;
+  return pointer_->cpu_;
 }
 
 auto Memory::device(Stream* stream) -> std::uintptr_t {
-  if (!have_device() || (pointer_->head == SyncedHead::AtCpu && !sync_to_device(stream)))
+  if (!have_device() || (pointer_->head_ == SyncedHead::AtCpu && !sync_to_device(stream)))
     return 0;
-  return pointer_->device;
+  return pointer_->device_;
 }
 
 auto Memory::mutable_device(Stream* stream) -> std::uintptr_t {
   if (device(stream) == 0)
     return 0;
-  pointer_->head = SyncedHead::AtDevice;
-  return pointer_->device;
+  pointer_->head_ = SyncedHead::AtDevice;
+  return pointer_->device_;
 }
 
 auto Memory::bytes() const -> std::size_t {
@@ -244,24 +244,24 @@ auto Memory::is_contiguous() const -> bool {
 }
 
 auto Memory::memory_type() const -> MemoryType {
-  return pointer_->type;
+  return pointer_->type_;
 }
 
 auto Memory::head() const -> SyncedHead {
-  return pointer_->head;
+  return pointer_->head_;
 }
 
 auto Memory::sync_to_cpu(Stream* stream) -> bool {
   if (!device_to_cpu(stream))
     return false;
-  pointer_->head = SyncedHead::Synced;
+  pointer_->head_ = SyncedHead::Synced;
   return true;
 }
 
 auto Memory::sync_to_device(Stream* stream) -> bool {
   if (!cpu_to_device(stream))
     return false;
-  pointer_->head = SyncedHead::Synced;
+  pointer_->head_ = SyncedHead::Synced;
   return true;
 }
 

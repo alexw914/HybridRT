@@ -17,10 +17,10 @@ namespace hrt::backend {
 namespace {
 
 auto host_release(memory::BasePointer& pointer) -> void {
-  if (pointer.cpu != nullptr && cudaFreeHost(pointer.cpu) != cudaSuccess)
+  if (pointer.cpu_ != nullptr && cudaFreeHost(pointer.cpu_) != cudaSuccess)
     KZ_LOG_ERROR("cuda: cudaFreeHost failed: {}", cudaGetErrorString(cudaGetLastError()));
-  pointer.cpu = nullptr;
-  pointer.capacity = 0;
+  pointer.cpu_ = nullptr;
+  pointer.capacity_ = 0;
 }
 
 auto host_allocate(memory::BasePointer& pointer, std::size_t size) -> bool {
@@ -30,16 +30,16 @@ auto host_allocate(memory::BasePointer& pointer, std::size_t size) -> bool {
   void* host = nullptr;
   const auto status = cudaHostAlloc(&host, size, cudaHostAllocDefault);
   KZ_CHECK_RETURN(status == cudaSuccess, false, "cuda: cudaHostAlloc({}) failed: {}", size, cudaGetErrorString(status));
-  pointer.cpu = host;
-  pointer.capacity = size;
+  pointer.cpu_ = host;
+  pointer.capacity_ = size;
   return true;
 }
 
 class CudaHostMemory final : public core::Memory {
 public:
   CudaHostMemory() : core::Memory(core::MemoryType::Cpu) {
-    pointer_->owned = true;
-    pointer_->release = host_release;
+    pointer_->owned_ = true;
+    pointer_->release_ = host_release;
   }
 
   CudaHostMemory(SharedPtr<memory::BasePointer> pointer, const core::Shape& shape, const core::Stride& stride)
@@ -55,13 +55,13 @@ public:
     if (stride.empty()) {
       memory_stride = core::contiguous_stride(shape);
     } else {
-      if (shape == shape_ && stride == stride_ && stride.front() <= pointer_->capacity)
+      if (shape == shape_ && stride == stride_ && stride.front() <= pointer_->capacity_)
         return true;
       if (!memory::check_stride(shape, stride))
         return false;
       memory_stride = stride;
     }
-    if (memory_stride.front() > pointer_->capacity && !host_allocate(*pointer_, memory_stride.front()))
+    if (memory_stride.front() > pointer_->capacity_ && !host_allocate(*pointer_, memory_stride.front()))
       return false;
     shape_ = shape;
     stride_ = std::move(memory_stride);
@@ -70,7 +70,7 @@ public:
 
   auto shrink_to_fit() -> bool override {
     const auto size = stride_.empty() ? 0 : stride_.front();
-    return size == pointer_->capacity || host_allocate(*pointer_, size);
+    return size == pointer_->capacity_ || host_allocate(*pointer_, size);
   }
 };
 

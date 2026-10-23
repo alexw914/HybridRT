@@ -14,11 +14,11 @@
 namespace hrt::memory {
 
 struct BasePointer {
-  explicit BasePointer(core::MemoryType memory_type) : type(memory_type) {}
+  explicit BasePointer(core::MemoryType memory_type) : type_(memory_type) {}
 
   ~BasePointer() {
-    if (release != nullptr)
-      release(*this);
+    if (release_ != nullptr)
+      release_(*this);
   }
 
   BasePointer(const BasePointer&) = delete;
@@ -26,19 +26,19 @@ struct BasePointer {
   BasePointer(BasePointer&&) = delete;
   auto operator=(BasePointer&&) -> BasePointer& = delete;
 
-  const core::MemoryType type;
-  void* cpu = nullptr;
-  std::uintptr_t device = 0;
+  const core::MemoryType type_;
+  void* cpu_ = nullptr;
+  std::uintptr_t device_ = 0;
   // Usable bytes; only owned storage can grow.
-  std::size_t capacity = 0;
-  bool owned = false;
+  std::size_t capacity_ = 0;
+  bool owned_ = false;
   // DmaBuffer: every page lies below 4 GB, where devices with 32-bit DMA reach it.
-  bool below_4gb = false;
-  core::SyncedHead head = core::SyncedHead::Synced;
-  kitzoo::memory::ByteBuffer host_storage;
-  // Frees owned storage outside host_storage (device or pinned host); null
-  // for host_storage and wrapped storage.
-  void (*release)(BasePointer&) = nullptr;
+  bool below_4gb_ = false;
+  core::SyncedHead head_ = core::SyncedHead::Synced;
+  kitzoo::memory::ByteBuffer host_storage_;
+  // Frees owned storage outside host_storage_ (device or pinned host); null
+  // for host_storage_ and wrapped storage.
+  void (*release_)(BasePointer&) = nullptr;
 };
 
 // Checks that the byte stride matches the non-empty static shape.
