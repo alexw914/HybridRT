@@ -21,8 +21,10 @@ namespace {
 // Matches common SIMD widths so kernels can use aligned loads.
 constexpr std::size_t kCpuAlignment = 64;
 
-// ByteBuffer growth keeps contents; callers treat resized memory as undefined.
+// Resized memory is undefined, so the old block is freed first: growth neither copies
+// contents nor overallocates as ByteBuffer's geometric growth would.
 auto cpu_allocate(BasePointer& pointer, std::size_t size) -> void {
+  pointer.host_storage.reset();
   pointer.host_storage.resize(size);
   pointer.cpu = pointer.host_storage.data();
   pointer.capacity = size;
