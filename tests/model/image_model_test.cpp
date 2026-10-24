@@ -626,6 +626,12 @@ auto expect_batch_matches_single(std::string_view name, std::string_view device 
       GTEST_SKIP() << "TensorRT batch-4 fixture is unavailable: " << engine_path;
     batch_algo["config"]["engine"]["backends"] = {{{"engine_type", "trt"}, {"data", engine_path.string()}}};
     batch_algo["config"]["preprocess"]["device"] = device == "trt_cpu" ? "cpu" : "cuda";
+    // Plans load only on the TensorRT version and platform that built them.
+    const auto param = hrt::hrtc::load_algo(batch_algo);
+    context->set_current();
+    auto probe = hrt::engine::Engine::create(hrt::engine::engine_type_from("trt"));
+    if (!param || !probe || !probe->initialize(param->engines.front()))
+      GTEST_SKIP() << "TensorRT batch-4 fixture does not load here: " << engine_path;
     single = hrt::model::ImageModel<Result>::create(batch_algo, context);
   }
   const auto batched = context ? hrt::model::ImageModel<Result>::create(batch_algo, context)
