@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <opencv2/core/utility.hpp>
 
 #include "include/postprocess/common.hpp"
 
@@ -20,7 +21,7 @@ namespace {
 
 // Adds weights[j] * channel j of the region, read as T, to `logits`.
 template <typename T>
-auto accumulate(const HeadGridView& grid, const Vector<float>& weights, const core::Rect& region, cv::Mat& logits)
+auto accumulate(const HeadGridView& grid, std::span<const float> weights, const core::Rect& region, cv::Mat& logits)
     -> void {
   const auto step = grid.col_step();
   for (std::size_t j = 0; j < weights.size(); ++j) {
@@ -42,9 +43,9 @@ auto accumulate(const HeadGridView& grid, const Vector<float>& weights, const co
 
 } // namespace
 
-auto MaskDecoder::decode(const HeadGridView& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
-                         const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit)
-    -> Mask {
+auto MaskDecoder::decode(const HeadGridView& prototypes, std::span<const float> coefficients,
+                         const core::Rect2f& net_box, const core::Rect2f& source_box,
+                         const preprocess::ImageTransform& transform, float mask_logit) -> Mask {
   Mask mask;
   mask.rect = core::intersect(core::cover_pixels(source_box), transform.src_roi);
   if (mask.rect.empty())
@@ -117,6 +118,41 @@ auto MaskDecoder::decode(const HeadGridView& prototypes, const Vector<float>& co
       bits[x] = top[x] + (bottom[x] - top[x]) * tap.weight > mask_logit ? 1 : 0;
   }
   return mask;
+}
+
+auto MaskBatch::add(std::span<const float> coefficients, const core::Rect2f& net_box, const core::Rect2f& source_box,
+                    std::int64_t cls, std::size_t index) -> void {
+  jobs_.push_back({.net_box = net_box,
+                   .source_box = source_box,
+                   .cls = cls,
+                   .index = index,
+                   .first = coefficients_.size(),
+                   .count = coefficients.size()});
+  coefficients_.insert(coefficients_.end(), coefficients.begin(), coefficients.end());
+}
+
+auto MaskBatch::decode(const HeadGridView& prototypes, const preprocess::ImageTransform& transform, float mask_logit,
+                       SegmentResultMap& result) -> void {
+  // Stripe s decodes objects s, s + stripes, ... with decoders_[s]; OpenCV runs each stripe on one thread.
+  const auto stripes = std::min(jobs_.size(), static_cast<std::size_t>(std::max(1, cv::getNumThreads())));
+  if (decoders_.size() < stripes)
+    decoders_.resize(stripes);
+  const auto run = [&](const cv::Range& range) -> void {
+    for (auto s = static_cast<std::size_t>(range.start); s < static_cast<std::size_t>(range.end); ++s) {
+      for (auto i = s; i < jobs_.size(); i += stripes) {
+        const auto& job = jobs_[i];
+        result.at(job.cls)[job.index].mask =
+            decoders_[s].decode(prototypes, std::span(coefficients_).subspan(job.first, job.count), job.net_box,
+                                job.source_box, transform, mask_logit);
+      }
+    }
+  };
+  if (stripes > 1)
+    cv::parallel_for_(cv::Range(0, static_cast<int>(stripes)), run);
+  else if (stripes == 1)
+    run(cv::Range(0, 1));
+  jobs_.clear();
+  coefficients_.clear();
 }
 
 auto MaskDecoder::bilinear_taps(Vector<Tap>& out, int count, double scale, double offset, int size) -> void {

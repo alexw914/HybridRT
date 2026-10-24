@@ -102,11 +102,12 @@ private:
           continue;
         for (std::size_t j = 0; j < coefficients.size(); ++j)
           coefficients[j] = at(4 + classes + j, anchors_[cls][k]);
-        auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
-        object.box = {box, scores_[cls][k], static_cast<std::int64_t>(cls), -1};
-        object.mask = masks_.decode(prototypes, coefficients, rects_[cls][k], box, transform, mask_logit_);
+        auto& objects = result[static_cast<std::int64_t>(cls)];
+        objects.emplace_back().box = {box, scores_[cls][k], static_cast<std::int64_t>(cls), -1};
+        masks_.add(coefficients, rects_[cls][k], box, static_cast<std::int64_t>(cls), objects.size() - 1);
       }
     }
+    masks_.decode(prototypes, transform, mask_logit_, result);
   }
 
   GeneralYoloSegmentParam param_;
@@ -117,7 +118,7 @@ private:
   std::size_t detections_ = 0;
   std::size_t prototypes_ = 1;
   float mask_logit_ = 0.0F;
-  MaskDecoder masks_;
+  MaskBatch masks_;
 };
 
 } // namespace

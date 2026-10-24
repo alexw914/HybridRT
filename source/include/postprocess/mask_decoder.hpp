@@ -13,6 +13,7 @@
 
 #include <opencv2/core.hpp>
 #include <optional>
+#include <span>
 
 namespace hrt::postprocess {
 
@@ -25,7 +26,7 @@ public:
   // the box's source pixels and thresholded as a logit. The prototype grid
   // has one channel per coefficient; only the box region is read, and int8
   // prototypes are accumulated without being dequantized.
-  auto decode(const HeadGridView& prototypes, const Vector<float>& coefficients, const core::Rect2f& net_box,
+  auto decode(const HeadGridView& prototypes, std::span<const float> coefficients, const core::Rect2f& net_box,
               const core::Rect2f& source_box, const preprocess::ImageTransform& transform, float mask_logit) -> Mask;
 
 private:
@@ -43,6 +44,33 @@ private:
   Vector<Tap> rows_;
   Vector<float> across_;
   Vector<float> weights_;
+};
+
+// The masks of one result, decoded together on OpenCV's threads after every
+// object is known: each stripe of objects has its own decoder scratch.
+class MaskBatch {
+public:
+  // Queues the mask of result[cls][index]; copies the coefficients.
+  auto add(std::span<const float> coefficients, const core::Rect2f& net_box, const core::Rect2f& source_box,
+           std::int64_t cls, std::size_t index) -> void;
+
+  // Decodes every queued mask into `result` and empties the queue.
+  auto decode(const HeadGridView& prototypes, const preprocess::ImageTransform& transform, float mask_logit,
+              SegmentResultMap& result) -> void;
+
+private:
+  struct Job {
+    core::Rect2f net_box;
+    core::Rect2f source_box;
+    std::int64_t cls = 0;
+    std::size_t index = 0;
+    std::size_t first = 0; // Offset of the coefficients in coefficients_.
+    std::size_t count = 0;
+  };
+
+  Vector<Job> jobs_;
+  Vector<float> coefficients_;
+  Vector<MaskDecoder> decoders_;
 };
 
 // Outputs of a raw per-stride segmentation model: `heads` in engine output order and

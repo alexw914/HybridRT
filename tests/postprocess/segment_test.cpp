@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 #include <limits>
+#include <opencv2/core/utility.hpp>
 
 #include "fake_engine.hpp"
 
@@ -75,6 +76,59 @@ TEST(SegmentTest, DecodesYoloInstanceMask) {
                                       hrt::test::buffer_of(proto(DataType::Float32, {1, 2, 4, 4}), prototypes())},
                                      hrt::test::identity(16, 16)));
   expect_left_half_mask(result);
+}
+
+// Masks decode in parallel on OpenCV's threads; every object must get the
+// mask a single thread gives it, whatever its class and position.
+TEST(SegmentTest, DecodesManyMasksAlikeOnOneAndSeveralThreads) {
+  constexpr std::uint32_t kAnchors = 24;
+  FakeEngine engine({proto(DataType::Float32, {1, 3, 64, 64})},
+                    {proto(DataType::Float32, {1, 8, kAnchors}), proto(DataType::Float32, {1, 2, 16, 16})});
+  auto postprocessor = hrt::postprocess::create_segment_postprocessor(
+      "GeneralYoloSegment", Json::parse(R"({"class_num": 2, "confidence_threshold": [0.5], "iou_threshold": [0.45]})"),
+      engine);
+  ASSERT_NE(postprocessor, nullptr);
+  // Rows: cx, cy, w, h, two class scores, two coefficients; boxes on a 6 x 4 grid do not overlap.
+  hrt::Vector<float> detections(8 * kAnchors);
+  for (std::uint32_t i = 0; i < kAnchors; ++i) {
+    const auto row = [&](std::uint32_t r) -> float& { return detections[r * kAnchors + i]; };
+    row(0) = 5.0F + 10.0F * static_cast<float>(i % 6);
+    row(1) = 8.0F + 15.0F * static_cast<float>(i / 6);
+    row(2) = 7.0F + static_cast<float>(i % 3);
+    row(3) = 9.0F + static_cast<float>(i % 4);
+    row(4 + i % 2) = 0.9F;
+    row(6) = 1.0F + 0.1F * static_cast<float>(i);
+    row(7) = -0.5F;
+  }
+  hrt::Vector<float> protos(2 * 16 * 16);
+  for (std::size_t k = 0; k < protos.size(); ++k)
+    protos[k] = static_cast<float>((k * 37) % 23) - 11.0F;
+  const auto run = [&](int threads) -> hrt::postprocess::SegmentResultMap {
+    cv::setNumThreads(threads);
+    hrt::postprocess::SegmentResultMap result;
+    EXPECT_TRUE(postprocessor->process(result,
+                                       {hrt::test::buffer_of(proto(DataType::Float32, {1, 8, kAnchors}), detections),
+                                        hrt::test::buffer_of(proto(DataType::Float32, {1, 2, 16, 16}), protos)},
+                                       hrt::test::identity(64, 64)));
+    return result;
+  };
+  const auto threads = cv::getNumThreads();
+  const auto serial = run(1);
+  const auto parallel = run(4);
+  cv::setNumThreads(threads);
+  ASSERT_EQ(serial.size(), 2U);
+  ASSERT_EQ(parallel.size(), serial.size());
+  std::size_t masks = 0;
+  for (const auto& [cls, objects] : serial) {
+    ASSERT_EQ(parallel.at(cls).size(), objects.size());
+    for (std::size_t k = 0; k < objects.size(); ++k) {
+      EXPECT_EQ(parallel.at(cls)[k].box.rect, objects[k].box.rect);
+      EXPECT_EQ(parallel.at(cls)[k].mask.rect, objects[k].mask.rect);
+      EXPECT_EQ(parallel.at(cls)[k].mask.data, objects[k].mask.data);
+      masks += objects[k].mask.data.empty() ? 0U : 1U;
+    }
+  }
+  EXPECT_EQ(masks, kAnchors);
 }
 
 TEST(SegmentTest, DecodesInt8Detections) {

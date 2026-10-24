@@ -117,6 +117,8 @@ auto BM_Type(benchmark::State& state) -> void {
   state.SetLabel(type + ":" + name);
   state.counters["input_width"] = prepared->transform.input_size.width;
   state.counters["input_height"] = prepared->transform.input_size.height;
+  // Instance masks decode on OpenCV's threads; the second argument sets their number.
+  cv::setNumThreads(static_cast<int>(state.range(1)));
   if (type.ends_with("Detect"))
     measure_postprocessor<hrt::postprocess::DetectResultMap>(state, *prepared);
   else if (type.ends_with("Segment"))
@@ -131,12 +133,18 @@ auto BM_Type(benchmark::State& state) -> void {
     measure_postprocessor<hrt::postprocess::OcrResult>(state, *prepared);
   else
     measure_postprocessor<hrt::postprocess::ClassifyResult>(state, *prepared);
+  cv::setNumThreads(1);
 }
 
 auto type_cases(benchmark::Benchmark* bench) -> void {
   const kitzoo::json::Reader reader(std::filesystem::path(HRT_SOURCE_DIR) / "assets/template/hrtc_template.json");
-  for (std::size_t i = 0; i < reader.raw()["algos"].size(); ++i)
-    bench->Arg(static_cast<std::int64_t>(i));
+  const auto& algos = reader.raw()["algos"];
+  for (std::size_t i = 0; i < algos.size(); ++i) {
+    bench->Args({static_cast<std::int64_t>(i), 1});
+    const auto& type = algos[i]["config"]["postprocess"]["type"].get_ref<const hrt::String&>();
+    if (type.ends_with("Segment") && type != "SemanticSegment")
+      bench->Args({static_cast<std::int64_t>(i), 4});
+  }
 }
 
 } // namespace

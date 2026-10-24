@@ -304,8 +304,10 @@ timing flags.
 
 Create `assets/test/benchmark_results/` before running. On macOS, preprocessing
 device argument `0` is CPU and `1` is Metal; Metal needs access to the GPU.
-`BM_Type/<index>` uses the current template algo order and includes the type and
-algo name in its JSON label, so use that label when comparing records.
+`BM_Type/<index>/<threads>` uses the current template algo order and includes the type and
+algo name in its JSON label, so use that label when comparing records. `<threads>` is the
+OpenCV thread count: 1 for every algo, and also 4 for instance segmentation, whose masks
+decode on OpenCV's threads. The tables above use 1.
 
 The local raw files for this run are `record_m4_six_preprocess.json`
 and `record_m4_postprocess.json` under

@@ -84,13 +84,13 @@ protected:
         const auto box = transform.clip_to_source(rects_[cls][k]);
         if (box.empty())
           continue;
-        const auto* first = coefficients_[cls].data() + k * masks;
-        mask_coefficients_.assign(first, first + masks);
-        auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
-        object.box = {box, scores_[cls][k], static_cast<std::int64_t>(cls), -1};
-        object.mask = masks_.decode(prototypes, mask_coefficients_, rects_[cls][k], box, transform, mask_logit_);
+        auto& objects = result[static_cast<std::int64_t>(cls)];
+        objects.emplace_back().box = {box, scores_[cls][k], static_cast<std::int64_t>(cls), -1};
+        masks_.add(std::span(coefficients_[cls]).subspan(k * masks, masks), rects_[cls][k], box,
+                   static_cast<std::int64_t>(cls), objects.size() - 1);
       }
     }
+    masks_.decode(prototypes, transform, mask_logit_, result);
     return true;
   }
 
@@ -127,8 +127,7 @@ private:
   Vector<Vector<core::Rect2f>> rects_;
   Vector<Vector<float>> scores_;
   Vector<Vector<float>> coefficients_;
-  Vector<float> mask_coefficients_;
-  MaskDecoder masks_;
+  MaskBatch masks_;
 };
 
 } // namespace

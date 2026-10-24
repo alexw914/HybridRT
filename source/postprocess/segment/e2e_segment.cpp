@@ -84,10 +84,11 @@ protected:
       coefficients_.clear();
       for (std::int64_t c = 6; c < columns; ++c)
         coefficients_.push_back(det.at(i, c));
-      auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
-      object.box = {box, score, static_cast<std::int64_t>(cls), -1};
-      object.mask = masks_.decode(prototypes, coefficients_, net_box, box, transform, mask_logit_);
+      auto& objects = result[static_cast<std::int64_t>(cls)];
+      objects.emplace_back().box = {box, score, static_cast<std::int64_t>(cls), -1};
+      masks_.add(coefficients_, net_box, box, static_cast<std::int64_t>(cls), objects.size() - 1);
     }
+    masks_.decode(prototypes, transform, mask_logit_, result);
     return true;
   }
 
@@ -97,7 +98,7 @@ private:
   std::size_t prototypes_ = 1;
   float mask_logit_ = 0.0F;
   Vector<float> coefficients_;
-  MaskDecoder masks_;
+  MaskBatch masks_;
 };
 
 } // namespace
