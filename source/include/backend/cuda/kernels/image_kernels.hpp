@@ -14,7 +14,7 @@
 
 namespace hrt::backend {
 
-enum class CudaResizeSource {
+enum class InputFormat {
   Bgr,  // Interleaved uint8 BGR pixels.
   Rgb,  // Interleaved uint8 RGB pixels.
   Nv12, // Y plane, then interleaved U and V at half resolution.
@@ -23,7 +23,7 @@ enum class CudaResizeSource {
   Yv12, // As I420 with V before U.
 };
 
-enum class CudaResizeFilter {
+enum class ResizeInterpolation {
   Linear,  // OpenCV INTER_LINEAR.
   Nearest, // OpenCV INTER_NEAREST.
   Cubic,   // OpenCV INTER_CUBIC.
@@ -31,8 +31,8 @@ enum class CudaResizeFilter {
 
 // One uint8 source region resized into the region of a 3-channel input and
 // padded around it. Every output pixel is written.
-struct CudaResizeTask {
-  CudaResizeSource source = CudaResizeSource::Bgr;
+struct PreprocessParam {
+  InputFormat source = InputFormat::Bgr;
   const std::uint8_t* src = nullptr;    // First pixel of the source region; the Y plane for NV12/NV21.
   std::int64_t src_pitch = 0;           // Bytes between source rows, also of the chroma plane.
   const std::uint8_t* chroma = nullptr; // YUV: first chroma row of the whole image, right after the Y plane.
@@ -44,7 +44,7 @@ struct CudaResizeTask {
   std::int32_t src_height = 0;
   double scale_x = 1.0; // Source pixels per region pixel, as OpenCV: 1 / (region / source) in double.
   double scale_y = 1.0;
-  CudaResizeFilter filter = CudaResizeFilter::Linear;
+  ResizeInterpolation interpolation = ResizeInterpolation::Linear;
   std::uint8_t* dst = nullptr; // First byte of the input.
   std::int64_t dst_pitch = 0;  // Bytes between input rows.
   std::int64_t dst_plane = 0;  // Bytes between planes; 0 for interleaved.
@@ -61,12 +61,12 @@ struct CudaResizeTask {
   bool float_output = true;          // float32, else uint8.
 };
 
-// Launches the tasks on `stream`, at most kCudaResizeTasksPerLaunch per
+// Launches the params on `stream`, at most kPreprocessParamsPerLaunch per
 // kernel, with OpenCV's uint8 color conversion and sampling (its fixed-point
 // weights) before alpha and beta apply.
-auto launch_cuda_resize(const CudaResizeTask* tasks, std::size_t count, cudaStream_t stream) -> cudaError_t;
+auto launch_cuda_preprocess(const PreprocessParam* params, std::size_t count, cudaStream_t stream) -> cudaError_t;
 
-inline constexpr std::size_t kCudaResizeTasksPerLaunch = 16;
+inline constexpr std::size_t kPreprocessParamsPerLaunch = 16;
 
 } // namespace hrt::backend
 

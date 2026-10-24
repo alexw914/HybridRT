@@ -30,20 +30,20 @@ auto is_planar(core::ImageFormat format) -> bool {
   return format == core::ImageFormat::PlanarBgr || format == core::ImageFormat::PlanarRgb;
 }
 
-auto source_of(core::ImageFormat format) -> std::optional<backend::CudaResizeSource> {
+auto input_format_of(core::ImageFormat format) -> std::optional<backend::InputFormat> {
   switch (format) {
   case core::ImageFormat::InterBgr:
-    return backend::CudaResizeSource::Bgr;
+    return backend::InputFormat::Bgr;
   case core::ImageFormat::InterRgb:
-    return backend::CudaResizeSource::Rgb;
+    return backend::InputFormat::Rgb;
   case core::ImageFormat::Nv12:
-    return backend::CudaResizeSource::Nv12;
+    return backend::InputFormat::Nv12;
   case core::ImageFormat::Nv21:
-    return backend::CudaResizeSource::Nv21;
+    return backend::InputFormat::Nv21;
   case core::ImageFormat::Yu12:
-    return backend::CudaResizeSource::I420;
+    return backend::InputFormat::I420;
   case core::ImageFormat::Yv12:
-    return backend::CudaResizeSource::Yv12;
+    return backend::InputFormat::Yv12;
   default:
     return std::nullopt;
   }
@@ -65,44 +65,46 @@ auto at(const core::Image& image, std::initializer_list<std::int64_t> index, cor
   return base == 0 ? nullptr : reinterpret_cast<const std::uint8_t*>(base + image.buffer()->offset(index));
 }
 
-// The kernel task writing `dst` from `src` as `transform` places it; nothing when an address is missing.
-auto make_task(const core::Image& dst, const ImageTransform& transform, const core::Image& src,
-               const ImagePreprocessorParam& param, core::Stream* stream) -> std::optional<backend::CudaResizeTask> {
+// Kernel parameters for writing `dst` from `src` as `transform` places it; empty if an address is missing.
+auto make_preprocess_param(const core::Image& dst, const ImageTransform& transform, const core::Image& src,
+                           const ImagePreprocessorParam& param, core::Stream* stream)
+    -> std::optional<backend::PreprocessParam> {
   const auto& roi = transform.dst_roi;
   const auto& from = transform.src_roi;
-  const auto source = source_of(src.format());
+  const auto source = input_format_of(src.format());
   const auto* region = at(src, {from.y, from.x}, stream);
   const auto base = dst.memory()->mutable_device(stream);
   if (!source || region == nullptr || base == 0 || roi.empty() || from.empty())
     return std::nullopt;
-  backend::CudaResizeTask task;
-  task.source = *source;
-  task.src = region;
-  task.src_pitch = pitch(src);
-  if (*source != backend::CudaResizeSource::Bgr && *source != backend::CudaResizeSource::Rgb) {
-    task.chroma = at(src, {src.size().height}, stream);
-    task.origin_x = from.x;
-    task.origin_y = from.y;
-    task.image_width = src.size().width;
-    task.image_height = src.size().height;
+  backend::PreprocessParam preprocess_param;
+  preprocess_param.source = *source;
+  preprocess_param.src = region;
+  preprocess_param.src_pitch = pitch(src);
+  if (*source != backend::InputFormat::Bgr && *source != backend::InputFormat::Rgb) {
+    preprocess_param.chroma = at(src, {src.size().height}, stream);
+    preprocess_param.origin_x = from.x;
+    preprocess_param.origin_y = from.y;
+    preprocess_param.image_width = src.size().width;
+    preprocess_param.image_height = src.size().height;
   }
-  task.src_width = from.width;
-  task.src_height = from.height;
-  task.scale_x = 1.0 / (static_cast<double>(roi.width) / from.width);
-  task.scale_y = 1.0 / (static_cast<double>(roi.height) / from.height);
-  task.dst = reinterpret_cast<std::uint8_t*>(base + dst.buffer()->offset({0}));
-  task.dst_pitch = pitch(dst);
-  task.dst_plane = is_planar(dst.format()) ? static_cast<std::int64_t>(dst.stride()[1]) : 0;
-  task.dst_width = dst.size().width;
-  task.dst_height = dst.size().height;
-  task.roi_x = roi.x;
-  task.roi_y = roi.y;
-  task.roi_width = roi.width;
-  task.roi_height = roi.height;
-  task.float_output = dst.data_type() == core::DataType::Float32;
-  task.filter = param.interpolation_mode == InterpolationMode::Nearest ? backend::CudaResizeFilter::Nearest
-                : param.interpolation_mode == InterpolationMode::Cubic ? backend::CudaResizeFilter::Cubic
-                                                                       : backend::CudaResizeFilter::Linear;
+  preprocess_param.src_width = from.width;
+  preprocess_param.src_height = from.height;
+  preprocess_param.scale_x = 1.0 / (static_cast<double>(roi.width) / from.width);
+  preprocess_param.scale_y = 1.0 / (static_cast<double>(roi.height) / from.height);
+  preprocess_param.dst = reinterpret_cast<std::uint8_t*>(base + dst.buffer()->offset({0}));
+  preprocess_param.dst_pitch = pitch(dst);
+  preprocess_param.dst_plane = is_planar(dst.format()) ? static_cast<std::int64_t>(dst.stride()[1]) : 0;
+  preprocess_param.dst_width = dst.size().width;
+  preprocess_param.dst_height = dst.size().height;
+  preprocess_param.roi_x = roi.x;
+  preprocess_param.roi_y = roi.y;
+  preprocess_param.roi_width = roi.width;
+  preprocess_param.roi_height = roi.height;
+  preprocess_param.float_output = dst.data_type() == core::DataType::Float32;
+  preprocess_param.interpolation =
+      param.interpolation_mode == InterpolationMode::Nearest ? backend::ResizeInterpolation::Nearest
+      : param.interpolation_mode == InterpolationMode::Cubic ? backend::ResizeInterpolation::Cubic
+                                                             : backend::ResizeInterpolation::Linear;
   // As the CPU flow: YUV converts to BGR, and padding is the default color, in input channel order, as a uint8
   // pixel, normalized unless only the ROI is.
   const auto normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
@@ -112,12 +114,12 @@ auto make_task(const core::Image& dst, const ImageTransform& transform, const co
     const auto alpha = normalize ? 1.0 / static_cast<double>(param.std[c]) : 1.0;
     const auto beta = normalize ? -static_cast<double>(param.mean[c]) * alpha : 0.0;
     const auto pad = std::clamp(std::nearbyint(static_cast<double>(param.default_color[c])), 0.0, 255.0);
-    task.channel[c] = swap ? 2 - i : i;
-    task.alpha[c] = static_cast<float>(alpha);
-    task.beta[c] = static_cast<float>(beta);
-    task.pad[c] = static_cast<float>(param.normalize_type == NormalizeType::Roi ? pad : pad * alpha + beta);
+    preprocess_param.channel[c] = swap ? 2 - i : i;
+    preprocess_param.alpha[c] = static_cast<float>(alpha);
+    preprocess_param.beta[c] = static_cast<float>(beta);
+    preprocess_param.pad[c] = static_cast<float>(param.normalize_type == NormalizeType::Roi ? pad : pad * alpha + beta);
   }
-  return task;
+  return preprocess_param;
 }
 
 } // namespace
@@ -152,33 +154,33 @@ auto CudaImagePreprocessor::normalize(core::Image& /*image*/, const core::Rect& 
 auto CudaImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
                                            const ImagePreprocessorParam& param) const -> bool {
   const auto normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
-  return source_of(src.format()).has_value() && src.data_type() == core::DataType::Uint8 &&
+  return input_format_of(src.format()).has_value() && src.data_type() == core::DataType::Uint8 &&
          (is_interleaved(dst.format()) || is_planar(dst.format())) &&
          (dst.data_type() == core::DataType::Float32 || (dst.data_type() == core::DataType::Uint8 && !normalize));
 }
 
 auto CudaImagePreprocessor::fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
                                   const ImagePreprocessorParam& param, core::Stream* stream) -> bool {
-  const auto task = make_task(dst, transform, src, param, stream);
-  if (!task)
+  const auto preprocess_param = make_preprocess_param(dst, transform, src, param, stream);
+  if (!preprocess_param)
     return false;
-  const auto status = backend::launch_cuda_resize(&*task, 1, backend::cuda_stream(stream));
-  KZ_CHECK_RETURN(status == cudaSuccess, false, "cuda: resize kernel failed: {}", cudaGetErrorString(status));
+  const auto status = backend::launch_cuda_preprocess(&*preprocess_param, 1, backend::cuda_stream(stream));
+  KZ_CHECK_RETURN(status == cudaSuccess, false, "cuda: preprocess kernel failed: {}", cudaGetErrorString(status));
   return true;
 }
 
 auto CudaImagePreprocessor::fused_batch(std::span<core::Image* const> dsts, std::span<const ImageTransform> transforms,
                                         std::span<const core::Image* const> srcs, const ImagePreprocessorParam& param,
                                         core::Stream* stream) -> bool {
-  tasks_.clear();
+  params_.clear();
   for (std::size_t i = 0; i < dsts.size(); ++i) {
-    const auto task = make_task(*dsts[i], transforms[i], *srcs[i], param, stream);
-    if (!task)
+    const auto preprocess_param = make_preprocess_param(*dsts[i], transforms[i], *srcs[i], param, stream);
+    if (!preprocess_param)
       return false;
-    tasks_.push_back(*task);
+    params_.push_back(*preprocess_param);
   }
-  const auto status = backend::launch_cuda_resize(tasks_.data(), tasks_.size(), backend::cuda_stream(stream));
-  KZ_CHECK_RETURN(status == cudaSuccess, false, "cuda: resize kernel failed: {}", cudaGetErrorString(status));
+  const auto status = backend::launch_cuda_preprocess(params_.data(), params_.size(), backend::cuda_stream(stream));
+  KZ_CHECK_RETURN(status == cudaSuccess, false, "cuda: preprocess kernel failed: {}", cudaGetErrorString(status));
   return true;
 }
 

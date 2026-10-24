@@ -37,7 +37,7 @@ public:
   auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
              const ImagePreprocessorParam& param, core::Stream* stream) -> bool override;
 
-  // All samples in one launch of up to backend::kCudaResizeTasksPerLaunch tasks per kernel.
+  // All samples in one launch of up to backend::kPreprocessParamsPerLaunch params per kernel.
   auto fused_batch(std::span<core::Image* const> dsts, std::span<const ImageTransform> transforms,
                    std::span<const core::Image* const> srcs, const ImagePreprocessorParam& param, core::Stream* stream)
       -> bool override;
@@ -54,7 +54,7 @@ private:
   KZ_NODISCARD auto supports_fused(const core::Image& dst, const core::Image& src,
                                    const ImagePreprocessorParam& param) const -> bool override;
 
-  Vector<backend::CudaResizeTask> tasks_; // Reused task list of fused_batch().
+  Vector<backend::PreprocessParam> params_; // Reused parameter list of fused_batch().
 };
 
 } // namespace hrt::preprocess

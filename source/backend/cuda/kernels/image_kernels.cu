@@ -13,10 +13,10 @@ namespace hrt::backend {
 
 namespace {
 
-// The tasks of one launch, passed by value: kernel parameters are captured at
+// The params of one launch, passed by value: kernel parameters are captured at
 // launch, so no device copy has to outlive the call.
-struct ResizeLaunch {
-  CudaResizeTask tasks[kCudaResizeTasksPerLaunch];
+struct PreprocessBatch {
+  PreprocessParam params[kPreprocessParamsPerLaunch];
 };
 
 constexpr int kBlockWidth = 32;
@@ -36,9 +36,9 @@ __device__ auto saturate(int value) -> int {
 
 // Pixel (x, y) of the source region: its channels for interleaved sources,
 // BGR as OpenCV's cvtColor gives it for NV12 and NV21.
-__device__ auto fetch(const CudaResizeTask& s, int x, int y, int (&out)[3]) -> void {
+__device__ auto fetch(const PreprocessParam& s, int x, int y, int (&out)[3]) -> void {
   const auto* row = s.src + static_cast<std::int64_t>(y) * s.src_pitch;
-  if (s.source == CudaResizeSource::Bgr || s.source == CudaResizeSource::Rgb) {
+  if (s.source == InputFormat::Bgr || s.source == InputFormat::Rgb) {
     const auto* p = row + static_cast<std::int64_t>(x) * 3;
     out[0] = p[0];
     out[1] = p[1];
@@ -49,10 +49,10 @@ __device__ auto fetch(const CudaResizeTask& s, int x, int y, int (&out)[3]) -> v
   const int gy = s.origin_y + y;
   int u = 0;
   int v = 0;
-  if (s.source == CudaResizeSource::Nv12 || s.source == CudaResizeSource::Nv21) {
+  if (s.source == InputFormat::Nv12 || s.source == InputFormat::Nv21) {
     const auto* uv = s.chroma + static_cast<std::int64_t>(gy / 2) * s.src_pitch + static_cast<std::int64_t>(gx / 2) * 2;
-    u = s.source == CudaResizeSource::Nv12 ? uv[0] : uv[1];
-    v = s.source == CudaResizeSource::Nv12 ? uv[1] : uv[0];
+    u = s.source == InputFormat::Nv12 ? uv[0] : uv[1];
+    v = s.source == InputFormat::Nv12 ? uv[1] : uv[0];
   } else {
     // Chroma rows are half as wide as the image rows holding them, so OpenCV packs two per row: half row k
     // after the Y plane starts at (k / 2) * pitch + (k % 2) * width / 2, and the second plane follows the first.
@@ -62,8 +62,8 @@ __device__ auto fetch(const CudaResizeTask& s, int x, int y, int (&out)[3]) -> v
     };
     const auto first = half(gy / 2)[gx / 2];
     const auto second = half(s.image_height / 2 + gy / 2)[gx / 2];
-    u = s.source == CudaResizeSource::I420 ? first : second;
-    v = s.source == CudaResizeSource::I420 ? second : first;
+    u = s.source == InputFormat::I420 ? first : second;
+    v = s.source == InputFormat::I420 ? second : first;
   }
   u -= 128;
   v -= 128;
@@ -122,7 +122,7 @@ __device__ auto linear_value(int top, int bottom, int w0, int w1) -> float {
   return static_cast<float>(saturate((high(top, w0) + high(bottom, w1) + 2) >> 2));
 }
 
-__device__ auto store(const CudaResizeTask& s, int x, int y, int c, float value) -> void {
+__device__ auto store(const PreprocessParam& s, int x, int y, int c, float value) -> void {
   auto* row = s.dst + static_cast<std::int64_t>(y) * s.dst_pitch;
   std::int64_t element = static_cast<std::int64_t>(x) * 3 + c;
   if (s.dst_plane != 0) {
@@ -135,8 +135,8 @@ __device__ auto store(const CudaResizeTask& s, int x, int y, int c, float value)
     row[element] = static_cast<std::uint8_t>(saturate(__float2int_rn(value)));
 }
 
-__global__ auto resize_kernel(ResizeLaunch launch) -> void {
-  const auto& s = launch.tasks[blockIdx.z];
+__global__ auto preprocess_kernel(PreprocessBatch batch) -> void {
+  const auto& s = batch.params[blockIdx.z];
   const int x = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
   const int y = static_cast<int>(blockIdx.y * blockDim.y + threadIdx.y);
   if (x >= s.dst_width || y >= s.dst_height)
@@ -149,7 +149,7 @@ __global__ auto resize_kernel(ResizeLaunch launch) -> void {
     return;
   }
   float value[3];
-  if (s.filter == CudaResizeFilter::Cubic) {
+  if (s.interpolation == ResizeInterpolation::Cubic) {
     int xs[4];
     int ys[4];
     int wx[4];
@@ -172,7 +172,7 @@ __global__ auto resize_kernel(ResizeLaunch launch) -> void {
     }
     for (int c = 0; c < 3; ++c)
       value[c] = static_cast<float>(saturate(__float2int_rn(sum[c])));
-  } else if (s.filter == CudaResizeFilter::Nearest) {
+  } else if (s.interpolation == ResizeInterpolation::Nearest) {
     // In double as OpenCV: exact products such as 78 * 50 / 156 must floor the same way.
     const int sx = min(static_cast<int>(floor(static_cast<double>(rx) * s.scale_x)), s.src_width - 1);
     const int sy = min(static_cast<int>(floor(static_cast<double>(ry) * s.scale_y)), s.src_height - 1);
@@ -208,22 +208,22 @@ __global__ auto resize_kernel(ResizeLaunch launch) -> void {
 
 } // namespace
 
-auto launch_cuda_resize(const CudaResizeTask* tasks, std::size_t count, cudaStream_t stream) -> cudaError_t {
-  for (std::size_t first = 0; first < count; first += kCudaResizeTasksPerLaunch) {
-    const auto n = std::min(kCudaResizeTasksPerLaunch, count - first);
-    ResizeLaunch launch{};
+auto launch_cuda_preprocess(const PreprocessParam* params, std::size_t count, cudaStream_t stream) -> cudaError_t {
+  for (std::size_t first = 0; first < count; first += kPreprocessParamsPerLaunch) {
+    const auto n = std::min(kPreprocessParamsPerLaunch, count - first);
+    PreprocessBatch batch{};
     int width = 0;
     int height = 0;
     for (std::size_t i = 0; i < n; ++i) {
-      launch.tasks[i] = tasks[first + i];
-      width = std::max(width, tasks[first + i].dst_width);
-      height = std::max(height, tasks[first + i].dst_height);
+      batch.params[i] = params[first + i];
+      width = std::max(width, params[first + i].dst_width);
+      height = std::max(height, params[first + i].dst_height);
     }
     const dim3 block(kBlockWidth, kBlockHeight);
     const dim3 grid(static_cast<unsigned int>((width + kBlockWidth - 1) / kBlockWidth),
                     static_cast<unsigned int>((height + kBlockHeight - 1) / kBlockHeight),
                     static_cast<unsigned int>(n));
-    resize_kernel<<<grid, block, 0, stream>>>(launch);
+    preprocess_kernel<<<grid, block, 0, stream>>>(batch);
     if (const auto error = cudaGetLastError(); error != cudaSuccess)
       return error;
   }
