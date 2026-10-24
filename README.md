@@ -30,7 +30,7 @@ Install the SDK for each inference backend you want to enable.
 | Platform | Build toolchain | Verification coverage |
 | --- | --- | --- |
 | Linux x86_64 | GCC 11.4 / 13.3; Clang 18.1.3 | CI with ONNX Runtime; additional NVIDIA CUDA / TensorRT validation |
-| Windows x64 | MSVC 19.50 | CI with ONNX Runtime and real-model validation; additional MNN, ncnn and TensorRT tests |
+| Windows x64 | MSVC 19.50 (19.44 for CUDA 12.x builds) | CI with ONNX Runtime and real-model validation; additional MNN, ncnn and TensorRT tests |
 | macOS arm64 | Apple Clang 21.0.0 | CI with ONNX Runtime; additional CoreML and MNN CPU validation |
 | Linux aarch64 / RK3588 | Arm GNU Toolchain 12.2 | RKNN / RGA, MNN and ncnn board validation |
 | Linux aarch64 / Ascend | GCC 12.3 | CANN engine and host preprocessing validation on an Ascend 910B2; DVPP operators validated on an Atlas 300V Pro |
@@ -45,7 +45,9 @@ cmake --build build/debug --parallel
 
 The default build includes tools and examples; tests are opt-in. CMake searches for
 OpenCV in the system installation. Set OpenCV_DIR only when it cannot be found.
-On Windows, run from an MSVC developer shell and use the matching Windows SDKs.
+On Windows, run from an MSVC developer shell and use the matching Windows SDKs. CUDA builds
+compile a kernel with nvcc, which accepts only the MSVC toolsets its CUDA version supports: with
+CUDA 12.x and Visual Studio 2026, open the shell with `vcvars64.bat -vcvars_ver=14.44`.
 For cross-compilation, add -DCMAKE_TOOLCHAIN_FILE=<toolchain.cmake> and provide
 target-platform OpenCV and backend SDKs.
 
