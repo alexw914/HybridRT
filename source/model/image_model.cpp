@@ -446,7 +446,7 @@ auto ImageModel<Result>::run_batch(std::span<const core::Image> srcs, std::span<
   Vector<preprocess::ImageTransform> transforms;
   decltype(output_pool_.acquire()) output;
   {
-    auto input = input_pool_.acquire();
+    const auto input = input_pool_.acquire();
     {
       // Rebuilt per call: preprocess settings may change between frames of a stream.
       Vector<core::Image> images;

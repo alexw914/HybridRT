@@ -375,7 +375,7 @@ auto CpuImagePreprocessor::fused(core::Image& dst, const ImageTransform& transfo
     const auto input = static_cast<std::size_t>(swap ? 2 - i : i);
     const auto alpha = normalize ? 1.0 / static_cast<double>(param.std[c]) : 1.0;
     const auto beta = normalize ? -static_cast<double>(param.mean[c]) * alpha : 0.0;
-    auto output = plane(dst, dst_base, i);
+    const auto output = plane(dst, dst_base, i);
     planes[input].convertTo(output(region), CV_32F, alpha, beta);
     if (region == whole)
       continue;

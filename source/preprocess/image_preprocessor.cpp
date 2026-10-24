@@ -273,7 +273,7 @@ auto ImagePreprocessor::stage(core::Image& dst, const core::Image& src, const co
         staged.local.src_roi.y -= area.y;
       }
     }
-    auto* input = scratch(src_slot, memory_type(), format, from->data_type(), from->size());
+    const auto* input = scratch(src_slot, memory_type(), format, from->data_type(), from->size());
     if (input == nullptr ||
         !core::Buffer::copy(*input->buffer(), *from->buffer(), core::CopyPolicy::AutoDstStride, stream)) {
       // Device memory can run out (e.g. a small shared CMA heap); the CPU then runs the whole call.
@@ -321,7 +321,7 @@ auto ImagePreprocessor::process(std::span<core::Image> dsts, std::span<const cor
     done[i] = processor.process(dsts[i], srcs[i], src_rects.empty() ? core::Rect{} : src_rects[i], param, stream);
   };
   // Staging keeps the formats, so the fused check holds before it.
-  auto fuses_all = [&]() -> bool {
+  const auto fuses_all = [&]() -> bool {
     for (std::size_t i = 0; i < srcs.size(); ++i) {
       if (!supports_fused(dsts[i], srcs[i], param))
         return false;

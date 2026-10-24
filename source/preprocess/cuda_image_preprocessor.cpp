@@ -61,7 +61,7 @@ auto at(const core::Image& image, std::initializer_list<std::int64_t> index, cor
 }
 
 // The kernel task writing `dst` from `src` as `transform` places it; nothing when an address is missing.
-auto make_task(core::Image& dst, const ImageTransform& transform, const core::Image& src,
+auto make_task(const core::Image& dst, const ImageTransform& transform, const core::Image& src,
                const ImagePreprocessorParam& param, core::Stream* stream) -> std::optional<backend::CudaResizeTask> {
   const auto& roi = transform.dst_roi;
   const auto& from = transform.src_roi;
