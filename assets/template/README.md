@@ -47,9 +47,23 @@ it converts uint8 BGR, RGB, NV12, NV21, YU12 (I420) or YV12 sources with any int
 into 3-channel planar or interleaved uint8 or float32 inputs, following OpenCV's uint8 color
 conversion and sampling, so it matches the CPU result up to OpenCV's own rounding
 differences. Other conversions (gray inputs or sources, RGBA or float sources) run on the CPU.
-NV12 halves the bytes a host frame uploads compared with BGR. A static batch whose samples all
-fuse runs as one kernel launch (up to 16 samples per kernel); on the CPU the samples of a batch
-run on OpenCV's threads.
+A static batch whose samples all fuse runs as one kernel launch (up to 16 samples per kernel);
+on the CPU the samples of a batch run on OpenCV's threads.
+
+Host frames for CUDA preprocessing are uploaded first, which usually costs more than the kernel
+(about 0.53 ms of 0.59 ms for a 1920 x 1080 BGR frame into 640 x 640 on an RTX 3060). Two choices
+of the caller shorten it:
+
+- Pass NV12 (or NV21, I420, YV12) as decoders and cameras produce it: 1.5 bytes per pixel
+  instead of 3, which cut the same case to 0.35 ms.
+- Keep frames in page-locked memory, for example from `cudaMallocHost` or a decoder that
+  allocates it, and wrap them with `core::Image::wrap(core::MemoryType::Cpu, ...)`. CUDA detects
+  page-locked pointers by itself; plain copies measured 14.3 GB/s from them against 12.6 GB/s
+  from pageable memory on that machine (WSL2, so native Linux may differ).
+
+Only the source region plus a two-pixel margin of an interleaved host frame is uploaded, so
+cascaded crops upload much less than the frame.
+
 For device-only memory, an unsupported stage retains the whole-call CPU fallback,
 including source download and result upload. Host-accessible buffers can use CPU operators
 directly. Fusion and fallback decisions do not change the model's preprocess parameters.
