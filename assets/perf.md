@@ -85,7 +85,7 @@ passes over float data. `BM_CudaResolution` with a device source showed 0.226 ms
 1920 x 1080 to 640 x 640 and 0.643 ms to 1280 x 1280.
 
 **Change.** `CudaImagePreprocessor` implements the fused operator in
-`source/preprocess/cuda_image_kernels.cu`: one thread per input pixel writes the padding value
+`source/backend/cuda/cuda_image_kernels.cu`: one thread per input pixel writes the padding value
 or samples the source region, then applies the channel order and `value * alpha + beta` and
 stores planar or interleaved uint8 or float32. Sampling follows OpenCV: INTER_LINEAR with
 half-pixel centers and coordinates in double, its 11-bit fixed-point weights and the rounding

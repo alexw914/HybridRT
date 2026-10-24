@@ -12,7 +12,7 @@
 #include <cmath>
 
 #include "include/backend/cuda/cuda_common.hpp"
-#include "include/preprocess/cuda_image_kernels.hpp"
+#include "include/backend/cuda/cuda_image_kernels.hpp"
 
 namespace hrt::preprocess {
 
@@ -30,15 +30,15 @@ auto is_planar(core::ImageFormat format) -> bool {
   return format == core::ImageFormat::PlanarBgr || format == core::ImageFormat::PlanarRgb;
 }
 
-auto source_of(core::ImageFormat format) -> std::optional<CudaResizeSource> {
+auto source_of(core::ImageFormat format) -> std::optional<backend::CudaResizeSource> {
   switch (format) {
   case core::ImageFormat::InterBgr:
   case core::ImageFormat::InterRgb:
-    return CudaResizeSource::Interleaved;
+    return backend::CudaResizeSource::Interleaved;
   case core::ImageFormat::Nv12:
-    return CudaResizeSource::Nv12;
+    return backend::CudaResizeSource::Nv12;
   case core::ImageFormat::Nv21:
-    return CudaResizeSource::Nv21;
+    return backend::CudaResizeSource::Nv21;
   default:
     return std::nullopt;
   }
@@ -62,7 +62,7 @@ auto at(const core::Image& image, std::initializer_list<std::int64_t> index, cor
 
 // The kernel task writing `dst` from `src` as `transform` places it; nothing when an address is missing.
 auto make_task(core::Image& dst, const ImageTransform& transform, const core::Image& src,
-               const ImagePreprocessorParam& param, core::Stream* stream) -> std::optional<CudaResizeTask> {
+               const ImagePreprocessorParam& param, core::Stream* stream) -> std::optional<backend::CudaResizeTask> {
   const auto& roi = transform.dst_roi;
   const auto& from = transform.src_roi;
   const auto source = source_of(src.format());
@@ -70,11 +70,11 @@ auto make_task(core::Image& dst, const ImageTransform& transform, const core::Im
   const auto base = dst.memory()->mutable_device(stream);
   if (!source || region == nullptr || base == 0 || roi.empty() || from.empty())
     return std::nullopt;
-  CudaResizeTask task;
+  backend::CudaResizeTask task;
   task.source = *source;
   task.src = region;
   task.src_pitch = pitch(src);
-  if (*source != CudaResizeSource::Interleaved) {
+  if (*source != backend::CudaResizeSource::Interleaved) {
     task.chroma = at(src, {src.size().height}, stream);
     task.origin_x = from.x;
     task.origin_y = from.y;
@@ -154,7 +154,7 @@ auto CudaImagePreprocessor::fused(core::Image& dst, const ImageTransform& transf
   const auto task = make_task(dst, transform, src, param, stream);
   if (!task)
     return false;
-  const auto status = launch_cuda_resize(&*task, 1, backend::cuda_stream(stream));
+  const auto status = backend::launch_cuda_resize(&*task, 1, backend::cuda_stream(stream));
   KZ_CHECK_RETURN(status == cudaSuccess, false, "cuda: resize kernel failed: {}", cudaGetErrorString(status));
   return true;
 }
@@ -169,7 +169,7 @@ auto CudaImagePreprocessor::fused_batch(std::span<core::Image* const> dsts, std:
       return false;
     tasks_.push_back(*task);
   }
-  const auto status = launch_cuda_resize(tasks_.data(), tasks_.size(), backend::cuda_stream(stream));
+  const auto status = backend::launch_cuda_resize(tasks_.data(), tasks_.size(), backend::cuda_stream(stream));
   KZ_CHECK_RETURN(status == cudaSuccess, false, "cuda: resize kernel failed: {}", cudaGetErrorString(status));
   return true;
 }

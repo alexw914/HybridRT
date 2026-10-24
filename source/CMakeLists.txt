@@ -108,7 +108,7 @@ if(HRT_USE_CUDA)
     endif()
     enable_language(CUDA)
     # Kernels build apart from kitzoo, whose build-tree warning flags are for the host compiler only.
-    add_library(hybridrt_cuda_kernels OBJECT preprocess/cuda_image_kernels.cu)
+    add_library(hybridrt_cuda_kernels OBJECT backend/cuda/cuda_image_kernels.cu)
     target_include_directories(hybridrt_cuda_kernels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(hybridrt_cuda_kernels PRIVATE CUDA::cudart)
     set_target_properties(hybridrt_cuda_kernels PROPERTIES
