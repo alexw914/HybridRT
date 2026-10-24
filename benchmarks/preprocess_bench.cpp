@@ -300,17 +300,19 @@ auto BM_CudaResolution(benchmark::State& state) -> void {
 }
 
 // One batched call letterboxing 1920x1080 frames into 640x640 inputs; args: batch size, mode (0 CPU with one OpenCV
-// thread, 1 CPU with four, 2 CUDA from host frames, 3 CUDA from device frames, 4 and 5 the same from NV12 frames).
+// thread, 1 CPU with four, 2 CUDA from host frames, 3 CUDA from device frames, 4 and 5 the same from NV12 frames,
+// 6 RGA from host frames and 7 from dma-buf frames into uint8 RGB dma-bufs, as RKNN image inputs take them).
 // Items are frames.
 auto BM_Batch(benchmark::State& state) -> void {
   using namespace hrt::core;
   using namespace hrt::preprocess;
   const auto batch = static_cast<std::size_t>(state.range(0));
   const auto mode = state.range(1);
-  constexpr const char* kLabels[] = {"cpu_1_thread",       "cpu_4_threads",  "cuda_host_source",
-                                     "cuda_device_source", "cuda_host_nv12", "cuda_device_nv12"};
+  constexpr const char* kLabels[] = {"cpu_1_thread",   "cpu_4_threads",    "cuda_host_source", "cuda_device_source",
+                                     "cuda_host_nv12", "cuda_device_nv12", "rga_host_source",  "rga_dma_source"};
   state.SetLabel(kLabels[mode]);
-  const auto cuda = mode >= 2;
+  const auto cuda = mode >= 2 && mode <= 5;
+  const auto rga = mode >= 6;
   cv::setNumThreads(mode == 1 ? 4 : 1);
   auto context = Context::create(cuda ? DeviceType::Cuda : DeviceType::Cpu);
   if (context == nullptr) {
@@ -319,13 +321,19 @@ auto BM_Batch(benchmark::State& state) -> void {
   }
   context->set_current();
   auto stream = context->create_stream();
-  auto processor = ImagePreprocessor::create(cuda ? ImagePreprocessorType::Cuda : ImagePreprocessorType::Cpu);
+  auto processor = ImagePreprocessor::create(cuda  ? ImagePreprocessorType::Cuda
+                                             : rga ? ImagePreprocessorType::Rga
+                                                   : ImagePreprocessorType::Cpu);
+  if (processor == nullptr) {
+    state.SkipWithMessage("The preprocessor is not available in this build");
+    return;
+  }
   const Size source_size{1920, 1080};
   hrt::Vector<cv::Mat> frames(batch);
   hrt::Vector<Image> sources;
   hrt::Vector<Image> targets;
   for (auto& frame : frames) {
-    const auto nv12 = mode >= 4;
+    const auto nv12 = mode == 4 || mode == 5;
     frame.create(nv12 ? source_size.height * 3 / 2 : source_size.height, source_size.width, nv12 ? CV_8UC1 : CV_8UC3);
     cv::randu(frame, 0, 256);
     const auto format = nv12 ? ImageFormat::Nv12 : ImageFormat::InterBgr;
@@ -334,8 +342,8 @@ auto BM_Batch(benchmark::State& state) -> void {
       state.SkipWithError("Cannot prepare batch preprocessing");
       return;
     }
-    if (mode == 3 || mode == 5) {
-      Image device(MemoryType::Cuda, format, DataType::Uint8, source_size);
+    if (mode == 3 || mode == 5 || mode == 7) {
+      Image device(mode == 7 ? MemoryType::DmaBuffer : MemoryType::Cuda, format, DataType::Uint8, source_size);
       if (!device.valid() || !Buffer::copy(*device.buffer(), *host->buffer(), CopyPolicy::DirectCopy, stream.get())) {
         state.SkipWithError("Cannot upload a frame");
         return;
@@ -344,12 +352,16 @@ auto BM_Batch(benchmark::State& state) -> void {
     } else {
       sources.push_back(std::move(*host));
     }
-    targets.emplace_back(cuda ? MemoryType::Cuda : MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32,
-                         Size{640, 640});
+    if (rga)
+      targets.emplace_back(MemoryType::DmaBuffer, ImageFormat::InterRgb, DataType::Uint8, Size{640, 640});
+    else
+      targets.emplace_back(cuda ? MemoryType::Cuda : MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32,
+                           Size{640, 640});
   }
   ImagePreprocessorParam param;
   param.resize_type = ResizeType::LetterBox;
-  param.std = {255, 255, 255};
+  param.dst_image_format = rga ? ImageFormat::InterRgb : ImageFormat::PlanarRgb;
+  param.std = rga ? hrt::Array<float, 3>{1, 1, 1} : hrt::Array<float, 3>{255, 255, 255};
   param.default_color = {114, 114, 114};
   auto step = [&]() -> bool {
     const auto ok = processor->process(targets, sources, {}, param, stream.get()).has_value();
@@ -393,4 +405,4 @@ BENCHMARK(BM_Resolution)
     ->UseRealTime()
     ->MeasureProcessCPUTime();
 BENCHMARK(BM_CudaResolution)->Apply(cuda_cases)->Unit(benchmark::kMillisecond)->UseRealTime();
-BENCHMARK(BM_Batch)->ArgsProduct({{1, 4}, {0, 1, 2, 3, 4, 5}})->Unit(benchmark::kMillisecond)->UseRealTime();
+BENCHMARK(BM_Batch)->ArgsProduct({{1, 4}, {0, 1, 2, 3, 4, 5, 6, 7}})->Unit(benchmark::kMillisecond)->UseRealTime();

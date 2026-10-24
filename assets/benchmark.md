@@ -128,6 +128,23 @@ predate launching a fused CUDA batch at once; see [perf.md](perf.md) for the bat
 after that change. NV12 rows (modes 4 and 5) were measured after NPP was
 replaced by the fused kernel: NV12 uploads half the bytes of BGR.
 
+### RK3588: batched preprocessing
+
+2026-10-24, Radxa Rock 5B+ (RK3588, Debian 12), cross-built with Arm GNU Toolchain 12.2,
+OpenCV 4.6.0, librga 1.10.1. `BM_Batch` as above, on the four A76 cores (`taskset -c 4-7`),
+median of three repetitions of at least 0.5 s, in ms per batch. CPU modes write planar RGB
+float32; RGA modes write interleaved uint8 RGB dma-bufs, as RKNN image inputs take them.
+
+| Mode | Batch 1 | Batch 4 |
+| --- | ---: | ---: |
+| CPU, one OpenCV thread | 4.67 | 19.0 |
+| CPU, four OpenCV threads | 1.98 | 6.12 |
+| RGA, host frames | 3.08 | 12.3 |
+| RGA, dma-buf frames | 2.20 | 12.8 |
+
+RGA processes one sample after another; the hardware time per 1080p frame dominates, so
+submitting a whole batch as one RGA job (tried, with fill and resize tasks) measured no gain.
+
 ### Other platforms: historical measurements
 
 These are transcribed from [perf.md](perf.md#2026-10-13-fuse-cpu-tensor-conversion-and-normalization-26e8d66),

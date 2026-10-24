@@ -610,8 +610,61 @@ TEST(ImagePreprocessorTest, CudaFusedKernelMatchesCpu) {
       }
     }
   }
-  // The kernel follows OpenCV's vectorized fixed-point rounding; OpenCV's scalar row tails round slightly differently.
-  EXPECT_GT(static_cast<double>(exact), 0.998 * static_cast<double>(checked)) << exact << " of " << checked;
+  // The kernel follows the rounding of OpenCV's vectorized fixed-point paths, which differs slightly in its scalar row
+  // tails and between OpenCV builds (99.87% identical with Ubuntu's OpenCV 4.6, 98.7% with the Windows build and IPP).
+  EXPECT_GT(static_cast<double>(exact), 0.98 * static_cast<double>(checked)) << exact << " of " << checked;
+}
+
+// A batch on the RGA runs as one job and must match single calls; a crop scaled beyond 16 times sends the batch through
+// the steps, with that resize on the CPU.
+TEST(ImagePreprocessorTest, RgaBatchMatchesSingleCalls) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto batched = ImagePreprocessor::create(ImagePreprocessorType::Rga);
+  auto single = ImagePreprocessor::create(ImagePreprocessorType::Rga);
+  if (!batched || !single)
+    GTEST_SKIP() << "RGA preprocessing unavailable";
+  hrt::Vector<HostImage> sources;
+  for (int i = 0; i < 5; ++i) {
+    auto src = uniform_bgr(320 + 48 * i, 180 + 30 * i, {0, 0, 0});
+    for (std::size_t k = 0; k < src.pixels.size(); ++k)
+      src.pixels[k] = static_cast<std::uint8_t>((k / 3 % 640) * 200 / 640 + static_cast<std::size_t>(i) * 10);
+    sources.push_back(std::move(src));
+  }
+  hrt::Vector<Image> srcs;
+  for (const auto& source : sources)
+    srcs.push_back(source.image);
+  ImagePreprocessorParam param;
+  param.resize_type = ResizeType::LetterBox;
+  param.dst_image_format = ImageFormat::InterRgb;
+  param.default_color = {114, 20, 250};
+  for (const bool tiny : {false, true}) {
+    for (const auto memory : {MemoryType::DmaBuffer, MemoryType::Cpu}) {
+      SCOPED_TRACE(testing::Message() << "tiny " << tiny << " memory " << static_cast<int>(memory));
+      const hrt::Vector<Rect> rects{{}, {}, {16, 8, 120, 90}, {}, tiny ? Rect{40, 40, 8, 6} : Rect{}};
+      hrt::Vector<Image> outputs;
+      hrt::Vector<Image> expected;
+      for (std::size_t i = 0; i < srcs.size(); ++i) {
+        outputs.emplace_back(memory, ImageFormat::InterRgb, DataType::Uint8, Size{160, 128});
+        expected.emplace_back(memory, ImageFormat::InterRgb, DataType::Uint8, Size{160, 128});
+      }
+      const auto transforms = batched->process(outputs, srcs, rects, param);
+      ASSERT_TRUE(transforms);
+      for (std::size_t i = 0; i < srcs.size(); ++i) {
+        SCOPED_TRACE(i);
+        const auto transform = single->process(expected[i], srcs[i], rects[i], param);
+        ASSERT_TRUE(transform);
+        EXPECT_EQ((*transforms)[i].dst_roi, transform->dst_roi);
+        const auto* got = static_cast<const std::uint8_t*>(outputs[i].memory()->cpu());
+        const auto* want = static_cast<const std::uint8_t*>(expected[i].memory()->cpu());
+        EXPECT_EQ(std::memcmp(got, want, 160 * 128 * 3), 0);
+        // Padding takes the default color in input (RGB) order.
+        EXPECT_EQ(got[0], 114);
+        EXPECT_EQ(got[1], 20);
+        EXPECT_EQ(got[2], 250);
+      }
+    }
+  }
 }
 
 TEST(ImagePreprocessorTest, RgaMatchesCpuForAlignedAndUnalignedRowStrides) {
