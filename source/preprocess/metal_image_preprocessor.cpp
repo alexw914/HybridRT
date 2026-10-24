@@ -60,7 +60,7 @@ MetalImagePreprocessor::MetalImagePreprocessor() : state_(std::make_unique<State
     if (state_->device == nil)
       return;
     NSError* error = nil;
-    NSString* source = [NSString stringWithUTF8String:backend::kMetalImageKernel];
+    NSString* source = [NSString stringWithUTF8String:backend::metal_image_kernel()];
     id<MTLLibrary> library = [state_->device newLibraryWithSource:source options:nil error:&error];
     if (library == nil) {
       KZ_LOG_WARN("metal: shader compilation failed: {}", [[error localizedDescription] UTF8String]);
