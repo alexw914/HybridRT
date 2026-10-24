@@ -17,7 +17,7 @@ using hrt::core::DataType;
 using hrt::test::proto;
 
 TEST(EmbeddingTest, ReturnsTheOutputAsFloat) {
-  EXPECT_EQ(hrt::model::task_of("Embedding"), hrt::model::Task::Embedding);
+  EXPECT_EQ(hrt::model::task_type("Embedding"), hrt::model::Task::Embedding);
   const auto output = proto(DataType::Int8, {1, 3});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {output});
   auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::EmbeddingResult>(

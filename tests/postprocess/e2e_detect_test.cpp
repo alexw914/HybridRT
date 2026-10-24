@@ -79,7 +79,7 @@ TEST(E2EDetectTest, MapsRowsWithoutNms) {
   EXPECT_FLOAT_EQ(box.rect.height, 20.0F);
   EXPECT_FLOAT_EQ(box.score, 0.9F);
   EXPECT_EQ(box.type, 0);
-  EXPECT_EQ(hrt::model::task_of("E2EDetect"), hrt::model::Task::Detect);
+  EXPECT_EQ(hrt::model::task_type("E2EDetect"), hrt::model::Task::Detect);
 }
 
 TEST(E2EDetectTest, DequantizesAndClipsToSourceRegion) {

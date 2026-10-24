@@ -123,7 +123,7 @@ TEST(YoloV8KeypointTest, DecodesBinsAndKeypointOffsets) {
   EXPECT_FLOAT_EQ(object.keypoints[1].point.x, 8.0F);
   EXPECT_FLOAT_EQ(object.keypoints[1].point.y, 16.0F);
   EXPECT_EQ(object.keypoints[1].visible, hrt::postprocess::KeypointVisible::Invisible);
-  EXPECT_EQ(hrt::model::task_of("YoloV8Keypoint"), hrt::model::Task::Keypoint);
+  EXPECT_EQ(hrt::model::task_type("YoloV8Keypoint"), hrt::model::Task::Keypoint);
 }
 
 TEST(YoloV8KeypointTest, AbortsOnHeadsThatDoNotFit) {

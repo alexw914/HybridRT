@@ -1,12 +1,12 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: source/include/postprocess/params.hpp
+// File: source/include/postprocess/postprocessor_params.hpp
 // Description: Declares the "postprocess" config sections shared by the YOLO and
 //              DETR decoders.
 // -----------------------------------------------------------------------------
 
-#ifndef HRT_POSTPROCESS_PARAMS_HPP
-#define HRT_POSTPROCESS_PARAMS_HPP
+#ifndef HRT_POSTPROCESS_POSTPROCESSOR_PARAMS_HPP
+#define HRT_POSTPROCESS_POSTPROCESSOR_PARAMS_HPP
 
 #include <hrt/postprocess/postprocessor.hpp>
 
@@ -91,4 +91,4 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(DetrParam, class_num, confidence
 
 } // namespace hrt::postprocess
 
-#endif // HRT_POSTPROCESS_PARAMS_HPP
+#endif // HRT_POSTPROCESS_POSTPROCESSOR_PARAMS_HPP

@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <iterator>
 
-#include "include/core/batch.hpp"
+#include "include/core/batch_scheduler.hpp"
 #include "include/core/config.hpp"
 
 #ifdef HRT_USE_DMA_BUFFER
@@ -181,7 +181,7 @@ auto read_algo(const kitzoo::json::Json& algo) -> hrtc::AlgoParam {
 
 } // namespace
 
-auto task_of(std::string_view postprocess_type) -> std::optional<Task> {
+auto task_type(std::string_view postprocess_type) -> std::optional<Task> {
   if (postprocess::supports_postprocessor<postprocess::DetectResultMap>(postprocess_type))
     return Task::Detect;
   if (postprocess::supports_postprocessor<postprocess::RotatedResultMap>(postprocess_type))
@@ -196,8 +196,7 @@ auto task_of(std::string_view postprocess_type) -> std::optional<Task> {
     return Task::Segment;
   return std::nullopt;
 }
-
-auto task_of(const hrtc::AlgoParam& algo) -> std::optional<Task> {
+auto task_type(const hrtc::AlgoParam& algo) -> std::optional<Task> {
   const auto reader = read_config(algo);
   if (!reader.is_parse_success() || !reader.raw().is_object())
     return std::nullopt;
@@ -206,7 +205,7 @@ auto task_of(const hrtc::AlgoParam& algo) -> std::optional<Task> {
   if (postprocess == config.end() || !postprocess->is_object())
     return std::nullopt;
   const auto type = postprocess->find("type");
-  return type != postprocess->end() && type->is_string() ? task_of(type->get_ref<const String&>()) : std::nullopt;
+  return type != postprocess->end() && type->is_string() ? task_type(type->get_ref<const String&>()) : std::nullopt;
 }
 
 auto check_algo_config(const hrtc::AlgoParam& algo) -> Vector<String> {
@@ -382,21 +381,18 @@ auto ImageModel<Result>::input_image(const core::Buffers& input, std::size_t ind
 
 template <typename Result>
 auto ImageModel<Result>::process_sync(const core::Image& src, const core::Rect& src_rect) -> std::optional<Result> {
-  auto results = run({&src, 1}, {&src_rect, 1});
-  if (!results)
-    return std::nullopt;
-  return std::move(results->front());
+  return run<true>({&src, 1}, {&src_rect, 1});
 }
-
 template <typename Result>
 auto ImageModel<Result>::process_sync(const Vector<core::Image>& srcs, const Vector<core::Rect>& src_rects)
     -> std::optional<Vector<Result>> {
-  return run(srcs, src_rects);
+  return run<false>(srcs, src_rects);
 }
 
 template <typename Result>
+template <bool Single>
 auto ImageModel<Result>::run(std::span<const core::Image> srcs, std::span<const core::Rect> src_rects)
-    -> std::optional<Vector<Result>> {
+    -> std::optional<std::conditional_t<Single, Result, Vector<Result>>> {
   KZ_CHECK_RETURN(!srcs.empty(), std::nullopt, "ImageModel: got no images");
   KZ_CHECK_RETURN(src_rects.empty() || src_rects.size() == srcs.size(), std::nullopt,
                   "ImageModel: got {} source rects for {} images", src_rects.size(), srcs.size());
@@ -415,7 +411,10 @@ auto ImageModel<Result>::run(std::span<const core::Image> srcs, std::span<const 
     if (!run_batch(srcs.subspan(first, count), rects, stream_slot->get(), results))
       return std::nullopt;
   }
-  return results;
+  if constexpr (Single)
+    return std::move(results.front());
+  else
+    return results;
 }
 
 template <typename Result>

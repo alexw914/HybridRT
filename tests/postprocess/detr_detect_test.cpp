@@ -48,7 +48,7 @@ TEST(DetrDetectTest, SelectsOneClassAndKeepsOverlappingQueries) {
   EXPECT_FLOAT_EQ(box.rect.height, 20.0F);
   EXPECT_FLOAT_EQ(box.score, 0.9F);
   EXPECT_EQ(box.type, 0);
-  EXPECT_EQ(hrt::model::task_of("DetrDetect"), hrt::model::Task::Detect);
+  EXPECT_EQ(hrt::model::task_type("DetrDetect"), hrt::model::Task::Detect);
 }
 
 TEST(DetrDetectTest, DequantizesAndClipsToSourceRegion) {

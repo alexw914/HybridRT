@@ -34,7 +34,7 @@
   `source/postprocess/postprocessor_factory.cpp` 注册，由 `postprocessor_factory.hpp` 的
   `create_postprocessor<Result>` 创建；`source/postprocess/<task>/` 只放具体解码实现，其构造入口声明在
   `source/include/postprocess/postprocessor_creators.hpp`。跨任务共用的后处理工具（nms、yolo_heads、
-  mask_decoder 等）各自成对放 `source/include/postprocess/` 与 `source/postprocess/`，不集中放入 params.hpp。
+  mask_decoder 等）各自成对放 `source/include/postprocess/` 与 `source/postprocess/`，不集中放入 postprocessor_params.hpp。
 - 后端通过 SDK 根目录启用并定义 `HRT_USE_<BACKEND>`，见 `cmake/HybridrtBackends.cmake`；
   SDK 头文件和类型不得出现在公开头文件。新增后端只扩展
   `source/engine/<backend>_engine.*`、`source/CMakeLists.txt` 和 `Engine::create`；
@@ -123,11 +123,15 @@
 
 - 注释只解释代码无法表达的约束、原因、数据布局和选项，不描述改动过程或显然逻辑；
   上述行尾形式用于需要说明的成员，不要求逐项添加重复注释。
+- 连续、同类型且用途相关的简单局部变量（含数组）合并到一行声明，保留各变量的初始化；
+  不混合指针、引用与普通变量，不为合并超过格式行宽。连续的类型别名声明之间不空行。
 - 只有持有进程级共享状态的对象才继承 `kitzoo::core::Singleton<T>`；无状态工具用自由函数。
 
 ## 函数与错误处理
 
-- 头文件只声明，实现放 .cpp，模板和 constexpr 除外。函数声明间空一行，同名重载（含构造函数）连续声明、不空行。
+- 头文件只声明，实现放 .cpp，模板和 constexpr 除外。不同名函数声明间空一行；同名函数连续排列、
+  中间不空行，适用于所有作用域的声明和定义，包括类成员、自由函数、函数模板、重载（含构造函数）、
+  `extern template` 显式实例化声明和显式实例化定义。
 - 同一文件实现多个类时，各类的方法分别连续放置，类内按头文件声明顺序实现，不在其中穿插其他类的方法。
 - 转发给成员的方法与被调方法同名（如 `Buffer::bytes()` 返回 `memory_->bytes()`），不另起名字造成歧义。
 - 类的每个访问区段（public、protected、private）内依次放：静态成员函数；构造函数、析构函数和拷贝、移动操作

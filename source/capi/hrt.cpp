@@ -464,7 +464,7 @@ auto hrt_model_create(const HrtPackage* package, const char* algo, const HrtMode
   const auto problems = model::check_algo_config(*param);
   if (!problems.empty())
     return fail(HRT_STATUS_INVALID_CONFIG, "invalid config of algo " + param->name + ": " + core::join(problems));
-  const auto task = model::task_of(*param);
+  const auto task = model::task_type(*param);
   if (!task)
     return fail(HRT_STATUS_INVALID_CONFIG, "unknown postprocess type of algo " + param->name);
   if (const auto status = check_engines(*param); status != HRT_STATUS_OK)

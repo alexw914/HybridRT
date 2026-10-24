@@ -22,7 +22,7 @@
 
 #include <hrt/postprocess/postprocessor.hpp>
 
-#include "include/core/batch.hpp"
+#include "include/core/batch_scheduler.hpp"
 
 namespace hrt::postprocess {
 

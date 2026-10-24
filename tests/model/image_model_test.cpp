@@ -540,6 +540,13 @@ TEST_F(ImageModelTest, RunsTheBatchOverloadOnABatchOfOne) {
   EXPECT_EQ((*runs)[0], *single);
   EXPECT_FLOAT_EQ((*runs)[1][0][0], 60.0F / 255.0F);
   EXPECT_EQ((*runs)[2], *single);
+
+  const hrt::core::Image invalid(hrt::core::MemoryType::Cpu, hrt::core::ImageFormat::InterBgr);
+  EXPECT_FALSE(model->process_sync(invalid));
+  EXPECT_FALSE(model->process_sync(Images{invalid}));
+  const hrt::core::Rect outside{-1, 0, 8, 8};
+  EXPECT_FALSE(model->process_sync(image, outside));
+  EXPECT_FALSE(model->process_sync(Images{image}, {outside}));
 }
 
 #ifdef HRT_ORT_MODEL_TEST

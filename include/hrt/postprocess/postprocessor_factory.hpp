@@ -14,21 +14,16 @@
 
 namespace hrt::postprocess {
 
+// Problems in a "postprocess" section for built-in `type`, including an
+// unknown type.
+auto check_postprocess_config(std::string_view type, const kitzoo::json::Json& config) -> Vector<String>;
+
 // The built-in postprocessor of `type` for Result, checked and initialized for
 // `engine`. Aborts on an unknown type, a type of another Result, a config
 // check_config() rejects, or engine outputs init() rejects.
 template <typename Result>
 auto create_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
     -> UniquePtr<Postprocessor<Result>>;
-
-// Whether built-in `type` produces Result; constructs nothing.
-template <typename Result>
-auto supports_postprocessor(std::string_view type) -> bool;
-
-// Problems in a "postprocess" section for built-in `type`, including an
-// unknown type.
-auto check_postprocess_config(std::string_view type, const kitzoo::json::Json& config) -> Vector<String>;
-
 extern template auto create_postprocessor<DetectResultMap>(std::string_view, const kitzoo::json::Json&,
                                                            const engine::Engine&) -> UniquePtr<DetectPostprocessor>;
 extern template auto create_postprocessor<RotatedResultMap>(std::string_view, const kitzoo::json::Json&,
@@ -44,6 +39,9 @@ extern template auto create_postprocessor<SegmentResultMap>(std::string_view, co
 extern template auto create_postprocessor<OcrResult>(std::string_view, const kitzoo::json::Json&, const engine::Engine&)
     -> UniquePtr<OcrPostprocessor>;
 
+// Whether built-in `type` produces Result; constructs nothing.
+template <typename Result>
+auto supports_postprocessor(std::string_view type) -> bool;
 extern template auto supports_postprocessor<DetectResultMap>(std::string_view) -> bool;
 extern template auto supports_postprocessor<RotatedResultMap>(std::string_view) -> bool;
 extern template auto supports_postprocessor<ClassifyResult>(std::string_view) -> bool;

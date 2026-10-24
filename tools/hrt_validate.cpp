@@ -6,7 +6,7 @@
 //              (assets/template/results.json).
 // -----------------------------------------------------------------------------
 
-#include <hrt/core/view.hpp>
+#include <hrt/core/canvas.hpp>
 #include <hrt/model/image_model.hpp>
 
 #include <kitzoo/core/cli.hpp>
@@ -306,7 +306,7 @@ auto main(int argc, char** argv) -> int {
     }
     engine = algo.engines.front().engine_type;
   }
-  const auto task = hrt::model::task_of(algo);
+  const auto task = hrt::model::task_type(algo);
   if (!task) {
     KZ_LOG_ERROR("algo {} has no known postprocess type", name);
     return 1;
@@ -327,7 +327,7 @@ auto main(int argc, char** argv) -> int {
     }
   }
 
-  // task_of succeeded, so the config parses and has a postprocess type.
+  // task_type succeeded, so the config parses and has a postprocess type.
   const kitzoo::json::Reader config{algo.config};
   const auto& postprocess = config.raw()["postprocess"];
   constexpr std::array<const char*, 6> kTasks = {"detect", "rotated", "classify", "keypoint", "segment", "embedding"};

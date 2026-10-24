@@ -1,11 +1,11 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: source/include/core/batch.hpp
+// File: source/include/core/batch_scheduler.hpp
 // Description: Declares views of single samples of batched buffers.
 // -----------------------------------------------------------------------------
 
-#ifndef HRT_CORE_BATCH_HPP
-#define HRT_CORE_BATCH_HPP
+#ifndef HRT_CORE_BATCH_SCHEDULER_HPP
+#define HRT_CORE_BATCH_SCHEDULER_HPP
 
 #include <hrt/core/buffer.hpp>
 
@@ -22,4 +22,4 @@ auto batch_sample(const Buffer& buffer, std::size_t index, bool write) -> Shared
 
 } // namespace hrt::core
 
-#endif // HRT_CORE_BATCH_HPP
+#endif // HRT_CORE_BATCH_SCHEDULER_HPP

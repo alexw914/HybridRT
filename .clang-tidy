@@ -12,6 +12,7 @@ Checks: >
   modernize-make-shared,
   modernize-make-unique,
   readability-*,
+  -readability-isolate-declaration,
   -readability-identifier-length,
   -readability-magic-numbers,
   -readability-function-cognitive-complexity,

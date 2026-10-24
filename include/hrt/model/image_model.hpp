@@ -21,6 +21,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <type_traits>
 
 namespace hrt::model {
 
@@ -33,8 +34,8 @@ enum class Task {
   Embedding,
 };
 
-auto task_of(std::string_view postprocess_type) -> std::optional<Task>;
-auto task_of(const hrtc::AlgoParam& algo) -> std::optional<Task>;
+auto task_type(std::string_view postprocess_type) -> std::optional<Task>;
+auto task_type(const hrtc::AlgoParam& algo) -> std::optional<Task>;
 
 // Problems in the config of `algo` (unknown keys, mistyped or unknown values,
 // unknown postprocess type), one line each; never throws.
@@ -116,7 +117,9 @@ private:
   auto build(const hrtc::AlgoParam& algo, const kitzoo::json::Json& config, const PostprocessorFactory& factory,
              UniquePtr<engine::Engine> first, const hrtc::EngineParam& chosen) -> void;
 
-  auto run(std::span<const core::Image> srcs, std::span<const core::Rect> src_rects) -> std::optional<Vector<Result>>;
+  template <bool Single>
+  auto run(std::span<const core::Image> srcs, std::span<const core::Rect> src_rects)
+      -> std::optional<std::conditional_t<Single, Result, Vector<Result>>>;
 
   // Runs at most batch() images as one engine call and appends their results.
   auto run_batch(std::span<const core::Image> srcs, std::span<const core::Rect> src_rects, core::Stream* stream,

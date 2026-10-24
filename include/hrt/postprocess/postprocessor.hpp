@@ -85,18 +85,11 @@ protected:
 };
 
 using DetectPostprocessor = Postprocessor<DetectResultMap>;
-
-// Source mapping requires uniform scaling, allowing integer letterbox rounding.
 using RotatedPostprocessor = Postprocessor<RotatedResultMap>;
-
 using ClassifyPostprocessor = Postprocessor<ClassifyResult>;
-
 using EmbeddingPostprocessor = Postprocessor<EmbeddingResult>;
-
 using KeypointPostprocessor = Postprocessor<KeypointResultMap>;
-
 using SegmentPostprocessor = Postprocessor<SegmentResultMap>;
-
 using OcrPostprocessor = Postprocessor<OcrResult>;
 
 } // namespace hrt::postprocess

@@ -1,10 +1,10 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: source/core/view.cpp
+// File: source/core/canvas.cpp
 // Description: Draws task results with shared class colors, labels and masks.
 // -----------------------------------------------------------------------------
 
-#include <hrt/core/view.hpp>
+#include <hrt/core/canvas.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -70,7 +70,6 @@ auto draw(cv::Mat& canvas, const postprocess::DetectResultMap& result) -> void {
       draw_box(canvas, box, cls, 3);
   }
 }
-
 auto draw(cv::Mat& canvas, const postprocess::RotatedResultMap& result) -> void {
   for (const auto& [cls, boxes] : result) {
     for (const auto& box : boxes) {
@@ -144,7 +143,6 @@ auto draw(cv::Mat& canvas, const postprocess::KeypointResultMap& result) -> void
     }
   }
 }
-
 auto draw(cv::Mat& canvas, const postprocess::SegmentResultMap& result) -> void {
   for (const auto& [cls, objects] : result) {
     for (const auto& object : objects) {

@@ -245,7 +245,7 @@ TEST(SegmentTest, DecodesRawYoloV8AndYolo26Heads) {
         hrt::test::identity(16, 16)))
         << type;
     expect_left_half_mask(result);
-    EXPECT_EQ(hrt::model::task_of(type), hrt::model::Task::Segment);
+    EXPECT_EQ(hrt::model::task_type(type), hrt::model::Task::Segment);
   }
 }
 
@@ -476,7 +476,7 @@ TEST(SegmentTest, DecodesEndToEndRowsWithoutNms) {
       hrt::test::identity(16, 16)));
   ASSERT_EQ(result.size(), 1U);
   expect_left_half_mask(result);
-  EXPECT_EQ(hrt::model::task_of("E2ESegment"), hrt::model::Task::Segment);
+  EXPECT_EQ(hrt::model::task_type("E2ESegment"), hrt::model::Task::Segment);
 }
 
 TEST(SegmentTest, AbortsOnMismatchedEndToEndOutputs) {

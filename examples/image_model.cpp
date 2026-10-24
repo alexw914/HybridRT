@@ -5,7 +5,7 @@
 //              image file and saves the drawn results.
 // -----------------------------------------------------------------------------
 
-#include <hrt/core/view.hpp>
+#include <hrt/core/canvas.hpp>
 #include <hrt/model/image_model.hpp>
 
 #include <kitzoo/core/cli.hpp>
@@ -57,13 +57,13 @@ auto main(int argc, char** argv) -> int {
     const auto* type = config != nullptr ? field(*config, "postprocess") : nullptr;
     type = type != nullptr ? field(*type, "type") : nullptr;
     if (type != nullptr && type->is_string())
-      task = hrt::model::task_of(type->get_ref<const hrt::String&>());
+      task = hrt::model::task_type(type->get_ref<const hrt::String&>());
   } else {
     package = hrt::hrtc::load(model_path);
     if (package && !package->algos.empty())
       packed = wanted.empty() ? &package->algos.front() : package->find(wanted);
     name = packed != nullptr ? packed->name : hrt::String{};
-    task = packed != nullptr ? hrt::model::task_of(*packed) : std::nullopt;
+    task = packed != nullptr ? hrt::model::task_type(*packed) : std::nullopt;
   }
   if (name.empty()) {
     KZ_LOG_ERROR("no algo {}in {}", wanted.empty() ? hrt::String{} : wanted + " ", model_path.string());

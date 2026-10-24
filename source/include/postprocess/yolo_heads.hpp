@@ -11,7 +11,7 @@
 
 #include <cstddef>
 
-#include "include/postprocess/params.hpp"
+#include "include/postprocess/postprocessor_params.hpp"
 
 namespace hrt::postprocess {
 

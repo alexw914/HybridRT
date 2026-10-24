@@ -90,7 +90,7 @@ TEST(E2EKeypointTest, MapsRowsAndKeypointsWithoutNms) {
   EXPECT_EQ(object.keypoints[0].visible, hrt::postprocess::KeypointVisible::Visible);
   EXPECT_FLOAT_EQ(object.keypoints[1].score, 0.2F);
   EXPECT_EQ(object.keypoints[1].visible, hrt::postprocess::KeypointVisible::Invisible);
-  EXPECT_EQ(hrt::model::task_of("E2EKeypoint"), hrt::model::Task::Keypoint);
+  EXPECT_EQ(hrt::model::task_type("E2EKeypoint"), hrt::model::Task::Keypoint);
 }
 
 TEST(E2EKeypointTest, AbortsOnInvalidConfigOrOutputs) {

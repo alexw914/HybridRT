@@ -1,10 +1,10 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: source/core/batch.cpp
+// File: source/core/batch_scheduler.cpp
 // Description: Implements views of single samples of batched buffers.
 // -----------------------------------------------------------------------------
 
-#include "include/core/batch.hpp"
+#include "include/core/batch_scheduler.hpp"
 
 #include <kitzoo/log/logger.hpp>
 

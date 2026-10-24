@@ -72,7 +72,7 @@ TEST(RtmoKeypointTest, KeepsBestCandidatesAndMapsKeypoints) {
   EXPECT_EQ(object.keypoints[0].visible, hrt::postprocess::KeypointVisible::Visible);
   EXPECT_FLOAT_EQ(object.keypoints[1].score, 0.2F);
   EXPECT_EQ(object.keypoints[1].visible, hrt::postprocess::KeypointVisible::Invisible);
-  EXPECT_EQ(hrt::model::task_of("RtmoKeypoint"), hrt::model::Task::Keypoint);
+  EXPECT_EQ(hrt::model::task_type("RtmoKeypoint"), hrt::model::Task::Keypoint);
 }
 
 TEST(RtmoKeypointTest, AppliesConfiguredThresholds) {

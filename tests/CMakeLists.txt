@@ -151,4 +151,4 @@ endif()
 hybridrt_add_unit_test(segment SOURCES postprocess/segment_test.cpp DEPENDS hrt::hybridrt)
 hybridrt_enable_model_test(segment)
 
-hybridrt_add_unit_test(view SOURCES core/view_test.cpp DEPENDS hrt::hybridrt)
+hybridrt_add_unit_test(canvas SOURCES core/canvas_test.cpp DEPENDS hrt::hybridrt)

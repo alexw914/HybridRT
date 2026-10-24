@@ -47,8 +47,7 @@ __device__ auto fetch(const PreprocessParam& s, int x, int y, int (&out)[3]) -> 
   }
   const int gx = s.origin_x + x;
   const int gy = s.origin_y + y;
-  int u = 0;
-  int v = 0;
+  int u = 0, v = 0;
   if (s.source == InputFormat::Nv12 || s.source == InputFormat::Nv21) {
     const auto* uv = s.chroma + static_cast<std::int64_t>(gy / 2) * s.src_pitch + static_cast<std::int64_t>(gx / 2) * 2;
     u = s.source == InputFormat::Nv12 ? uv[0] : uv[1];
@@ -150,10 +149,7 @@ __global__ auto preprocess_kernel(PreprocessBatch batch) -> void {
   }
   float value[3];
   if (s.interpolation == ResizeInterpolation::Cubic) {
-    int xs[4];
-    int ys[4];
-    int wx[4];
-    int wy[4];
+    int xs[4], ys[4], wx[4], wy[4];
     cubic_taps(rx, s.scale_x, s.src_width, xs, wx);
     cubic_taps(ry, s.scale_y, s.src_height, ys, wy);
     // OpenCV's vectorized vertical pass sums the rows in float, scaled back by 2048 squared.
@@ -181,20 +177,10 @@ __global__ auto preprocess_kernel(PreprocessBatch batch) -> void {
     for (int c = 0; c < 3; ++c)
       value[c] = static_cast<float>(p[c]);
   } else {
-    int x0 = 0;
-    int x1 = 0;
-    int y0 = 0;
-    int y1 = 0;
-    int ax0 = 0;
-    int ax1 = 0;
-    int ay0 = 0;
-    int ay1 = 0;
+    int x0 = 0, x1 = 0, y0 = 0, y1 = 0, ax0 = 0, ax1 = 0, ay0 = 0, ay1 = 0;
     linear_tap(rx, s.scale_x, s.src_width, x0, x1, ax0, ax1);
     linear_tap(ry, s.scale_y, s.src_height, y0, y1, ay0, ay1);
-    int p00[3];
-    int p01[3];
-    int p10[3];
-    int p11[3];
+    int p00[3], p01[3], p10[3], p11[3];
     fetch(s, x0, y0, p00);
     fetch(s, x1, y0, p01);
     fetch(s, x0, y1, p10);
@@ -212,8 +198,7 @@ auto launch_cuda_preprocess(const PreprocessParam* params, std::size_t count, cu
   for (std::size_t first = 0; first < count; first += kPreprocessParamsPerLaunch) {
     const auto n = std::min(kPreprocessParamsPerLaunch, count - first);
     PreprocessBatch batch{};
-    int width = 0;
-    int height = 0;
+    int width = 0, height = 0;
     for (std::size_t i = 0; i < n; ++i) {
       batch.params[i] = params[first + i];
       width = std::max(width, params[first + i].dst_width);

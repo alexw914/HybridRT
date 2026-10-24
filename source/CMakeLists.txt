@@ -32,10 +32,10 @@ add_library(hybridrt STATIC
     core/context.cpp
     core/memory.cpp
     core/buffer.cpp
-    core/batch.cpp
+    core/batch_scheduler.cpp
     core/image.cpp
     core/config.cpp
-    core/view.cpp
+    core/canvas.cpp
     engine/engine.cpp
     memory/cpu_memory.cpp
     memory/memory_copier.cpp

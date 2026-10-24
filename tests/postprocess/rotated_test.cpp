@@ -173,7 +173,7 @@ TEST(RotatedTest, E2EDecodesRowsWithoutNms) {
   EXPECT_FLOAT_EQ(box.rect.size.height, 20.0F);
   EXPECT_NEAR(box.rect.angle, 15.0F, 1e-4F);
   EXPECT_FLOAT_EQ(box.score, 0.9F);
-  EXPECT_EQ(hrt::model::task_of("E2ERotated"), hrt::model::Task::Rotated);
+  EXPECT_EQ(hrt::model::task_type("E2ERotated"), hrt::model::Task::Rotated);
 }
 
 TEST(RotatedTest, E2EAbortsOnInvalidConfigOrOutputs) {

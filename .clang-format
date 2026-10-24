@@ -30,4 +30,4 @@ IncludeCategories:
   - Regex: '^"'
     Priority: 4
 ReflowComments: true
-SeparateDefinitionBlocks: Always
+SeparateDefinitionBlocks: Leave

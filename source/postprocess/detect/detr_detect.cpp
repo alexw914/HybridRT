@@ -12,8 +12,8 @@
 #include <limits>
 
 #include "include/postprocess/common.hpp"
-#include "include/postprocess/params.hpp"
 #include "include/postprocess/postprocessor_creators.hpp"
+#include "include/postprocess/postprocessor_params.hpp"
 
 namespace hrt::postprocess {
 
