@@ -33,8 +33,9 @@ auto is_planar(core::ImageFormat format) -> bool {
 auto source_of(core::ImageFormat format) -> std::optional<backend::CudaResizeSource> {
   switch (format) {
   case core::ImageFormat::InterBgr:
+    return backend::CudaResizeSource::Bgr;
   case core::ImageFormat::InterRgb:
-    return backend::CudaResizeSource::Interleaved;
+    return backend::CudaResizeSource::Rgb;
   case core::ImageFormat::Nv12:
     return backend::CudaResizeSource::Nv12;
   case core::ImageFormat::Nv21:
@@ -78,7 +79,7 @@ auto make_task(const core::Image& dst, const ImageTransform& transform, const co
   task.source = *source;
   task.src = region;
   task.src_pitch = pitch(src);
-  if (*source != backend::CudaResizeSource::Interleaved) {
+  if (*source != backend::CudaResizeSource::Bgr && *source != backend::CudaResizeSource::Rgb) {
     task.chroma = at(src, {src.size().height}, stream);
     task.origin_x = from.x;
     task.origin_y = from.y;

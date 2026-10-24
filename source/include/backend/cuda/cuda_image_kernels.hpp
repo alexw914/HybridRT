@@ -15,11 +15,12 @@
 namespace hrt::backend {
 
 enum class CudaResizeSource {
-  Interleaved, // uint8 BGR or RGB pixels.
-  Nv12,        // Y plane, then interleaved U and V at half resolution.
-  Nv21,        // Y plane, then interleaved V and U at half resolution.
-  I420,        // Y, U and V planes, the chroma ones at half resolution in half rows, as OpenCV reads them.
-  Yv12,        // As I420 with V before U.
+  Bgr,  // Interleaved uint8 BGR pixels.
+  Rgb,  // Interleaved uint8 RGB pixels.
+  Nv12, // Y plane, then interleaved U and V at half resolution.
+  Nv21, // Y plane, then interleaved V and U at half resolution.
+  I420, // Y, U and V planes, the chroma ones at half resolution in half rows, as OpenCV reads them.
+  Yv12, // As I420 with V before U.
 };
 
 enum class CudaResizeFilter {
@@ -31,7 +32,7 @@ enum class CudaResizeFilter {
 // One uint8 source region resized into the region of a 3-channel input and
 // padded around it. Every output pixel is written.
 struct CudaResizeTask {
-  CudaResizeSource source = CudaResizeSource::Interleaved;
+  CudaResizeSource source = CudaResizeSource::Bgr;
   const std::uint8_t* src = nullptr;    // First pixel of the source region; the Y plane for NV12/NV21.
   std::int64_t src_pitch = 0;           // Bytes between source rows, also of the chroma plane.
   const std::uint8_t* chroma = nullptr; // YUV: first chroma row of the whole image, right after the Y plane.

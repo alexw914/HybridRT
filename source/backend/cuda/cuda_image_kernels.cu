@@ -38,7 +38,7 @@ __device__ auto saturate(int value) -> int {
 // BGR as OpenCV's cvtColor gives it for NV12 and NV21.
 __device__ auto fetch(const CudaResizeTask& s, int x, int y, int (&out)[3]) -> void {
   const auto* row = s.src + static_cast<std::int64_t>(y) * s.src_pitch;
-  if (s.source == CudaResizeSource::Interleaved) {
+  if (s.source == CudaResizeSource::Bgr || s.source == CudaResizeSource::Rgb) {
     const auto* p = row + static_cast<std::int64_t>(x) * 3;
     out[0] = p[0];
     out[1] = p[1];
