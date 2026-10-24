@@ -156,25 +156,6 @@ auto dequantize_buffer(const core::Buffer& output, core::Buffer& scratch) -> voi
 // One dequantize_buffer() buffer per engine output, shaped like the int8 ones.
 auto create_scratch(const engine::Engine& engine) -> Vector<core::Buffer>;
 
-// Indices of the rects kept by greedy NMS, highest score first.
-auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
-    -> Vector<std::size_t>;
-
-// Checks and initializes a postprocessor made for `type`. Aborts on an unknown
-// type, a config check_config rejects, an engine without one image input, or
-// engine outputs init() rejects. init() may therefore dereference
-// engine.input_size().
-template <typename Postprocessor>
-auto check_init(UniquePtr<Postprocessor> postprocessor, std::string_view type, const kitzoo::json::Json& config,
-                const engine::Engine& engine) -> UniquePtr<Postprocessor> {
-  KZ_CHECK_MSG(postprocessor != nullptr, "postprocess: unknown type \"{}\"", type);
-  const auto problems = postprocessor->check_config(config);
-  KZ_CHECK_MSG(problems.empty(), "postprocess: invalid {} config: {}", type, core::join(problems));
-  KZ_CHECK_MSG(engine.input_size().has_value(), "postprocess: {} needs one 4-D image input", type);
-  KZ_CHECK_MSG(postprocessor->init(config, engine), "postprocess: {} does not fit the engine", type);
-  return postprocessor;
-}
-
 } // namespace hrt::postprocess
 
 #endif // HRT_POSTPROCESS_COMMON_HPP

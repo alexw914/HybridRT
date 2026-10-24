@@ -5,7 +5,7 @@
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
-#include <hrt/postprocess/detect.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -77,7 +77,7 @@ TEST(DetectTest, InfersStridesInOutputOrderAndChecksExplicitValues) {
       config["anchors"] = {{8, 8}, {16, 16}};
     else if (hrt::String(type) == "YoloV8Detect")
       config["reg_max"] = 1;
-    EXPECT_NE(hrt::postprocess::create_detect_postprocessor(type, config, engine), nullptr);
+    EXPECT_NE(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(type, config, engine), nullptr);
     // Strides are always inferred, so a configured list is an unknown key.
     config["strides"] = {16, 8};
     EXPECT_FALSE(hrt::postprocess::check_postprocess_config(type, config).empty());
@@ -89,21 +89,26 @@ TEST(DetectTest, ChecksExplicitRegMaxAgainstEveryHead) {
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 9, 2, 2})});
   auto config = yolov8_config();
   config["reg_max"] = 2;
-  EXPECT_NE(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", config, engine), nullptr);
+  EXPECT_NE(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV8Detect", config, engine),
+            nullptr);
   for (const auto bins : {0, 1, 16}) {
     config["reg_max"] = bins;
-    EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", config, engine), "");
+    EXPECT_DEATH(
+        hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV8Detect", config, engine), "");
   }
   config.erase("reg_max");
   FakeEngine inconsistent({proto(DataType::Float32, {1, 3, 16, 16})},
                           {proto(DataType::Float32, {1, 9, 2, 2}), proto(DataType::Float32, {1, 13, 1, 1})});
-  EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", config, inconsistent), "");
+  EXPECT_DEATH(
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV8Detect", config, inconsistent),
+      "");
 }
 
 TEST(DetectYoloV8Test, DecodesNchwFloat) {
   const auto output = proto(DataType::Float32, {1, 9, 2, 2});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
-  auto postprocessor = hrt::postprocess::create_detect_postprocessor("YoloV8Detect", yolov8_config(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
+      "YoloV8Detect", yolov8_config(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   hrt::postprocess::DetectResultMap result;
@@ -115,7 +120,8 @@ TEST(DetectYoloV8Test, DecodesNchwFloat) {
 TEST(DetectYoloV8Test, DecodesNhwcInt8) {
   const auto output = proto(DataType::Int8, {1, 2, 2, 9});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output}, hrt::engine::DataLayout::Nhwc);
-  auto postprocessor = hrt::postprocess::create_detect_postprocessor("YoloV8Detect", yolov8_config(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
+      "YoloV8Detect", yolov8_config(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   const auto real = yolov8_values(true, 0.2F);
@@ -134,7 +140,8 @@ TEST(DetectYoloV8Test, DecodesNhwcInt8) {
 TEST(DetectYoloV8Test, FiltersInt8AtThreshold) {
   const auto output = proto(DataType::Int8, {1, 9, 2, 2});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
-  auto postprocessor = hrt::postprocess::create_detect_postprocessor("YoloV8Detect", yolov8_config(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
+      "YoloV8Detect", yolov8_config(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   // scale 0.2, zero point 10: q = real / 0.2 + 10. Threshold 0.5 is logit 0,
@@ -164,11 +171,15 @@ TEST(DetectYoloV8Test, AbortsOnMismatchedConfig) {
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 9, 2, 2})});
   auto config = yolov8_config();
   config["class_num"] = 2;
-  EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", config, engine), "");
-  EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("Unknown", yolov8_config(), engine), "");
+  EXPECT_DEATH(
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV8Detect", config, engine), "");
+  EXPECT_DEATH(
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("Unknown", yolov8_config(), engine),
+      "");
   auto negative = yolov8_config();
   negative["confidence_threshold"] = {-0.1};
-  EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV8Detect", negative, engine), "");
+  EXPECT_DEATH(
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV8Detect", negative, engine), "");
 }
 
 TEST(DetectYolo26Test, ReadsDistancesInCells) {
@@ -178,7 +189,8 @@ TEST(DetectYolo26Test, ReadsDistancesInCells) {
   const auto output = proto(DataType::Float32, {1, 5, 2, 2});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
   const auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
-  auto postprocessor = hrt::postprocess::create_detect_postprocessor("Yolo26Detect", config, engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("Yolo26Detect", config, engine);
   hrt::Vector<float> values(5 * 4, -10.0F);
   const hrt::Vector<float> cell{1.0F, 1.0F, 0.5F, 0.5F, 3.0F};
   for (std::size_t c = 0; c < cell.size(); ++c)
@@ -196,7 +208,8 @@ TEST(DetectYolo26Test, ReadsDistancesInCells) {
   // YOLOv8-sized heads (distance bins) do not fit.
   FakeEngine bins({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 65, 2, 2})});
   GTEST_FLAG_SET(death_test_style, "threadsafe");
-  EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("Yolo26Detect", config, bins), "");
+  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("Yolo26Detect", config, bins),
+               "");
   EXPECT_EQ(hrt::postprocess::check_postprocess_config("Yolo26Detect", Json::parse(R"({"reg_max": 1})")).size(), 1U);
 }
 
@@ -206,7 +219,8 @@ TEST(DetectYoloV5Test, KeepsLowObjectnessAboveThreshold) {
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
   auto config =
       Json::parse(R"({"class_num": 1, "anchors": [[8, 8]], "confidence_threshold": [0.25], "iou_threshold": [0.45]})");
-  auto postprocessor = hrt::postprocess::create_detect_postprocessor("YoloV5Detect", config, engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV5Detect", config, engine);
   ASSERT_NE(postprocessor, nullptr);
 
   hrt::Vector<float> values(24, -10.0F);
@@ -231,7 +245,8 @@ TEST(DetectYoloV5Test, TakesOneStrideAndAnchorListPerHead) {
   const auto good = Json::parse(
       R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "anchors": [[8, 8, 16, 16]]})");
   EXPECT_TRUE(hrt::postprocess::check_postprocess_config("YoloV5Detect", good).empty());
-  EXPECT_NE(hrt::postprocess::create_detect_postprocessor("YoloV5Detect", good, engine), nullptr);
+  EXPECT_NE(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV5Detect", good, engine),
+            nullptr);
 
   // The removed head_num, anchors_per_head and strides_per_head are unknown keys.
   const auto old = Json::parse(
@@ -242,14 +257,18 @@ TEST(DetectYoloV5Test, TakesOneStrideAndAnchorListPerHead) {
   for (const auto* bad :
        {R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "anchors": [[8, 8, 16]]})",
         R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "anchors": [[8, 8]]})"})
-    EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("YoloV5Detect", Json::parse(bad), engine), "") << bad;
+    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV5Detect",
+                                                                                           Json::parse(bad), engine),
+                 "")
+        << bad;
 }
 
 TEST(DetectGeneralTest, AppliesNmsAndMapsToSource) {
   const auto output = proto(DataType::Float32, {1, 5, 2});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
   auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
-  auto postprocessor = hrt::postprocess::create_detect_postprocessor("GeneralDetect", config, engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("GeneralDetect", config, engine);
   ASSERT_NE(postprocessor, nullptr);
 
   // Rows cx, cy, w, h, score for two overlapping boxes: (10, 10)-(30, 30) and
@@ -273,7 +292,8 @@ TEST(DetectGeneralTest, DecodesCenterSizeBoxes) {
   const auto output = proto(DataType::Float32, {1, 5, 1});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
   auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
-  auto postprocessor = hrt::postprocess::create_detect_postprocessor("GeneralDetect", config, engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("GeneralDetect", config, engine);
   ASSERT_NE(postprocessor, nullptr);
 
   // Center (20, 15), size 10 x 6.
@@ -292,7 +312,8 @@ TEST(DetectGeneralTest, SkipsNanCentersAndNonpositiveSizes) {
   const auto output = proto(DataType::Float32, {1, 5, 3});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
   auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
-  auto postprocessor = hrt::postprocess::create_detect_postprocessor("GeneralDetect", config, engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("GeneralDetect", config, engine);
   ASSERT_NE(postprocessor, nullptr);
 
   // Columns: NaN center, valid box, negative width; all pass the score.
@@ -337,7 +358,8 @@ TEST(DetectGeneralTest, ScansScoreRowsAcrossBlocksAndTail) {
   {
     const auto output = proto(DataType::Float32, {1, 5, kAnchors});
     FakeEngine engine({proto(DataType::Float32, {1, 3, 80, 80})}, {output});
-    auto postprocessor = hrt::postprocess::create_detect_postprocessor("GeneralDetect", config, engine);
+    auto postprocessor =
+        hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("GeneralDetect", config, engine);
     ASSERT_NE(postprocessor, nullptr);
     // box(i): center 2i + 0.5, size 1; box(0) and box(-1) give cy 0.5 and size 1.
     const auto box = [](std::int64_t i) -> float { return i < 0 ? 1.0F : static_cast<float>(2 * i) + 0.5F; };
@@ -349,7 +371,8 @@ TEST(DetectGeneralTest, ScansScoreRowsAcrossBlocksAndTail) {
   {
     const auto output = proto(DataType::Int8, {1, 5, kAnchors});
     FakeEngine engine({proto(DataType::Float32, {1, 3, 80, 80})}, {output});
-    auto postprocessor = hrt::postprocess::create_detect_postprocessor("GeneralDetect", config, engine);
+    auto postprocessor =
+        hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("GeneralDetect", config, engine);
     ASSERT_NE(postprocessor, nullptr);
     // real = 0.5 * q: centers i + 0.5 and size 0.5; score q = 1 is exactly the
     // threshold and q = 2 passes.
@@ -366,7 +389,8 @@ TEST(DetectGeneralTest, DecodesInt8) {
   const auto output = proto(DataType::Int8, {1, 5, 1});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
   auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
-  auto postprocessor = hrt::postprocess::create_detect_postprocessor("GeneralDetect", config, engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("GeneralDetect", config, engine);
   ASSERT_NE(postprocessor, nullptr);
 
   // real = 0.25 * (q - 4): cx, cy, w, h = 20, 20, 20, 20 and score 0.75.
@@ -397,9 +421,9 @@ TEST(DetectGeneralTest, ChecksConfigWithoutThrowing) {
 
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {proto(DataType::Float32, {1, 5, 2})});
-  EXPECT_DEATH(
-      hrt::postprocess::create_detect_postprocessor("GeneralDetect", Json::parse(R"({"class_num": "one"})"), engine),
-      "");
+  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
+                   "GeneralDetect", Json::parse(R"({"class_num": "one"})"), engine),
+               "");
 }
 
 #ifdef HRT_ORT_MODEL_TEST

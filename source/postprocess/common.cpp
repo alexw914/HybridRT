@@ -20,8 +20,9 @@
 #include <emmintrin.h>
 #endif
 
+#include <hrt/postprocess/postprocessor.hpp>
+
 #include "include/core/batch.hpp"
-#include "include/postprocess/params.hpp"
 
 namespace hrt::postprocess {
 
@@ -376,50 +377,6 @@ auto dequantize_buffer(const core::Buffer& output, core::Buffer& scratch) -> voi
     }
     convert(base + offset, cols);
   }
-}
-
-auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
-    -> Vector<std::size_t> {
-  Vector<std::size_t> order(rects.size());
-  std::iota(order.begin(), order.end(), std::size_t{0});
-  std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) -> bool { return scores[a] > scores[b]; });
-  Vector<std::size_t> kept;
-  for (auto index : order) {
-    const auto& rect = rects[index];
-    const auto overlaps = std::any_of(kept.begin(), kept.end(), [&](std::size_t other) -> bool {
-      return core::iou(rect, rects[other]) >= iou_threshold;
-    });
-    if (!overlaps)
-      kept.push_back(index);
-  }
-  return kept;
-}
-
-namespace {
-
-auto create_any(std::string_view type) -> UniquePtr<PostprocessorBase> {
-  if (auto postprocessor = create_detect(type))
-    return postprocessor;
-  if (auto postprocessor = create_rotated(type))
-    return postprocessor;
-  if (auto postprocessor = create_classify(type))
-    return postprocessor;
-  if (auto postprocessor = create_embedding(type))
-    return postprocessor;
-  if (auto postprocessor = create_keypoint(type))
-    return postprocessor;
-  if (auto postprocessor = create_segment(type))
-    return postprocessor;
-  return create_ocr(type);
-}
-
-} // namespace
-
-auto check_postprocess_config(std::string_view type, const kitzoo::json::Json& config) -> Vector<String> {
-  const auto postprocessor = create_any(type);
-  if (postprocessor == nullptr)
-    return {"postprocess.type: unknown \"" + String(type) + "\""};
-  return postprocessor->check_config(config);
 }
 
 } // namespace hrt::postprocess

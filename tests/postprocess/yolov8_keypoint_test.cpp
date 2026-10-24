@@ -6,7 +6,7 @@
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
-#include <hrt/postprocess/keypoint.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <cmath>
 #include <gtest/gtest.h>
@@ -75,11 +75,15 @@ TEST(YoloV8KeypointTest, ChecksKeypointChannelsAcrossPoseFormats) {
     else if (name == "Yolo26Keypoint" || name == "YoloV8Keypoint")
       shape = {1, (name == "YoloV8Keypoint" ? 9 : 5) + 6, 2, 2};
     FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, shape)});
-    EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor(type, options, engine), nullptr) << type;
+    EXPECT_NE(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>(type, options, engine),
+              nullptr)
+        << type;
     for (const auto count : {0, 3}) {
       auto broken = options;
       broken["keypoint_num"] = count;
-      EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor(type, broken, engine), "") << type << count;
+      EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>(type, broken, engine),
+                   "")
+          << type << count;
     }
   }
 }
@@ -89,13 +93,16 @@ TEST(YoloV8KeypointTest, DefaultsToSeventeenVisibleKeypointsAndSixteenBins) {
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 116, 2, 2})});
   const auto options = Json::parse(R"({"class_num":1,"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
   EXPECT_TRUE(hrt::postprocess::check_postprocess_config("YoloV8Keypoint", options).empty());
-  EXPECT_NE(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", options, engine), nullptr);
+  EXPECT_NE(
+      hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("YoloV8Keypoint", options, engine),
+      nullptr);
 }
 
 TEST(YoloV8KeypointTest, DecodesBinsAndKeypointOffsets) {
   const auto output = proto(DataType::Float32, {1, kChannels, 4, 4});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 32, 32})}, {output});
-  auto decoder = hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", config(), engine);
+  auto decoder =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("YoloV8Keypoint", config(), engine);
   ASSERT_NE(decoder, nullptr);
   hrt::postprocess::KeypointResultMap result;
   ASSERT_TRUE(decoder->process(result, {hrt::test::create_buffer(output, head_values())}, hrt::test::identity(32, 32)));
@@ -125,12 +132,15 @@ TEST(YoloV8KeypointTest, AbortsOnHeadsThatDoNotFit) {
   const auto output = proto(DataType::Float32, {1, kChannels, 4, 4});
   for (const auto& shape : hrt::Vector<hrt::core::Shape>{{1, kChannels + 1, 4, 4}}) {
     FakeEngine engine({input}, {proto(DataType::Float32, shape)});
-    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", config(), engine), "");
+    EXPECT_DEATH(
+        hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("YoloV8Keypoint", config(), engine),
+        "");
   }
   FakeEngine valid({input}, {output});
   auto broken = config();
   broken["keypoint_num"] = 0;
-  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", broken, valid), "");
+  EXPECT_DEATH(
+      hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("YoloV8Keypoint", broken, valid), "");
 }
 
 #ifdef HRT_ORT_MODEL_TEST

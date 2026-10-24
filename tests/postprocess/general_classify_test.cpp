@@ -4,7 +4,7 @@
 // Description: Tests classification score activation.
 // -----------------------------------------------------------------------------
 
-#include <hrt/postprocess/classify.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <cmath>
 #include <gtest/gtest.h>
@@ -19,7 +19,7 @@ using hrt::test::proto;
 TEST(GeneralClassifyTest, AppliesSoftmax) {
   const auto output = proto(DataType::Float32, {1, 3});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {output});
-  auto postprocessor = hrt::postprocess::create_classify_postprocessor(
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::ClassifyResult>(
       "GeneralClassify", kitzoo::json::Json::parse(R"({"classify_postprocess_type": "softmax"})"), engine);
   ASSERT_NE(postprocessor, nullptr);
 
@@ -34,8 +34,8 @@ TEST(GeneralClassifyTest, AppliesSoftmax) {
 TEST(GeneralClassifyTest, DequantizesInt8Scores) {
   const auto output = proto(DataType::Int8, {1, 3});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {output});
-  auto postprocessor =
-      hrt::postprocess::create_classify_postprocessor("GeneralClassify", kitzoo::json::Json::object(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::ClassifyResult>(
+      "GeneralClassify", kitzoo::json::Json::object(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   auto buffer = hrt::test::create_buffer<std::int8_t>(output, {0, 10, 20});
@@ -51,7 +51,7 @@ TEST(GeneralClassifyTest, DequantizesInt8Scores) {
 TEST(GeneralClassifyTest, DecodesEachSampleOfABatch) {
   const auto output = proto(DataType::Float32, {2, 3});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {2, 3, 8, 8})}, {output});
-  auto postprocessor = hrt::postprocess::create_classify_postprocessor(
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::ClassifyResult>(
       "GeneralClassify", kitzoo::json::Json::parse(R"({"classify_postprocess_type": "softmax"})"), engine);
   ASSERT_NE(postprocessor, nullptr);
 

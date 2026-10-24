@@ -6,12 +6,13 @@
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
-#include <hrt/postprocess/rotated.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <gtest/gtest.h>
 #include <numbers>
 
 #include "fake_engine.hpp"
+#include "include/postprocess/nms.hpp"
 
 #ifdef HRT_ORT_MODEL_TEST
 #include <opencv2/imgcodecs.hpp>
@@ -29,11 +30,14 @@ TEST(RotatedTest, InfersYoloV8StridesAndRegMax) {
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 10, 2, 2})});
   auto config =
       kitzoo::json::Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
-  EXPECT_NE(hrt::postprocess::create_rotated_postprocessor("YoloV8Rotated", config, engine), nullptr);
+  EXPECT_NE(hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("YoloV8Rotated", config, engine),
+            nullptr);
   config["reg_max"] = 2;
-  EXPECT_NE(hrt::postprocess::create_rotated_postprocessor("YoloV8Rotated", config, engine), nullptr);
+  EXPECT_NE(hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("YoloV8Rotated", config, engine),
+            nullptr);
   config["reg_max"] = 16;
-  EXPECT_DEATH(hrt::postprocess::create_rotated_postprocessor("YoloV8Rotated", config, engine), "");
+  EXPECT_DEATH(
+      hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("YoloV8Rotated", config, engine), "");
 }
 
 TEST(RotatedTest, NmsMergesOverlappingBoxes) {
@@ -70,7 +74,8 @@ TEST(RotatedTest, GeneralDecodesObb) {
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 64, 64})}, {output});
   auto config =
       kitzoo::json::Json::parse(R"({"class_num": 2, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
-  auto postprocessor = hrt::postprocess::create_rotated_postprocessor("GeneralRotated", config, engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("GeneralRotated", config, engine);
 
   // cx, cy, w, h, class 0 and 1 scores, angle pi / 12.
   const hrt::Vector<float> values{20, 15, 20, 10, 0.1F, 0.9F, std::numbers::pi_v<float> / 12.0F};
@@ -97,7 +102,8 @@ TEST(RotatedTest, Yolo26ReadsDistancesAndRadians) {
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
   const auto config =
       kitzoo::json::Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
-  auto postprocessor = hrt::postprocess::create_rotated_postprocessor("Yolo26Rotated", config, engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("Yolo26Rotated", config, engine);
   hrt::Vector<float> values(6 * 4, -10.0F);
   const hrt::Vector<float> cell{0.5F, 0.5F, 0.5F, 0.5F, std::numbers::pi_v<float> / 12.0F, 3.0F};
   for (std::size_t c = 0; c < cell.size(); ++c)
@@ -117,7 +123,8 @@ TEST(RotatedTest, RejectsNonuniformSourceMapping) {
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 64, 64})}, {output});
   const auto config =
       kitzoo::json::Json::parse(R"({"class_num":1,"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
-  auto postprocessor = hrt::postprocess::create_rotated_postprocessor("GeneralRotated", config, engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("GeneralRotated", config, engine);
   const auto buffer = hrt::test::create_buffer<float>(output, {20, 15, 20, 10, 0.9F, std::numbers::pi_v<float> / 4.0F});
   hrt::postprocess::RotatedResultMap result;
   const hrt::preprocess::ImageTransform stretched{{0, 0, 64, 64}, {0, 0, 128, 64}, {64, 64}};
@@ -145,7 +152,8 @@ TEST(RotatedTest, E2EDecodesRowsWithoutNms) {
   const auto output = proto(DataType::Float32, {1, 3, 7});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 64, 64})}, {output});
   const auto config = kitzoo::json::Json::parse(R"({"class_num": 2, "confidence_threshold": [0.5]})");
-  auto postprocessor = hrt::postprocess::create_rotated_postprocessor("E2ERotated", config, engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("E2ERotated", config, engine);
   const auto angle = std::numbers::pi_v<float> / 12.0F;
   // cx, cy, w, h, score, class, angle: two identical boxes both stay (the
   // export already deduplicated them) and a padding row is skipped.
@@ -174,10 +182,11 @@ TEST(RotatedTest, E2EAbortsOnInvalidConfigOrOutputs) {
   const auto config = kitzoo::json::Json::parse(R"({"class_num": 15, "confidence_threshold": [0.25]})");
   for (const auto& shape : hrt::Vector<hrt::core::Shape>{{1, 20, 21504}, {1, 300, 6}}) {
     hrt::test::FakeEngine engine({input}, {proto(DataType::Float32, shape)});
-    EXPECT_DEATH(hrt::postprocess::create_rotated_postprocessor("E2ERotated", config, engine), "");
+    EXPECT_DEATH(
+        hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("E2ERotated", config, engine), "");
   }
   hrt::test::FakeEngine valid({input}, {proto(DataType::Float32, {1, 300, 7})});
-  EXPECT_DEATH(hrt::postprocess::create_rotated_postprocessor(
+  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>(
                    "E2ERotated", kitzoo::json::Json::parse(R"({"class_num": 15, "iou_threshold": [0.45]})"), valid),
                "");
 }

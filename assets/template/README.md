@@ -136,6 +136,16 @@ Per platform:
 
 ## postprocess
 
+C++ callers create a built-in postprocessor with
+`create_postprocessor<OcrResult>("Ocr", config, engine)` or
+`create_postprocessor<DetectResultMap>("YoloV8Detect", config, engine)` from
+`hrt/postprocess/postprocessor_factory.hpp`; the result types are in
+`hrt/postprocess/result_types.hpp`. `supports_postprocessor<Result>(type)` checks whether a
+built-in type produces `Result` without constructing it. Creation checks the result type,
+configuration and engine outputs; invalid requests abort. `check_postprocess_config(type, config)`
+returns configuration problems before engine initialization. Every built-in type is registered
+once in `source/postprocess/postprocessor_factory.cpp`, which `ImageModel` uses as well.
+
 `confidence_threshold` and `iou_threshold` take one value for all classes or one per class,
 each in [0, 1].
 

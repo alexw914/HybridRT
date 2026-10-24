@@ -5,17 +5,16 @@
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <kitzoo/json/reader.hpp>
 #include <kitzoo/log/logger.hpp>
 
 #include <algorithm>
 #include <iterator>
-#include <type_traits>
 
 #include "include/core/batch.hpp"
 #include "include/core/config.hpp"
-#include "include/postprocess/params.hpp"
 
 #ifdef HRT_USE_DMA_BUFFER
 #include "include/memory/dma_buffer_memory.hpp"
@@ -141,25 +140,6 @@ auto is_yuv(core::ImageFormat format) -> bool {
          format == core::ImageFormat::Yv12;
 }
 
-template <typename Result>
-auto builtin_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
-    -> UniquePtr<postprocess::Postprocessor<Result>> {
-  if constexpr (std::is_same_v<Result, postprocess::DetectResultMap>)
-    return postprocess::create_detect_postprocessor(type, config, engine);
-  else if constexpr (std::is_same_v<Result, postprocess::RotatedResultMap>)
-    return postprocess::create_rotated_postprocessor(type, config, engine);
-  else if constexpr (std::is_same_v<Result, postprocess::ClassifyResult>)
-    return postprocess::create_classify_postprocessor(type, config, engine);
-  else if constexpr (std::is_same_v<Result, postprocess::EmbeddingResult>)
-    return postprocess::create_embedding_postprocessor(type, config, engine);
-  else if constexpr (std::is_same_v<Result, postprocess::SegmentResultMap>)
-    return postprocess::create_segment_postprocessor(type, config, engine);
-  else if constexpr (std::is_same_v<Result, postprocess::OcrResult>)
-    return postprocess::create_ocr_postprocessor(config, engine);
-  else
-    return postprocess::create_keypoint_postprocessor(type, config, engine);
-}
-
 // With `host_engine`, buffers are written on the host: they use its fast host memory when it offers one, and
 // dma-bufs come from any heap, as no device with 32-bit DMA (RGA2) touches them.
 auto make_buffers(const Vector<core::BufferProto>& protos, const engine::Engine* host_engine)
@@ -202,17 +182,17 @@ auto read_algo(const kitzoo::json::Json& algo) -> hrtc::AlgoParam {
 } // namespace
 
 auto task_of(std::string_view postprocess_type) -> std::optional<Task> {
-  if (postprocess::create_detect(postprocess_type) != nullptr)
+  if (postprocess::supports_postprocessor<postprocess::DetectResultMap>(postprocess_type))
     return Task::Detect;
-  if (postprocess::create_rotated(postprocess_type) != nullptr)
+  if (postprocess::supports_postprocessor<postprocess::RotatedResultMap>(postprocess_type))
     return Task::Rotated;
-  if (postprocess::create_embedding(postprocess_type) != nullptr)
+  if (postprocess::supports_postprocessor<postprocess::EmbeddingResult>(postprocess_type))
     return Task::Embedding;
-  if (postprocess::create_classify(postprocess_type) != nullptr)
+  if (postprocess::supports_postprocessor<postprocess::ClassifyResult>(postprocess_type))
     return Task::Classify;
-  if (postprocess::create_keypoint(postprocess_type) != nullptr)
+  if (postprocess::supports_postprocessor<postprocess::KeypointResultMap>(postprocess_type))
     return Task::Keypoint;
-  if (postprocess::create_segment(postprocess_type) != nullptr)
+  if (postprocess::supports_postprocessor<postprocess::SegmentResultMap>(postprocess_type))
     return Task::Segment;
   return std::nullopt;
 }
@@ -301,8 +281,8 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
   const auto postprocess_config = config.value("postprocess", kitzoo::json::Json::object());
   for (std::size_t i = 0; i < postprocess_num; ++i) {
     auto postprocessor = factory ? factory(postprocess_config, engine)
-                                 : builtin_postprocessor<Result>(postprocess_config["type"].get_ref<const String&>(),
-                                                                 postprocess_config, engine);
+                                 : postprocess::create_postprocessor<Result>(
+                                       postprocess_config["type"].get_ref<const String&>(), postprocess_config, engine);
     KZ_CHECK_MSG(postprocessor != nullptr, "ImageModel: no postprocessor for algo {}", algo.name);
     postprocessor_pool_.add(std::make_unique<UniquePtr<postprocess::Postprocessor<Result>>>(std::move(postprocessor)));
   }

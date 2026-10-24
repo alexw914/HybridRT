@@ -11,13 +11,7 @@
 #include <hrt/core/context.hpp>
 #include <hrt/engine/engine.hpp>
 #include <hrt/hrtc/hrtc.hpp>
-#include <hrt/postprocess/classify.hpp>
-#include <hrt/postprocess/detect.hpp>
-#include <hrt/postprocess/embedding.hpp>
-#include <hrt/postprocess/keypoint.hpp>
-#include <hrt/postprocess/ocr.hpp>
-#include <hrt/postprocess/rotated.hpp>
-#include <hrt/postprocess/segment.hpp>
+#include <hrt/postprocess/postprocessor.hpp>
 #include <hrt/preprocess/image_preprocessor.hpp>
 
 #include <kitzoo/core/macro.hpp>

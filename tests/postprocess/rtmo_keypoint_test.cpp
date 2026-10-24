@@ -6,7 +6,7 @@
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
-#include <hrt/postprocess/keypoint.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <gtest/gtest.h>
 
@@ -30,7 +30,8 @@ TEST(RtmoKeypointTest, KeepsBestCandidatesAndMapsKeypoints) {
   const auto keypoints = proto(DataType::Float32, {1, 3, 2, 3});
   // Keypoints first: outputs are matched by rank, not order.
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {keypoints, boxes});
-  auto decoder = hrt::postprocess::create_keypoint_postprocessor("RtmoKeypoint", Json::object(), engine);
+  auto decoder = hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("RtmoKeypoint",
+                                                                                             Json::object(), engine);
   const hrt::Vector<float> box_values{
       10,
       10,
@@ -79,7 +80,8 @@ TEST(RtmoKeypointTest, AppliesConfiguredThresholds) {
   const auto keypoints = proto(DataType::Float32, {1, 2, 1, 3});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {boxes, keypoints});
   const auto config = Json::parse(R"({"confidence_threshold":[0.05],"iou_threshold":[0.99],"keypoint_threshold":0.1})");
-  auto decoder = hrt::postprocess::create_keypoint_postprocessor("RtmoKeypoint", config, engine);
+  auto decoder =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("RtmoKeypoint", config, engine);
   hrt::postprocess::KeypointResultMap result;
   ASSERT_TRUE(decoder->process(result,
                                {hrt::test::create_buffer<float>(boxes, {10, 10, 30, 20, 0.9F, 11, 10, 30, 20, 0.1F}),
@@ -102,11 +104,15 @@ TEST(RtmoKeypointTest, AbortsOnInvalidConfigOrOutputs) {
                                                         {proto(DataType::Float32, {1, 4, 4}), keypoints},
                                                         {proto(DataType::Float32, {2, 4, 5}), keypoints}}) {
     FakeEngine engine({input}, outputs);
-    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("RtmoKeypoint", Json::object(), engine), "");
+    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("RtmoKeypoint",
+                                                                                             Json::object(), engine),
+                 "");
   }
   FakeEngine valid({input}, {boxes, keypoints});
   for (const char* text : {R"({"confidence_threshold":[0.1,0.2]})", R"({"iou_threshold":[1.5]})", R"({"class_num":1})"})
-    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("RtmoKeypoint", Json::parse(text), valid), "");
+    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("RtmoKeypoint",
+                                                                                             Json::parse(text), valid),
+                 "");
 }
 
 #ifdef HRT_ORT_MODEL_TEST

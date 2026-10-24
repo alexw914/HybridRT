@@ -5,7 +5,7 @@
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
-#include <hrt/postprocess/detect.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <cmath>
 #include <gtest/gtest.h>
@@ -30,7 +30,8 @@ TEST(DetrDetectTest, SelectsOneClassAndKeepsOverlappingQueries) {
   const auto output = proto(DataType::Float32, {1, 4, 6});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
   const auto config = Json::parse(R"({"class_num":2,"confidence_threshold":[0.5,0.7]})");
-  auto decoder = hrt::postprocess::create_detect_postprocessor("DetrDetect", config, engine);
+  auto decoder =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("DetrDetect", config, engine);
   const hrt::Vector<float> values{
       0.5F, 0.5F, 0.5F, 0.25F, 0.9F,  0.8F, 0.5F, 0.5F, 0.5F, 0.25F, 0.7F, 0.1F,
       0.5F, 0.5F, 0.5F, 0.25F, 0.55F, 0.6F, 0.5F, 0.5F, 0.5F, 0.25F, 0.1F, 0.7F,
@@ -53,7 +54,8 @@ TEST(DetrDetectTest, SelectsOneClassAndKeepsOverlappingQueries) {
 TEST(DetrDetectTest, DequantizesAndClipsToSourceRegion) {
   const auto output = proto(DataType::Int8, {1, 1, 6});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 100, 100})}, {output});
-  auto decoder = hrt::postprocess::create_detect_postprocessor("DetrDetect", Json::parse(R"({"class_num":2})"), engine);
+  auto decoder = hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
+      "DetrDetect", Json::parse(R"({"class_num":2})"), engine);
   auto buffer = hrt::test::create_buffer<std::int8_t>(output, {50, 50, 100, 100, 10, 90});
   buffer->set_quantization(0.01F, 0);
   hrt::postprocess::DetectResultMap result;
@@ -72,7 +74,8 @@ TEST(DetrDetectTest, DequantizesAndClipsToSourceRegion) {
 TEST(DetrDetectTest, RejectsNonfiniteAndEmptyBoxesAndClearsResults) {
   const auto output = proto(DataType::Float32, {1, 4, 5});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
-  auto decoder = hrt::postprocess::create_detect_postprocessor("DetrDetect", Json::parse(R"({"class_num":1})"), engine);
+  auto decoder = hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
+      "DetrDetect", Json::parse(R"({"class_num":1})"), engine);
   const auto nan = std::numeric_limits<float>::quiet_NaN();
   const auto inf = std::numeric_limits<float>::infinity();
   const hrt::Vector<float> values{nan,  0.5F, 0.2F, 0.2F, 0.9F, 0.5F, 0.5F, -0.2F, 0.2F, 0.9F,
@@ -92,12 +95,15 @@ TEST(DetrDetectTest, ChecksConfigAndOutputContract) {
   for (const auto* text :
        {R"({"class_num":0})", R"({"class_num":3})", R"({"class_num":2,"confidence_threshold":[-0.1]})",
         R"({"class_num":2,"confidence_threshold":[0.1,0.2,0.3]})"})
-    EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("DetrDetect", Json::parse(text), engine), "");
+    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("DetrDetect",
+                                                                                           Json::parse(text), engine),
+                 "");
   for (const auto& output :
        {proto(DataType::Float32, {1, 6, 2}), proto(DataType::Float32, {1, 0, 6}), proto(DataType::Int32, {1, 2, 6})}) {
     FakeEngine invalid({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
-    EXPECT_DEATH(
-        hrt::postprocess::create_detect_postprocessor("DetrDetect", Json::parse(R"({"class_num":2})"), invalid), "");
+    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
+                     "DetrDetect", Json::parse(R"({"class_num":2})"), invalid),
+                 "");
   }
 }
 
@@ -108,7 +114,8 @@ TEST(DetrDetectTest, AppliesStableSoftmaxIncludingBackgroundOnSeparateOutputs) {
   const auto config = Json::parse(R"({"class_num":2,"output_format":"separate","score_activation":"softmax",
                                        "background_class":2,
                                        "confidence_threshold":[0.1]})");
-  auto decoder = hrt::postprocess::create_detect_postprocessor("DetrDetect", config, engine);
+  auto decoder =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("DetrDetect", config, engine);
   const auto box_buffer = hrt::test::create_buffer<float>(boxes, {0.5F, 0.5F, 0.2F, 0.4F, 0.5F, 0.5F, 0.2F, 0.4F});
   const auto score_buffer = hrt::test::create_buffer<float>(scores, {1000, 1002, 1004, 1001, 1000, 1010});
   hrt::postprocess::DetectResultMap result;
@@ -124,7 +131,8 @@ TEST(DetrDetectTest, AppliesSigmoidAndRemapsClassesAroundBackground) {
   const auto output = proto(DataType::Float32, {1, 1, 7});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 100, 100})}, {output});
   const auto config = Json::parse(R"({"class_num":2,"score_activation":"sigmoid","background_class":0})");
-  auto decoder = hrt::postprocess::create_detect_postprocessor("DetrDetect", config, engine);
+  auto decoder =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("DetrDetect", config, engine);
   hrt::postprocess::DetectResultMap result;
   ASSERT_TRUE(decoder->process(result, {hrt::test::create_buffer<float>(output, {0.5F, 0.5F, 0.2F, 0.4F, 10, -2, 2})},
                                hrt::test::identity(100, 100)));
@@ -138,7 +146,8 @@ TEST(DetrDetectTest, PacksStridedQueries) {
   auto output = proto(DataType::Float32, {1, 2, 5});
   output.stride = {64, 64, 32};
   FakeEngine engine({proto(DataType::Float32, {1, 3, 100, 100})}, {output});
-  auto decoder = hrt::postprocess::create_detect_postprocessor("DetrDetect", Json::parse(R"({"class_num":1})"), engine);
+  auto decoder = hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
+      "DetrDetect", Json::parse(R"({"class_num":1})"), engine);
   auto buffer = std::make_shared<hrt::core::Buffer>(output);
   auto* data = static_cast<float*>(buffer->memory()->mutable_cpu());
   for (const auto offset : {0, 8}) {
@@ -160,12 +169,12 @@ TEST(DetrDetectTest, RejectsMismatchedSeparateQueriesAndRemovedOutputKeys) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})},
                     {proto(DataType::Float32, {1, 2, 4}), proto(DataType::Float32, {1, 3, 2})});
-  EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor(
+  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
                    "DetrDetect", Json::parse(R"({"class_num":2,"output_format":"separate"})"), engine),
                "");
   FakeEngine reversed({proto(DataType::Float32, {1, 3, 40, 40})},
                       {proto(DataType::Float32, {1, 2, 2}), proto(DataType::Float32, {1, 2, 4})});
-  EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor(
+  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
                    "DetrDetect", Json::parse(R"({"class_num":2,"output_format":"separate"})"), reversed),
                "");
   for (const auto* key : {"boxes_output", "scores_output"}) {
@@ -179,7 +188,9 @@ TEST(DetrDetectTest, RejectsMismatchedSeparateQueriesAndRemovedOutputKeys) {
                            R"({"class_num":2,"output_format":"separate","scores_output":1})",
                            R"({"class_num":2,"output_format":"separate","background_class":3})",
                            R"({"class_num":2,"output_format":"separate","background_class":-2})"})
-    EXPECT_DEATH(hrt::postprocess::create_detect_postprocessor("DetrDetect", Json::parse(text), valid), "");
+    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("DetrDetect",
+                                                                                           Json::parse(text), valid),
+                 "");
 }
 
 #ifdef HRT_ORT_MODEL_TEST

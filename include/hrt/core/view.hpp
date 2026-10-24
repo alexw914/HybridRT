@@ -7,11 +7,7 @@
 #ifndef HRT_CORE_VIEW_HPP
 #define HRT_CORE_VIEW_HPP
 
-#include <hrt/postprocess/classify.hpp>
-#include <hrt/postprocess/detect.hpp>
-#include <hrt/postprocess/keypoint.hpp>
-#include <hrt/postprocess/rotated.hpp>
-#include <hrt/postprocess/segment.hpp>
+#include <hrt/postprocess/result_types.hpp>
 
 #include <opencv2/core/mat.hpp>
 

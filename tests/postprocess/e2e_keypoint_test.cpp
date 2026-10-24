@@ -6,7 +6,7 @@
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
-#include <hrt/postprocess/keypoint.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <gtest/gtest.h>
 
@@ -31,7 +31,8 @@ TEST(E2EKeypointTest, MapsRowsAndKeypointsWithoutNms) {
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
   const auto config =
       Json::parse(R"({"class_num": 1, "keypoint_num": 2, "confidence_threshold": [0.5], "keypoint_threshold": 0.4})");
-  auto decoder = hrt::postprocess::create_keypoint_postprocessor("E2EKeypoint", config, engine);
+  auto decoder =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("E2EKeypoint", config, engine);
   const hrt::Vector<float> values{
       10,
       10,
@@ -98,14 +99,17 @@ TEST(E2EKeypointTest, AbortsOnInvalidConfigOrOutputs) {
   const auto config = Json::parse(R"({"class_num": 1, "keypoint_num": 17, "confidence_threshold": [0.25]})");
   for (const auto& shape : hrt::Vector<hrt::core::Shape>{{1, 56, 8400}, {1, 300, 56}, {300, 57}}) {
     FakeEngine engine({input}, {proto(DataType::Float32, shape)});
-    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("E2EKeypoint", config, engine), "");
+    EXPECT_DEATH(
+        hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("E2EKeypoint", config, engine), "");
   }
   FakeEngine valid({input}, {proto(DataType::Float32, {1, 300, 57})});
   for (const char* text : {R"({"class_num": 1, "keypoint_num": 0, "confidence_threshold": [0.25]})",
                            R"({"class_num": 1, "keypoint_num": 17})",
                            R"({"class_num": 1, "keypoint_num": 17, "confidence_threshold": [0.25],
                                "iou_threshold": [0.45]})"})
-    EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("E2EKeypoint", Json::parse(text), valid), "");
+    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("E2EKeypoint",
+                                                                                             Json::parse(text), valid),
+                 "");
 }
 
 #ifdef HRT_ORT_MODEL_TEST

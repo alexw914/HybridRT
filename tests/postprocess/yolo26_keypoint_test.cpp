@@ -6,7 +6,7 @@
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
-#include <hrt/postprocess/keypoint.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <gtest/gtest.h>
 
@@ -32,7 +32,8 @@ TEST(Yolo26KeypointTest, DecodesDistancesAndKeypointOffsets) {
   FakeEngine engine({proto(DataType::Float32, {1, 3, 32, 32})}, {output});
   const auto config = Json::parse(R"({"class_num": 1, "keypoint_num": 2,
                                       "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
-  auto decoder = hrt::postprocess::create_keypoint_postprocessor("Yolo26Keypoint", config, engine);
+  auto decoder =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("Yolo26Keypoint", config, engine);
   hrt::Vector<float> values(kChannels * 16, 0.0F);
   auto at = [&](int channel, int y, int x) -> float& {
     return values[static_cast<std::size_t>(channel * 16 + y * 4 + x)];
@@ -66,7 +67,9 @@ TEST(Yolo26KeypointTest, AbortsOnHeadsThatDoNotFit) {
                                       "confidence_threshold": [0.25], "iou_threshold": [0.45]})");
   // A YOLOv8 head with distance bins: 64 + 1 + 51 channels.
   FakeEngine engine({proto(DataType::Float32, {1, 3, 32, 32})}, {proto(DataType::Float32, {1, 116, 4, 4})});
-  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("Yolo26Keypoint", config, engine), "");
+  EXPECT_DEATH(
+      hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("Yolo26Keypoint", config, engine),
+      "");
 }
 
 #ifdef HRT_ORT_MODEL_TEST

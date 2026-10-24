@@ -1,64 +1,16 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: source/postprocess/detect.cpp
-// Description: Implements detection NMS, head validation and the
-//              detection postprocessor factory.
+// File: source/postprocess/yolo_heads.cpp
+// Description: Implements validation of YOLO output heads and inference of their strides.
 // -----------------------------------------------------------------------------
 
-#include <hrt/postprocess/detect.hpp>
+#include "include/postprocess/yolo_heads.hpp"
 
 #include <kitzoo/log/logger.hpp>
 
 #include "include/postprocess/common.hpp"
-#include "include/postprocess/params.hpp"
 
 namespace hrt::postprocess {
-
-auto nms(DetectResult& boxes, float iou_threshold) -> void {
-  if (boxes.size() <= 1)
-    return;
-  Vector<core::Rect2f> rects;
-  Vector<float> scores;
-  for (const auto& box : boxes) {
-    rects.push_back(box.rect);
-    scores.push_back(box.score);
-  }
-  DetectResult kept;
-  for (auto index : nms_indices(rects, scores, iou_threshold))
-    kept.push_back(boxes[index]);
-  boxes = std::move(kept);
-}
-
-auto create_detect(std::string_view type) -> UniquePtr<DetectPostprocessor> {
-  if (type == "YoloV8Detect")
-    return create_yolov8_detect();
-  if (type == "Yolo26Detect")
-    return create_yolo26_detect();
-  if (type == "YoloV5Detect")
-    return create_yolov5_detect();
-  if (type == "GeneralDetect")
-    return create_general_detect();
-  if (type == "DetrDetect")
-    return create_detr_detect();
-  if (type == "E2EDetect")
-    return create_e2e_detect();
-  return nullptr;
-}
-
-auto create_detect_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
-    -> UniquePtr<DetectPostprocessor> {
-  return check_init(create_detect(type), type, config, engine);
-}
-
-auto nms_reverse(DetectResultMap& result, const Vector<float>& iou_threshold,
-                 const preprocess::ImageTransform& transform) -> void {
-  for (auto& [cls, boxes] : result) {
-    nms(boxes, iou_threshold[cls]);
-    for (auto& box : boxes)
-      box.rect = transform.clip_reverse(box.rect);
-    std::erase_if(boxes, [](const ObjectBox& box) -> bool { return box.rect.empty(); });
-  }
-}
 
 auto resolve_yolov5_heads(YoloV5Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool {
   if (!expand_per_class(param.confidence_threshold, param.class_num, "confidence_threshold") ||

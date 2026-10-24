@@ -14,7 +14,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "include/postprocess/common.hpp"
-#include "include/postprocess/params.hpp"
+#include "include/postprocess/postprocessor_creators.hpp"
 
 namespace hrt::postprocess {
 

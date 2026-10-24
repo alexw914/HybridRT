@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: source/postprocess/segment/mask_decoder.cpp
+// File: source/postprocess/mask_decoder.cpp
 // Description: Implements instance mask decoding from coefficients and
 //              prototypes.
 // -----------------------------------------------------------------------------

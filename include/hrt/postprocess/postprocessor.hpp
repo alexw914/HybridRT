@@ -9,6 +9,7 @@
 
 #include <hrt/core/buffer.hpp>
 #include <hrt/engine/engine.hpp>
+#include <hrt/postprocess/result_types.hpp>
 #include <hrt/preprocess/image_preprocessor.hpp>
 
 #include <kitzoo/core/macro.hpp>
@@ -83,9 +84,20 @@ protected:
       -> bool = 0;
 };
 
-// Problems in a "postprocess" section for built-in `type`, including an
-// unknown type.
-auto check_postprocess_config(std::string_view type, const kitzoo::json::Json& config) -> Vector<String>;
+using DetectPostprocessor = Postprocessor<DetectResultMap>;
+
+// Source mapping requires uniform scaling, allowing integer letterbox rounding.
+using RotatedPostprocessor = Postprocessor<RotatedResultMap>;
+
+using ClassifyPostprocessor = Postprocessor<ClassifyResult>;
+
+using EmbeddingPostprocessor = Postprocessor<EmbeddingResult>;
+
+using KeypointPostprocessor = Postprocessor<KeypointResultMap>;
+
+using SegmentPostprocessor = Postprocessor<SegmentResultMap>;
+
+using OcrPostprocessor = Postprocessor<OcrResult>;
 
 } // namespace hrt::postprocess
 

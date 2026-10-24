@@ -4,32 +4,13 @@
 // Description: Benchmarks every template postprocessor on real model outputs.
 // -----------------------------------------------------------------------------
 
+#include <hrt/postprocess/postprocessor_factory.hpp>
+
 #include <benchmark/benchmark.h>
-#include <type_traits>
 
 #include "yolo_fixture.hpp"
 
 namespace {
-
-template <typename Result>
-auto check_init(const kitzoo::json::Json& config, const hrt::engine::Engine& engine)
-    -> hrt::UniquePtr<hrt::postprocess::Postprocessor<Result>> {
-  const auto& type = config["type"].get_ref<const hrt::String&>();
-  if constexpr (std::is_same_v<Result, hrt::postprocess::DetectResultMap>)
-    return hrt::postprocess::create_detect_postprocessor(type, config, engine);
-  else if constexpr (std::is_same_v<Result, hrt::postprocess::SegmentResultMap>)
-    return hrt::postprocess::create_segment_postprocessor(type, config, engine);
-  else if constexpr (std::is_same_v<Result, hrt::postprocess::KeypointResultMap>)
-    return hrt::postprocess::create_keypoint_postprocessor(type, config, engine);
-  else if constexpr (std::is_same_v<Result, hrt::postprocess::RotatedResultMap>)
-    return hrt::postprocess::create_rotated_postprocessor(type, config, engine);
-  else if constexpr (std::is_same_v<Result, hrt::postprocess::EmbeddingResult>)
-    return hrt::postprocess::create_embedding_postprocessor(type, config, engine);
-  else if constexpr (std::is_same_v<Result, hrt::postprocess::OcrResult>)
-    return hrt::postprocess::create_ocr_postprocessor(config, engine);
-  else
-    return hrt::postprocess::create_classify_postprocessor(type, config, engine);
-}
 
 struct Prepared {
   hrt::UniquePtr<hrt::engine::Engine> engine;
@@ -83,7 +64,9 @@ auto prepare(benchmark::State& state, const kitzoo::json::Json& entry, const std
 
 template <typename Result>
 auto measure_postprocessor(benchmark::State& state, Prepared& prepared) -> void {
-  auto postprocessor = check_init<Result>(prepared.config["postprocess"], *prepared.engine);
+  const auto& config = prepared.config["postprocess"];
+  auto postprocessor = hrt::postprocess::create_postprocessor<Result>(config["type"].get_ref<const hrt::String&>(),
+                                                                      config, *prepared.engine);
   if (!postprocessor) {
     state.SkipWithError("Postprocessor initialization failed");
     return;

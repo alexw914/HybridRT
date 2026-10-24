@@ -6,7 +6,7 @@
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
-#include <hrt/postprocess/segment.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <gtest/gtest.h>
 #include <limits>
@@ -64,7 +64,8 @@ auto expect_left_half_mask(const hrt::postprocess::SegmentResultMap& result) -> 
 
 TEST(SegmentTest, DecodesYoloInstanceMask) {
   auto engine = segment_engine(DataType::Float32);
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", segment_config(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(
+      "GeneralYoloSegment", segment_config(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   // cx, cy, w, h, score, coefficient 0, coefficient 1.
@@ -84,7 +85,7 @@ TEST(SegmentTest, DecodesManyMasksAlikeOnOneAndSeveralThreads) {
   constexpr std::uint32_t kAnchors = 24;
   FakeEngine engine({proto(DataType::Float32, {1, 3, 64, 64})},
                     {proto(DataType::Float32, {1, 8, kAnchors}), proto(DataType::Float32, {1, 2, 16, 16})});
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor(
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(
       "GeneralYoloSegment", Json::parse(R"({"class_num": 2, "confidence_threshold": [0.5], "iou_threshold": [0.45]})"),
       engine);
   ASSERT_NE(postprocessor, nullptr);
@@ -134,7 +135,8 @@ TEST(SegmentTest, DecodesManyMasksAlikeOnOneAndSeveralThreads) {
 
 TEST(SegmentTest, DecodesInt8Detections) {
   auto engine = segment_engine(DataType::Int8);
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", segment_config(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(
+      "GeneralYoloSegment", segment_config(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   // real = 0.1 * q: 8, 8, 8, 8, 0.9, 1, 0.
@@ -150,7 +152,8 @@ TEST(SegmentTest, DecodesInt8Detections) {
 TEST(SegmentTest, AccumulatesInt8PrototypesWithZeroPoint) {
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})},
                     {proto(DataType::Float32, {1, 7, 1}), proto(DataType::Int8, {1, 2, 4, 4})});
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", segment_config(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(
+      "GeneralYoloSegment", segment_config(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   // real = 0.5 * (q - 40). Both coefficients are 1, so ignoring the zero
@@ -174,7 +177,8 @@ TEST(SegmentTest, KeepsNonzeroClassId) {
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {detections, masks});
   auto config = segment_config();
   config["class_num"] = 2;
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", config, engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("GeneralYoloSegment", config, engine);
   hrt::postprocess::SegmentResultMap result;
   ASSERT_TRUE(postprocessor->process(result,
                                      {hrt::test::create_buffer<float>(detections, {8, 8, 8, 8, 0.1F, 0.9F, 1, 0}),
@@ -190,8 +194,12 @@ TEST(SegmentTest, AbortsOnMismatchedOutputs) {
   auto engine = segment_engine(DataType::Float32);
   auto config = segment_config();
   config["class_num"] = 2;
-  EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", config, engine), "");
-  EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("Mystery", segment_config(), engine), "");
+  EXPECT_DEATH(
+      hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("GeneralYoloSegment", config, engine),
+      "");
+  EXPECT_DEATH(
+      hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("Mystery", segment_config(), engine),
+      "");
   EXPECT_EQ(hrt::postprocess::check_postprocess_config("SemanticSegment", Json::parse(R"({"class_num": 3})")).size(),
             1U);
 }
@@ -228,7 +236,8 @@ TEST(SegmentTest, DecodesRawYoloV8AndYolo26Heads) {
     FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {masks, head});
     auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5],
                                   "iou_threshold": [0.45]})");
-    auto postprocessor = hrt::postprocess::create_segment_postprocessor(type, config, engine);
+    auto postprocessor =
+        hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(type, config, engine);
     ASSERT_NE(postprocessor, nullptr) << type;
     hrt::postprocess::SegmentResultMap result;
     ASSERT_TRUE(postprocessor->process(
@@ -260,7 +269,8 @@ TEST(SegmentTest, DecodesNhwcRawHeadsAndPrototypes) {
     FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {masks, head}, hrt::engine::DataLayout::Nhwc);
     auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5],
                                   "iou_threshold": [0.45]})");
-    auto postprocessor = hrt::postprocess::create_segment_postprocessor(type, config, engine);
+    auto postprocessor =
+        hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(type, config, engine);
     ASSERT_NE(postprocessor, nullptr) << type;
     hrt::postprocess::SegmentResultMap result;
     ASSERT_TRUE(
@@ -282,7 +292,8 @@ TEST(SegmentTest, ChecksExplicitRawHeadStrides) {
     auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
     if (hrt::String(type) == "YoloV8Segment")
       config["reg_max"] = 1;
-    EXPECT_NE(hrt::postprocess::create_segment_postprocessor(type, config, engine), nullptr);
+    EXPECT_NE(hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(type, config, engine),
+              nullptr);
     config["strides"] = {16, 8};
     EXPECT_FALSE(hrt::postprocess::check_postprocess_config(type, config).empty());
   }
@@ -294,10 +305,13 @@ TEST(SegmentTest, ChecksRawYoloV8RegMax) {
                     {proto(DataType::Float32, {1, 11, 2, 2}), proto(DataType::Float32, {1, 2, 4, 4})});
   auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
   config["reg_max"] = 2;
-  EXPECT_NE(hrt::postprocess::create_segment_postprocessor("YoloV8Segment", config, engine), nullptr);
+  EXPECT_NE(hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("YoloV8Segment", config, engine),
+            nullptr);
   for (const auto bins : {0, 1, 16}) {
     config["reg_max"] = bins;
-    EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("YoloV8Segment", config, engine), "");
+    EXPECT_DEATH(
+        hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("YoloV8Segment", config, engine),
+        "");
   }
 }
 
@@ -309,14 +323,17 @@ TEST(SegmentTest, AbortsOnRawHeadsThatDoNotFit) {
   for (const auto& outputs : hrt::Vector<hrt::Vector<hrt::core::BufferProto>>{
            {proto(DataType::Float32, {1, 7, 2, 2})}, {proto(DataType::Float32, {1, 8, 2, 2}), masks}}) {
     FakeEngine engine({input}, outputs);
-    EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("Yolo26Segment", config, engine), "");
+    EXPECT_DEATH(
+        hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("Yolo26Segment", config, engine),
+        "");
   }
 }
 
 TEST(SegmentTest, DecodesSemanticLabels) {
   const auto output = proto(DataType::Float32, {1, 3, 2, 2});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 4, 4})}, {output});
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("SemanticSegment", Json::object(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(
+      "SemanticSegment", Json::object(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   // Winning class per 2x2 output cell: 0, 1 / 2, 1.
@@ -354,7 +371,8 @@ TEST(SegmentTest, MatchesScalarArgmaxAcrossVectorStepsAndTail) {
   constexpr std::size_t kPlane = kHeight * kWidth;
   const auto output = proto(DataType::Float32, {1, kChannels, kHeight, kWidth});
   FakeEngine engine({proto(DataType::Float32, {1, 3, kHeight, kWidth})}, {output});
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("SemanticSegment", Json::object(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(
+      "SemanticSegment", Json::object(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   hrt::Vector<float> scores(kChannels * kPlane);
@@ -386,7 +404,8 @@ TEST(SegmentTest, MatchesScalarArgmaxAcrossVectorStepsAndTail) {
 TEST(SegmentTest, DecodesInt8SemanticScoresWithoutDequantizing) {
   const auto output = proto(DataType::Int8, {1, 3, 2, 2});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 4, 4})}, {output});
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("SemanticSegment", Json::object(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(
+      "SemanticSegment", Json::object(), engine);
   // Quantized scores keep their order; ties go to the lower class: 0, 1 / 2, 0.
   auto buffer = hrt::test::create_buffer<std::int8_t>(output, {
                                                                   90,
@@ -414,7 +433,8 @@ TEST(SegmentTest, DecodesInt8SemanticScoresWithoutDequantizing) {
 TEST(SegmentTest, PreservesInputRegionAndIntegerClassIds) {
   const auto output = proto(DataType::Int32, {1, 2, 2});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 2, 2})}, {output});
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("SemanticSegment", Json::object(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(
+      "SemanticSegment", Json::object(), engine);
   hrt::postprocess::SegmentResultMap result;
   const hrt::preprocess::ImageTransform transform{{0, 0, 2, 2}, {10, 20, 2, 2}, {2, 2}};
   ASSERT_TRUE(
@@ -441,7 +461,8 @@ TEST(SegmentTest, DecodesEndToEndRowsWithoutNms) {
   const auto masks = proto(DataType::Float32, {1, 2, 4, 4});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {masks, detections});
   const auto config = Json::parse(R"({"class_num": 2, "confidence_threshold": [0.5]})");
-  auto postprocessor = hrt::postprocess::create_segment_postprocessor("E2ESegment", config, engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("E2ESegment", config, engine);
   ASSERT_NE(postprocessor, nullptr);
   // x1, y1, x2, y2, score, class, coefficient 0, coefficient 1: the left-half
   // mask of class 0, a class 1 row below its threshold and a padding row.
@@ -468,10 +489,11 @@ TEST(SegmentTest, AbortsOnMismatchedEndToEndOutputs) {
                                                         {proto(DataType::Float32, {1, 3, 9}), masks},
                                                         {proto(DataType::Float32, {1, 7, 1}), masks}}) {
     FakeEngine engine({input}, outputs);
-    EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor("E2ESegment", config, engine), "");
+    EXPECT_DEATH(
+        hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("E2ESegment", config, engine), "");
   }
   FakeEngine valid({input}, {proto(DataType::Float32, {1, 3, 8}), masks});
-  EXPECT_DEATH(hrt::postprocess::create_segment_postprocessor(
+  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(
                    "E2ESegment", Json::parse(R"({"class_num": 1, "iou_threshold": [0.5]})"), valid),
                "");
 }

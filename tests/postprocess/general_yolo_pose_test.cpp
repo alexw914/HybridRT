@@ -4,7 +4,7 @@
 // Description: Tests decoding of single-output pose heads.
 // -----------------------------------------------------------------------------
 
-#include <hrt/postprocess/keypoint.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <gtest/gtest.h>
 
@@ -25,7 +25,8 @@ TEST(GeneralYoloPoseTest, KeepsTheBestBoxWithItsKeypoints) {
   // [1, 4 + 1 class + 2 keypoints x 3, 2 candidates], one row per value.
   const auto output = proto(DataType::Float32, {1, 11, 2});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
-  auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("GeneralYoloPose", config(), engine);
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("GeneralYoloPose", config(), engine);
 
   // Candidate 0: box (10, 10)-(30, 30), score 0.9, keypoints (12, 14) visible
   // and (28, 26) hidden. Candidate 1 overlaps it with a lower score.
@@ -55,7 +56,9 @@ TEST(GeneralYoloPoseTest, KeepsTheBestBoxWithItsKeypoints) {
 TEST(GeneralYoloPoseTest, AbortsOnOutputsThatDoNotFit) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {proto(DataType::Float32, {1, 10, 4})});
-  EXPECT_DEATH(hrt::postprocess::create_keypoint_postprocessor("GeneralYoloPose", config(), engine), "");
+  EXPECT_DEATH(
+      hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("GeneralYoloPose", config(), engine),
+      "");
   EXPECT_EQ(hrt::postprocess::check_postprocess_config("GeneralYoloPose", Json::parse(R"({"keypoints": 17})")).size(),
             1U);
 }

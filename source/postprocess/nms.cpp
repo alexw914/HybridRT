@@ -1,15 +1,18 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: source/postprocess/rotated.cpp
-// Description: Implements rotated-box NMS and the rotated postprocessor
-//              factory.
+// File: source/postprocess/nms.cpp
+// Description: Implements the greedy non-maximum suppression shared by the
+//              postprocessors and its mapping of kept boxes to the source.
 // -----------------------------------------------------------------------------
 
-#include <hrt/postprocess/rotated.hpp>
+#include "include/postprocess/nms.hpp"
 
 #include <kitzoo/log/logger.hpp>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <numeric>
 
 // OpenCV 5 moved rotatedRectangleIntersection and contourArea to geometry.
 #if __has_include(<opencv2/geometry.hpp>)
@@ -17,9 +20,6 @@
 #else
 #include <opencv2/imgproc.hpp>
 #endif
-
-#include "include/postprocess/common.hpp"
-#include "include/postprocess/params.hpp"
 
 namespace hrt::postprocess {
 
@@ -41,6 +41,38 @@ auto rotated_iou(const core::RotatedRect& a, const core::RotatedRect& b) -> floa
 
 } // namespace
 
+auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
+    -> Vector<std::size_t> {
+  Vector<std::size_t> order(rects.size());
+  std::iota(order.begin(), order.end(), std::size_t{0});
+  std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) -> bool { return scores[a] > scores[b]; });
+  Vector<std::size_t> kept;
+  for (auto index : order) {
+    const auto& rect = rects[index];
+    const auto overlaps = std::any_of(kept.begin(), kept.end(), [&](std::size_t other) -> bool {
+      return core::iou(rect, rects[other]) >= iou_threshold;
+    });
+    if (!overlaps)
+      kept.push_back(index);
+  }
+  return kept;
+}
+
+auto nms(DetectResult& boxes, float iou_threshold) -> void {
+  if (boxes.size() <= 1)
+    return;
+  Vector<core::Rect2f> rects;
+  Vector<float> scores;
+  for (const auto& box : boxes) {
+    rects.push_back(box.rect);
+    scores.push_back(box.score);
+  }
+  DetectResult kept;
+  for (auto index : nms_indices(rects, scores, iou_threshold))
+    kept.push_back(boxes[index]);
+  boxes = std::move(kept);
+}
+
 auto nms_rotated(RotatedResult& boxes, float iou_threshold) -> void {
   if (boxes.size() <= 1)
     return;
@@ -57,23 +89,14 @@ auto nms_rotated(RotatedResult& boxes, float iou_threshold) -> void {
   boxes = std::move(kept);
 }
 
-auto create_rotated(std::string_view type) -> UniquePtr<RotatedPostprocessor> {
-  if (type == "YoloV8Rotated")
-    return create_yolov8_rotated();
-  if (type == "Yolo26Rotated")
-    return create_yolo26_rotated();
-  if (type == "YoloV5Rotated")
-    return create_yolov5_rotated();
-  if (type == "GeneralRotated")
-    return create_general_rotated();
-  if (type == "E2ERotated")
-    return create_e2e_rotated();
-  return nullptr;
-}
-
-auto create_rotated_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
-    -> UniquePtr<RotatedPostprocessor> {
-  return check_init(create_rotated(type), type, config, engine);
+auto nms_reverse(DetectResultMap& result, const Vector<float>& iou_threshold,
+                 const preprocess::ImageTransform& transform) -> void {
+  for (auto& [cls, boxes] : result) {
+    nms(boxes, iou_threshold[cls]);
+    for (auto& box : boxes)
+      box.rect = transform.clip_reverse(box.rect);
+    std::erase_if(boxes, [](const ObjectBox& box) -> bool { return box.rect.empty(); });
+  }
 }
 
 auto rotated_reverse(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool {

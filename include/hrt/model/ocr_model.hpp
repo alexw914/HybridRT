@@ -8,7 +8,7 @@
 #define HRT_MODEL_OCR_MODEL_HPP
 
 #include <hrt/hrtc/hrtc.hpp>
-#include <hrt/postprocess/ocr.hpp>
+#include <hrt/postprocess/postprocessor.hpp>
 
 namespace hrt::model {
 

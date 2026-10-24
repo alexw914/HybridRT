@@ -9,7 +9,7 @@
 #define HRT_POSTPROCESS_MASK_DECODER_HPP
 
 #include <hrt/engine/engine.hpp>
-#include <hrt/postprocess/segment.hpp>
+#include <hrt/postprocess/postprocessor.hpp>
 
 #include <opencv2/core.hpp>
 #include <optional>

@@ -5,6 +5,7 @@
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <gtest/gtest.h>
 
@@ -19,8 +20,8 @@ TEST(EmbeddingTest, ReturnsTheOutputAsFloat) {
   EXPECT_EQ(hrt::model::task_of("Embedding"), hrt::model::Task::Embedding);
   const auto output = proto(DataType::Int8, {1, 3});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {output});
-  auto postprocessor =
-      hrt::postprocess::create_embedding_postprocessor("Embedding", kitzoo::json::Json::object(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::EmbeddingResult>(
+      "Embedding", kitzoo::json::Json::object(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   auto buffer = hrt::test::create_buffer<std::int8_t>(output, {0, 10, 20});
@@ -36,8 +37,8 @@ TEST(EmbeddingTest, ReturnsTheOutputAsFloat) {
 TEST(EmbeddingTest, DequantizesStridedRowsInOrder) {
   const auto output = proto(DataType::Int8, {1, 2, 3});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {output});
-  auto postprocessor =
-      hrt::postprocess::create_embedding_postprocessor("Embedding", kitzoo::json::Json::object(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::EmbeddingResult>(
+      "Embedding", kitzoo::json::Json::object(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   // Rows of 3 bytes padded to 4; the padding must be skipped.
@@ -58,8 +59,8 @@ TEST(EmbeddingTest, DequantizesEveryInt8ValueLikeTheScalarFormula) {
   constexpr std::int64_t kCount = 256 + 5;
   const auto output = proto(DataType::Int8, {1, kCount});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {output});
-  auto postprocessor =
-      hrt::postprocess::create_embedding_postprocessor("Embedding", kitzoo::json::Json::object(), engine);
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::EmbeddingResult>(
+      "Embedding", kitzoo::json::Json::object(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
   hrt::Vector<std::int8_t> values(kCount);
@@ -77,7 +78,9 @@ TEST(EmbeddingTest, DequantizesEveryInt8ValueLikeTheScalarFormula) {
 TEST(EmbeddingTest, NeedsOneOutput) {
   const auto output = proto(DataType::Float32, {1, 3});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {output, output});
-  EXPECT_DEATH(hrt::postprocess::create_embedding_postprocessor("Embedding", kitzoo::json::Json::object(), engine), "");
+  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::EmbeddingResult>(
+                   "Embedding", kitzoo::json::Json::object(), engine),
+               "");
 }
 
 TEST(EmbeddingTest, TakesNoParameters) {

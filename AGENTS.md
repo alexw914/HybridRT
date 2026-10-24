@@ -30,8 +30,11 @@
   `source/memory/`，设备公共代码（context、memory、SDK 辅助）放
   `source/backend/<device>/`，设备 kernel（CUDA .cu、Metal shader 等）实现放其 `kernels/`、
   声明放 `source/include/backend/<device>/kernels/`，任务解码放 `source/postprocess/<task>/`。
-- `include/hrt/postprocess/<task>.hpp` 的任务工厂在 `source/postprocess/<task>.cpp` 实现；
-  `<task>/` 子目录只放具体后处理类型的解码实现及其构造入口。
+- 后处理结果类型统一放 `include/hrt/postprocess/result_types.hpp`；内置后处理类型只在
+  `source/postprocess/postprocessor_factory.cpp` 注册，由 `postprocessor_factory.hpp` 的
+  `create_postprocessor<Result>` 创建；`source/postprocess/<task>/` 只放具体解码实现，其构造入口声明在
+  `source/include/postprocess/postprocessor_creators.hpp`。跨任务共用的后处理工具（nms、yolo_heads、
+  mask_decoder 等）各自成对放 `source/include/postprocess/` 与 `source/postprocess/`，不集中放入 params.hpp。
 - 后端通过 SDK 根目录启用并定义 `HRT_USE_<BACKEND>`，见 `cmake/HybridrtBackends.cmake`；
   SDK 头文件和类型不得出现在公开头文件。新增后端只扩展
   `source/engine/<backend>_engine.*`、`source/CMakeLists.txt` 和 `Engine::create`；

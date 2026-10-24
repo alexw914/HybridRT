@@ -4,7 +4,7 @@
 // Description: Tests CTC sequence decoding, DB regions and config validation.
 // -----------------------------------------------------------------------------
 
-#include <hrt/postprocess/ocr.hpp>
+#include <hrt/postprocess/postprocessor_factory.hpp>
 
 #include <gtest/gtest.h>
 #include <limits>
@@ -20,7 +20,7 @@ TEST(OcrTest, DecodesUtf8DuplicatesBlanksAndSpace) {
   const auto output = proto(DataType::Float32, {1, 7, 4});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 48, 320})}, {output});
   const kitzoo::json::Json config{{"stage", "recognition"}, {"dictionary", "string:中\na\n"}};
-  auto decoder = hrt::postprocess::create_ocr_postprocessor(config, engine);
+  auto decoder = hrt::postprocess::create_postprocessor<hrt::postprocess::OcrResult>("Ocr", config, engine);
   hrt::Vector<float> scores(28, 0.01F);
   const hrt::Array<int, 7> indexes{1, 1, 0, 1, 3, 2, 0};
   for (std::size_t t = 0; t < indexes.size(); ++t)
@@ -46,7 +46,8 @@ TEST(OcrTest, DecodesUtf8DuplicatesBlanksAndSpace) {
 TEST(OcrTest, ExpandsScoresAndMapsDbRegions) {
   const auto output = proto(DataType::Float32, {1, 1, 32, 64});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 32, 64})}, {output});
-  auto decoder = hrt::postprocess::create_ocr_postprocessor({{"stage", "detection"}}, engine);
+  auto decoder =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::OcrResult>("Ocr", {{"stage", "detection"}}, engine);
   hrt::Vector<float> scores(32 * 64, 0);
   for (int y = 10; y <= 20; ++y)
     for (int x = 10; x <= 40; ++x)
@@ -71,10 +72,15 @@ TEST(OcrTest, ExpandsScoresAndMapsDbRegions) {
 TEST(OcrTest, RejectsInvalidConfigAndDictionaryMismatch) {
   const auto output = proto(DataType::Float32, {1, 2, 4});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 48, 320})}, {output});
-  EXPECT_DEATH(hrt::postprocess::create_ocr_postprocessor({{"stage", "detection"}, {"unknown", true}}, engine), "");
-  EXPECT_DEATH(
-      hrt::postprocess::create_ocr_postprocessor({{"stage", "recognition"}, {"dictionary", "string:a\n"}}, engine), "");
-  EXPECT_DEATH(hrt::postprocess::create_ocr_postprocessor({{"stage", "detection"}, {"threshold", 2}}, engine), "");
+  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::OcrResult>(
+                   "Ocr", {{"stage", "detection"}, {"unknown", true}}, engine),
+               "");
+  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::OcrResult>(
+                   "Ocr", {{"stage", "recognition"}, {"dictionary", "string:a\n"}}, engine),
+               "");
+  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::OcrResult>(
+                   "Ocr", {{"stage", "detection"}, {"threshold", 2}}, engine),
+               "");
 }
 
 } // namespace
