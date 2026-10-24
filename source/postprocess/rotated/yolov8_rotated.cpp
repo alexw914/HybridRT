@@ -46,7 +46,7 @@ protected:
       const HeadGridView grid(*outputs[head], layout_);
       decode_head(result, grid, param_.strides[head]);
     }
-    return nms_rotated_to_source(result, param_.iou_threshold, transform);
+    return nms_rotated_reverse(result, param_.iou_threshold, transform);
   }
 
 private:

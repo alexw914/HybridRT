@@ -76,7 +76,7 @@ auto create_rotated_postprocessor(std::string_view type, const kitzoo::json::Jso
   return check_init(create_rotated(type), type, config, engine);
 }
 
-auto rotated_to_source(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool {
+auto rotated_reverse(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool {
   const auto& src = transform.src_roi;
   const auto& dst = transform.dst_roi;
   // Letterbox dimensions are rounded to integer pixels, and a device preprocessor may round
@@ -100,11 +100,11 @@ auto rotated_to_source(RotatedResultMap& result, const preprocess::ImageTransfor
   return true;
 }
 
-auto nms_rotated_to_source(RotatedResultMap& result, const Vector<float>& iou_threshold,
-                           const preprocess::ImageTransform& transform) -> bool {
+auto nms_rotated_reverse(RotatedResultMap& result, const Vector<float>& iou_threshold,
+                         const preprocess::ImageTransform& transform) -> bool {
   for (auto& [cls, boxes] : result)
     nms_rotated(boxes, iou_threshold[cls]);
-  return rotated_to_source(result, transform);
+  return rotated_reverse(result, transform);
 }
 
 } // namespace hrt::postprocess

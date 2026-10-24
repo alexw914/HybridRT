@@ -74,7 +74,7 @@ protected:
            score,
            static_cast<std::int64_t>(cls)});
     }
-    return rotated_to_source(result, transform);
+    return rotated_reverse(result, transform);
   }
 
 private:

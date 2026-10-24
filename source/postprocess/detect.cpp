@@ -50,8 +50,8 @@ auto create_detect_postprocessor(std::string_view type, const kitzoo::json::Json
   return check_init(create_detect(type), type, config, engine);
 }
 
-auto nms_to_source(DetectResultMap& result, const Vector<float>& iou_threshold,
-                   const preprocess::ImageTransform& transform) -> void {
+auto nms_reverse(DetectResultMap& result, const Vector<float>& iou_threshold,
+                 const preprocess::ImageTransform& transform) -> void {
   for (auto& [cls, boxes] : result) {
     nms(boxes, iou_threshold[cls]);
     for (auto& box : boxes)

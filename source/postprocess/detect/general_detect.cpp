@@ -47,7 +47,7 @@ protected:
       -> bool override {
     const HeadGridView rows(*outputs[0], std::nullopt);
     decode_rows(result, rows);
-    nms_to_source(result, param_.iou_threshold, transform);
+    nms_reverse(result, param_.iou_threshold, transform);
     return true;
   }
 

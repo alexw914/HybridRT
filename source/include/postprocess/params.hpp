@@ -158,15 +158,15 @@ auto create_e2e_segment() -> UniquePtr<SegmentPostprocessor>;
 
 auto create_semantic_segment() -> UniquePtr<SegmentPostprocessor>;
 
-auto nms_to_source(DetectResultMap& result, const Vector<float>& iou_threshold,
-                   const preprocess::ImageTransform& transform) -> void;
+auto nms_reverse(DetectResultMap& result, const Vector<float>& iou_threshold,
+                 const preprocess::ImageTransform& transform) -> void;
 
 // Maps network-space rotated boxes back to the source; fails without uniform
 // scaling.
-auto rotated_to_source(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool;
+auto rotated_reverse(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool;
 
-auto nms_rotated_to_source(RotatedResultMap& result, const Vector<float>& iou_threshold,
-                           const preprocess::ImageTransform& transform) -> bool;
+auto nms_rotated_reverse(RotatedResultMap& result, const Vector<float>& iou_threshold,
+                         const preprocess::ImageTransform& transform) -> bool;
 
 auto resolve_yolov5_heads(YoloV5Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
 
