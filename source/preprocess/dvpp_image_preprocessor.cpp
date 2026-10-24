@@ -150,27 +150,4 @@ auto DvppImagePreprocessor::fused(core::Image& dst, const ImageTransform& transf
   return true;
 }
 
-// Only the fused step runs on DVPP; the preprocessor never selects these.
-auto DvppImagePreprocessor::fill(core::Image& /*image*/, const core::Rect& /*roi*/, const Array<float, 3>& /*color*/,
-                                 core::Stream* /*stream*/) -> bool {
-  return false;
-}
-
-auto DvppImagePreprocessor::resize(core::Image& /*dst*/, const core::Rect& /*dst_roi*/, const core::Image& /*src*/,
-                                   const core::Rect& /*src_roi*/, InterpolationMode /*mode*/, core::Stream* /*stream*/)
-    -> bool {
-  return false;
-}
-
-auto DvppImagePreprocessor::convert(core::Image& /*dst*/, const core::Image& /*src*/, core::Stream* /*stream*/)
-    -> bool {
-  return false;
-}
-
-auto DvppImagePreprocessor::normalize(core::Image& /*image*/, const core::Rect& /*roi*/,
-                                      const Array<float, 3>& /*mean*/, const Array<float, 3>& /*stddev*/,
-                                      core::Stream* /*stream*/) -> bool {
-  return false;
-}
-
 } // namespace hrt::preprocess

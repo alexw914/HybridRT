@@ -19,17 +19,6 @@ public:
 
   ~MetalImagePreprocessor() override;
 
-  auto fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color, core::Stream* stream)
-      -> bool override;
-
-  auto resize(core::Image& dst, const core::Rect& dst_roi, const core::Image& src, const core::Rect& src_roi,
-              InterpolationMode mode, core::Stream* stream) -> bool override;
-
-  auto convert(core::Image& dst, const core::Image& src, core::Stream* stream) -> bool override;
-
-  auto normalize(core::Image& image, const core::Rect& roi, const Array<float, 3>& mean, const Array<float, 3>& stddev,
-                 core::Stream* stream) -> bool override;
-
   auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
              const ImagePreprocessorParam& param, core::Stream* stream) -> bool override;
 

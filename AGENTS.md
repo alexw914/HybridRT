@@ -37,7 +37,7 @@
   `source/engine/<backend>_engine.*`、`source/CMakeLists.txt` 和 `Engine::create`；
   新增设备扩展 `Memory::create`/`wrap`、`copy_memory`、`Context::create`、
   `ImagePreprocessor::create`，上层流程不按后端分支。
-- 预处理流程只在 `ImagePreprocessor` 基类实现，设备子类只实现算子；
+- 预处理流程只在 `ImagePreprocessor` 基类实现，算子默认返回 false，设备子类只重写支持的算子；
   不支持的步骤由 `supports()` 返回 false 并回退 CPU。后处理只在主机执行，按 `postprocess.type` 注册。
 - `ImageModel` 的 algo 只描述模型（preprocess、postprocess），引擎只读取自己的 config。
   各阶段实例数只通过 create 的 `ImageModelOptions` 传入，不写入模型包。

@@ -154,19 +154,20 @@ public:
   virtual auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst,
                           const core::Image& src) const -> void;
 
+  // Step operators return false by default; override only the supported ones.
   virtual auto fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color, core::Stream* stream)
-      -> bool = 0;
+      -> bool;
 
   // Within one layout family; swaps RGB/BGR order when the formats differ.
   virtual auto resize(core::Image& dst, const core::Rect& dst_roi, const core::Image& src, const core::Rect& src_roi,
-                      InterpolationMode mode, core::Stream* stream) -> bool = 0;
+                      InterpolationMode mode, core::Stream* stream) -> bool;
 
   // Same size, any format and data type.
-  virtual auto convert(core::Image& dst, const core::Image& src, core::Stream* stream) -> bool = 0;
+  virtual auto convert(core::Image& dst, const core::Image& src, core::Stream* stream) -> bool;
 
   // In place on a float image: x = (x - mean) / std.
   virtual auto normalize(core::Image& image, const core::Rect& roi, const Array<float, 3>& mean,
-                         const Array<float, 3>& stddev, core::Stream* stream) -> bool = 0;
+                         const Array<float, 3>& stddev, core::Stream* stream) -> bool;
 
   virtual auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
                      const ImagePreprocessorParam& param, core::Stream* stream) -> bool;

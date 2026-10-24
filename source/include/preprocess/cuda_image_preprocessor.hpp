@@ -20,17 +20,6 @@ namespace hrt::preprocess {
 // planar inputs and sources, other source formats) to the CPU.
 class CudaImagePreprocessor final : public ImagePreprocessor {
 public:
-  auto fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color, core::Stream* stream)
-      -> bool override;
-
-  auto resize(core::Image& dst, const core::Rect& dst_roi, const core::Image& src, const core::Rect& src_roi,
-              InterpolationMode mode, core::Stream* stream) -> bool override;
-
-  auto convert(core::Image& dst, const core::Image& src, core::Stream* stream) -> bool override;
-
-  auto normalize(core::Image& image, const core::Rect& roi, const Array<float, 3>& mean, const Array<float, 3>& stddev,
-                 core::Stream* stream) -> bool override;
-
   // Interleaved BGR/RGB or NV12/NV21/I420/YV12 uint8 to a 3-channel uint8 or
   // float32 input in one kernel: color conversion, resize (linear, nearest or
   // cubic), padding, channel order and normalization.

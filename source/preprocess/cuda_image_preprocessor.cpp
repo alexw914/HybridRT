@@ -129,28 +129,6 @@ auto CudaImagePreprocessor::supports(ImageOperation /*op*/, const core::Image& /
   return false;
 }
 
-auto CudaImagePreprocessor::fill(core::Image& /*image*/, const core::Rect& /*roi*/, const Array<float, 3>& /*color*/,
-                                 core::Stream* /*stream*/) -> bool {
-  return false;
-}
-
-auto CudaImagePreprocessor::resize(core::Image& /*dst*/, const core::Rect& /*dst_roi*/, const core::Image& /*src*/,
-                                   const core::Rect& /*src_roi*/, InterpolationMode /*mode*/, core::Stream* /*stream*/)
-    -> bool {
-  return false;
-}
-
-auto CudaImagePreprocessor::convert(core::Image& /*dst*/, const core::Image& /*src*/, core::Stream* /*stream*/)
-    -> bool {
-  return false;
-}
-
-auto CudaImagePreprocessor::normalize(core::Image& /*image*/, const core::Rect& /*roi*/,
-                                      const Array<float, 3>& /*mean*/, const Array<float, 3>& /*stddev*/,
-                                      core::Stream* /*stream*/) -> bool {
-  return false;
-}
-
 auto CudaImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
                                            const ImagePreprocessorParam& param) const -> bool {
   const auto normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);

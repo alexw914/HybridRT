@@ -180,22 +180,4 @@ auto MetalImagePreprocessor::fused(core::Image& dst, const ImageTransform& trans
   }
 }
 
-auto MetalImagePreprocessor::fill(core::Image&, const core::Rect&, const Array<float, 3>&, core::Stream*) -> bool {
-  return false;
-}
-
-auto MetalImagePreprocessor::resize(core::Image&, const core::Rect&, const core::Image&, const core::Rect&,
-                                    InterpolationMode, core::Stream*) -> bool {
-  return false;
-}
-
-auto MetalImagePreprocessor::convert(core::Image&, const core::Image&, core::Stream*) -> bool {
-  return false;
-}
-
-auto MetalImagePreprocessor::normalize(core::Image&, const core::Rect&, const Array<float, 3>&, const Array<float, 3>&,
-                                       core::Stream*) -> bool {
-  return false;
-}
-
 } // namespace hrt::preprocess

@@ -16,6 +16,24 @@
 
 namespace {
 
+class UnsupportedPreprocessor final : public hrt::preprocess::ImagePreprocessor {
+public:
+  KZ_NODISCARD auto type() const -> hrt::preprocess::ImagePreprocessorType override {
+    return hrt::preprocess::ImagePreprocessorType::Auto;
+  }
+
+  KZ_NODISCARD auto memory_type() const -> hrt::core::MemoryType override { return hrt::core::MemoryType::Cpu; }
+
+  KZ_NODISCARD auto accepts(hrt::core::MemoryType type) const -> bool override {
+    return type == hrt::core::MemoryType::Cpu;
+  }
+
+  KZ_NODISCARD auto supports(hrt::preprocess::ImageOperation /*op*/, const hrt::core::Image& /*dst*/,
+                             const hrt::core::Image& /*src*/) const -> bool override {
+    return false;
+  }
+};
+
 auto param_with(hrt::preprocess::ResizeType type) -> hrt::preprocess::ImagePreprocessorParam {
   hrt::preprocess::ImagePreprocessorParam param;
   param.resize_type = type;
@@ -169,6 +187,27 @@ TEST(ImagePreprocessorTest, LetterBoxesBgrIntoNormalizedPlanarRgb) {
   EXPECT_EQ(transform->dst_roi, (hrt::core::Rect{0, 2, 8, 4}));
   EXPECT_EQ(transform->src_roi, (hrt::core::Rect{0, 0, 8, 4}));
   EXPECT_EQ(transform->input_size, (hrt::core::Size{8, 8}));
+  EXPECT_FLOAT_EQ(planar_at(dst, 0, 3, 3), 30.0F / 255.0F);
+  EXPECT_FLOAT_EQ(planar_at(dst, 1, 3, 3), 20.0F / 255.0F);
+  EXPECT_FLOAT_EQ(planar_at(dst, 2, 3, 3), 10.0F / 255.0F);
+  EXPECT_FLOAT_EQ(planar_at(dst, 0, 0, 0), 114.0F / 255.0F);
+  EXPECT_FLOAT_EQ(planar_at(dst, 2, 7, 7), 114.0F / 255.0F);
+}
+
+TEST(ImagePreprocessorTest, FallsBackToCpuWithoutStepOverrides) {
+  auto src = uniform_bgr(8, 4, {10, 20, 30}, 32);
+  hrt::core::Image dst(hrt::core::MemoryType::Cpu, hrt::core::ImageFormat::PlanarRgb, hrt::core::DataType::Float32,
+                       {8, 8});
+  hrt::preprocess::ImagePreprocessorParam param;
+  param.resize_type = hrt::preprocess::ResizeType::LetterBox;
+  param.std = {255.0F, 255.0F, 255.0F};
+  param.default_color = {114.0F, 114.0F, 114.0F};
+  UnsupportedPreprocessor processor;
+
+  const auto transform = processor.process(dst, src.image, {}, param);
+  ASSERT_TRUE(transform);
+  EXPECT_EQ(transform->dst_roi, (hrt::core::Rect{0, 2, 8, 4}));
+  EXPECT_EQ(transform->src_roi, src.image.rect());
   EXPECT_FLOAT_EQ(planar_at(dst, 0, 3, 3), 30.0F / 255.0F);
   EXPECT_FLOAT_EQ(planar_at(dst, 1, 3, 3), 20.0F / 255.0F);
   EXPECT_FLOAT_EQ(planar_at(dst, 2, 3, 3), 10.0F / 255.0F);

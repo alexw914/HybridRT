@@ -273,6 +273,26 @@ auto ImagePreprocessor::process(std::span<core::Image> dsts, std::span<const cor
 auto ImagePreprocessor::adjust_roi(core::Rect& /*dst_roi*/, core::Rect& /*src_roi*/, const core::Image& /*dst*/,
                                    const core::Image& /*src*/) const -> void {}
 
+auto ImagePreprocessor::fill(core::Image& /*image*/, const core::Rect& /*roi*/, const Array<float, 3>& /*color*/,
+                             core::Stream* /*stream*/) -> bool {
+  return false;
+}
+
+auto ImagePreprocessor::resize(core::Image& /*dst*/, const core::Rect& /*dst_roi*/, const core::Image& /*src*/,
+                               const core::Rect& /*src_roi*/, InterpolationMode /*mode*/, core::Stream* /*stream*/)
+    -> bool {
+  return false;
+}
+
+auto ImagePreprocessor::convert(core::Image& /*dst*/, const core::Image& /*src*/, core::Stream* /*stream*/) -> bool {
+  return false;
+}
+
+auto ImagePreprocessor::normalize(core::Image& /*image*/, const core::Rect& /*roi*/, const Array<float, 3>& /*mean*/,
+                                  const Array<float, 3>& /*stddev*/, core::Stream* /*stream*/) -> bool {
+  return false;
+}
+
 auto ImagePreprocessor::fused(core::Image& /*dst*/, const ImageTransform& /*transform*/, const core::Image& /*src*/,
                               const ImagePreprocessorParam& /*param*/, core::Stream* /*stream*/) -> bool {
   return false;
