@@ -1,7 +1,8 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: benchmarks/postprocess_bench.cpp
-// Description: Benchmarks every template postprocessor on real model outputs.
+// Description: Benchmarks every template postprocessor on real model outputs,
+//              and the basic YOLO postprocessors on RKNN int8 outputs.
 // -----------------------------------------------------------------------------
 
 #include <hrt/postprocess/postprocessor_factory.hpp>
@@ -34,6 +35,11 @@ auto prepare(benchmark::State& state, const kitzoo::json::Json& entry, const std
     state.SkipWithError("The engine is not available or the model did not load");
     return std::nullopt;
   }
+  const auto size = engine->input_size();
+  if (!size) {
+    state.SkipWithError("The model has no single image input");
+    return std::nullopt;
+  }
   hrt::core::Buffers inputs;
   for (const auto& proto : engine->input_protos())
     inputs.push_back(std::make_shared<hrt::core::Buffer>(proto));
@@ -47,7 +53,7 @@ auto prepare(benchmark::State& state, const kitzoo::json::Json& entry, const std
   for (std::int64_t i = 0; i < shape[0]; ++i) {
     auto sample = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu,
                                          base + static_cast<std::size_t>(i) * input.stride()[1], param.dst_image_format,
-                                         {static_cast<int>(shape[3]), static_cast<int>(shape[2])}, input.data_type());
+                                         *size, input.data_type());
     const auto transform = sample ? preprocessor->process(*sample, *source, {}, param) : std::nullopt;
     if (!transform) {
       state.SkipWithError("Preprocessing failed");
@@ -88,6 +94,7 @@ auto measure_postprocessor(benchmark::State& state, Prepared& prepared) -> void 
   state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(prepared.transforms.size()));
 }
 
+#ifdef HRT_BENCH_ORT
 auto BM_Type(benchmark::State& state) -> void {
   cv::setNumThreads(1);
   const kitzoo::json::Reader reader(std::filesystem::path(HRT_SOURCE_DIR) / "assets/template/hrtc_template.json");
@@ -146,6 +153,45 @@ auto type_cases(benchmark::Benchmark* bench) -> void {
   }
 }
 
+#endif
+
+#ifdef HRT_BENCH_RKNN
+// The basic YOLO postprocessors on the int8 outputs of `<model>Int8.rknn` in assets/test/rknn, which keep their
+// quantization; arg: task (0 detect, 1 segment, 2 pose, 4 classify).
+auto BM_Rknn(benchmark::State& state) -> void {
+  cv::setNumThreads(1);
+  const auto task = static_cast<std::size_t>(state.range(0));
+  auto entry = hrt::bench::algo_entry(task, hrt::bench::Provider::Cpu, false);
+  if (!entry.is_object()) {
+    state.SkipWithError("Template algo is missing");
+    return;
+  }
+  auto path = std::filesystem::path(entry["config"]["engine"]["backends"][0]["data"].get<hrt::String>());
+  path = std::filesystem::path("assets/test/rknn") / (path.stem().string() + "Int8.rknn");
+  if (!std::filesystem::is_regular_file(path)) {
+    state.SkipWithMessage("RKNN int8 model is missing");
+    return;
+  }
+  entry["config"]["engine"]["backends"] = {
+      {{"engine_type", "rknn"}, {"data", path.string()}, {"config", {{"image_input", true}}}}};
+  auto& preprocess = entry["config"]["preprocess"];
+  preprocess["dst_image_format"] = "inter_rgb";
+  preprocess["std"] = {1, 1, 1};
+  const auto bgr = hrt::bench::task_image(task);
+  auto prepared = prepare(state, entry, hrt::bench::wrap_bgr(bgr));
+  if (!prepared)
+    return;
+  state.SetLabel(entry["config"]["postprocess"]["type"].get<hrt::String>() + ":" + entry["name"].get<hrt::String>() +
+                 "/int8");
+  hrt::bench::with_result(task, [&]<typename Result>() { measure_postprocessor<Result>(state, *prepared); });
+}
+#endif
+
 } // namespace
 
+#ifdef HRT_BENCH_ORT
 BENCHMARK(BM_Type)->Apply(type_cases)->Unit(benchmark::kMillisecond)->UseRealTime();
+#endif
+#ifdef HRT_BENCH_RKNN
+BENCHMARK(BM_Rknn)->ArgName("task")->Arg(0)->Arg(1)->Arg(2)->Arg(4)->Unit(benchmark::kMillisecond)->UseRealTime();
+#endif

@@ -434,45 +434,51 @@ Single-thread timing results and reproduction commands are in [benchmark.md](../
 | `yolov5_detect` | `YoloV5Detect.onnx` | `1 x 3 x 640 x 640` | `968d45c63e7bf811a7fe0e6e73c0740afd079996985608714b79d39faffc6fd3` |
 | `rtdetr_l_detect` | `DetrDetect.onnx` | `1 x 3 x 640 x 640` | `89e10a08e26eb872fa9cd6d0397b2eb9569fa2df5d1d37653ae5fa36fc08e862` |
 | `yolo26n_e2e_detect` | `E2EDetect.onnx` | `1 x 3 x 640 x 640` | `cc54c1e9bfc069212f274d07ca10450ad08b83f078ac8e09cd1e532eeeb1a100` |
-| `yolov8n_detect` | `GeneralDetect.onnx` | `1 x 3 x 480 x 640` | `a8ede0ffb077b655aa2d1be3044298f4374d1d278d84f6d87ab2cd404895d071` |
+| `yolov8n_detect` | `GeneralDetect.onnx` | `1 x 3 x 640 x 640` | `782006124ca30bc45ac1da40466b2541b06b203754fac8b5018fbbfbb602d36f` |
 | `yolo26n_e2e_obb` | `E2ERotated.onnx` | `1 x 3 x 640 x 640` | `13476c2bb3d7966df6c880036ecc4a3cdf41318e3d2e6bca483f4306ef691f63` |
 | `yolov8n_obb_raw` | `YoloV8Rotated.onnx` | `1 x 3 x 480 x 640` | `36223a5306c60c620186aa58a5a9c9bdcd34ad181c119d096edb8c2d30089a4a` |
 | `yolo26n_obb_raw` | `Yolo26Rotated.onnx` | `1 x 3 x 640 x 640` | `9393f99be7ee049e797b77032e6b9d95dc07ff5d6ba275cf626b9bda5d0a494c` |
 | `yolov5_rotated` | `YoloV5Rotated.onnx` | `1 x 3 x 1280 x 1280` | `afffc7a2813e15e9137648bc7655155827b1cdace2a0999b1919d1196be57dfb` |
 | `yolov8n_obb` | `GeneralRotated.onnx` | `1 x 3 x 1024 x 1024` | `c207d49b65f8173265f2e2ff66f59bfef54b0b6d6da578a31c223b190e13dd60` |
-| `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 224 x 224` | `12b84b2d5f63b9e5a7d8122643d61051810dffad6642bee875c4cd4f24d79a87` |
-| `yolov8n_classify_embedding` | `Embedding.onnx` | `1 x 3 x 224 x 224` | `b3b8c37ac7d6bfe052fcc17e4d018bd79a68f354bee845e9073f080b3705ce95` |
-| `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 640 x 640` | `de42e8e71ff022fe44287e6723fbf6429d1fee84084e63fd19630e1d6496785d` |
+| `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 640 x 640` | `46f101117e36acb79ebbd362250971b13d8dd906c7c877a2b7cc6af1fc1b8054` |
+| `yolov8n_classify_embedding` | `Embedding.onnx` | `1 x 3 x 640 x 640` | `46f101117e36acb79ebbd362250971b13d8dd906c7c877a2b7cc6af1fc1b8054` |
+| `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 640 x 640` | `b1684b889751d66d6e3f1a5f9e5a799c41e325fabef0cb552cbac82b385dbcba` |
 | `yolov8n_face` | `YoloV8Keypoint.onnx` | `1 x 3 x 640 x 640` | `af09683be4937ebe23e9da0346cbf46cd937b73ed5fac986e6205e6c7cdd2c25` |
 | `yolo26n_pose_raw` | `Yolo26Keypoint.onnx` | `1 x 3 x 640 x 640` | `0c0b46ec46f05727218ee2431942e02f40d9f928a4a12d720ccadfba715fd59a` |
 | `yolo26n_e2e_pose` | `E2EKeypoint.onnx` | `1 x 3 x 640 x 640` | `18be1d966c3c0c5c38a81fc301933ec94bb2633313e2806f14999de3001a2f8f` |
 | `rtmo_s_pose` | `RtmoKeypoint.onnx` | `1 x 3 x 640 x 640` | `f686d078c403183ebb428fc7b3818bc7ebb838fd8486423dc20688a1f8079c31` |
 | `rtmpose_m_pose` | `GeneralKeypoint.onnx` | `1 x 3 x 256 x 192` | `204ed5161fc30dd26f1af8e40d87426a2f5885828840e4abdad2e22b77d487d7` |
-| `yolov8n_segment` | `GeneralYoloSegment.onnx` | `1 x 3 x 480 x 640` | `1f05bc76e1a542931f9a4b0c21f9d281ff4a8136a3cf8d03869996b0b9a5d124` |
+| `yolov8n_segment` | `GeneralYoloSegment.onnx` | `1 x 3 x 640 x 640` | `a9c25c390e47e6a5e7b3c1dc22bee67ef28cd1746576f2c80a141717fd30dbc6` |
 | `yolov8n_segment_raw` | `YoloV8Segment.onnx` | `1 x 3 x 480 x 640` | `fdbd46dc0a5ae4bb1cb1b32010fa131a43f370043077555f921890bcd2880494` |
 | `yolo26n_segment_raw` | `Yolo26Segment.onnx` | `1 x 3 x 640 x 640` | `52f066c5e682fddf899466d975d4f7c0bc727fb49424072fc7d986f9d09b8ed8` |
 | `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `78cb9fff568e1a006523a54ae96c1f43ea6b376e93dd637e10eede16128335f4` |
 | `lraspp_voc_segment` | `SemanticSegment.onnx` | `1 x 3 x 512 x 512` | `70e2c6d571872208589c43a491fde37fbf73376481343119a5c67dfd55df8c6f` |
 
-Static batch-4 fixtures are exported directly from official [Ultralytics weights](https://github.com/ultralytics/assets/releases/tag/v8.3.0),
-using local `assets/test/scripts/export_batch4.py`: Ultralytics 8.4.8, PyTorch 2.9.1,
-ONNX 1.20.1, opset 17, `batch=4`, `imgsz=[480,640]`, `dynamic=False`,
-`simplify=False`, FP32. Batch-1 reference models are exported from the same weights.
-These are native batched networks. Their template algos end in `_batch4`.
+Static batch-4 and batch-8 fixtures are exported directly from official [Ultralytics weights](https://github.com/ultralytics/assets/releases/tag/v8.3.0),
+using local `assets/test/scripts/export_static_batch.py` (arguments: the batches to export):
+Ultralytics 8.4.8, PyTorch 2.9.1, ONNX 1.20.1, opset 17, `batch=4` or `batch=8`,
+`imgsz=[640,640]`, `dynamic=False`, `simplify=False`, FP32. Batch-1 reference models are
+exported from the same weights. These are native batched networks. Their template algos end in
+`_batch4` and `_batch8`; `hybridrt_bench_pipeline` `BM_Batch` runs batch 1, 4 and 8 with as many
+images per call.
 `ImageModelTest.MatchesBatchOneOnStaticBatchModels` compares four images and a partial batch
 against individual CPU calls. `MatchesBatchOneOnTensorRtStaticBatchModels` compares batched
 and individual calls on the same TensorRT model with CPU and CUDA preprocessing separately;
 the CUDA kernel may differ from OpenCV by one uint8 step in rare pixels. TensorRT fixtures are local
-`.engine` files beside the ONNX files of both the batch-4 and the batch-1 models, built with
+`.engine` files in `assets/test/trt/`, named after the ONNX files of the batch-1, batch-4 and batch-8 models, built with
 TensorRT 10.14.1, FP32, `--noTF32`; plans load only where they were built, so tests and
 benchmarks skip them elsewhere.
 
-| Algo | ONNX file in `assets/test/onnx/` | Input NCHW | Outputs | Batch-1 SHA256 | Batch-4 SHA256 |
-| --- | --- | --- | --- | --- | --- |
-| `yolov8n_classify_batch4` | `GeneralClassifyBatch4.onnx` | `4 x 3 x 480 x 640` | `4 x 1000` | `12b84b2d5f63b9e5a7d8122643d61051810dffad6642bee875c4cd4f24d79a87` | `7d6383b06d8574a40a437b0d92c2a431fa1e1dc41ec24f89af1f712f0a3907fa` |
-| `yolov8n_detect_batch4` | `GeneralDetectBatch4.onnx` | `4 x 3 x 480 x 640` | `4 x 84 x 6300` | `a8ede0ffb077b655aa2d1be3044298f4374d1d278d84f6d87ab2cd404895d071` | `2a186204dc8f28e1cf2e77441193661fdf2ae3071f63c969c6cc1cd8fcadfe2c` |
-| `yolov8n_pose_batch4` | `GeneralYoloPoseBatch4.onnx` | `4 x 3 x 480 x 640` | `4 x 56 x 6300` | `de42e8e71ff022fe44287e6723fbf6429d1fee84084e63fd19630e1d6496785d` | `5673504bafdac64d9f90775c061011319625fa6d45dc084990e6460d728ee9ab` |
-| `yolov8n_segment_batch4` | `GeneralYoloSegmentBatch4.onnx` | `4 x 3 x 480 x 640` | `4 x 116 x 6300; 4 x 32 x 120 x 160` | `1f05bc76e1a542931f9a4b0c21f9d281ff4a8136a3cf8d03869996b0b9a5d124` | `9baa669e562fd20ebbf74744d185dda7777b52dee02c81ba77c4c871c238995c` |
+| Algo | ONNX file in `assets/test/onnx/` | Input NCHW | Outputs | SHA256 |
+| --- | --- | --- | --- | --- |
+| `yolov8n_classify_batch4` | `GeneralClassifyBatch4.onnx` | `4 x 3 x 640 x 640` | `4 x 1000` | `bb5992374ba65a0555d0bd30679a3610a5c7305f95e305542efd747e51c26b4e` |
+| `yolov8n_detect_batch4` | `GeneralDetectBatch4.onnx` | `4 x 3 x 640 x 640` | `4 x 84 x 8400` | `deb8c98ab42828ccc537eaad85838f1c5349a37fc20a256dbca23eb8cc477518` |
+| `yolov8n_pose_batch4` | `GeneralYoloPoseBatch4.onnx` | `4 x 3 x 640 x 640` | `4 x 56 x 8400` | `4197a3fbe3181fb9deeea665cb3898c608500437cc85a4f3d69660e45debb194` |
+| `yolov8n_segment_batch4` | `GeneralYoloSegmentBatch4.onnx` | `4 x 3 x 640 x 640` | `4 x 116 x 8400; 4 x 32 x 160 x 160` | `e13654d03168abf180dd73cfc3b28daf3b03dffef2a12f37ee4bf2d8cf4a9462` |
+| `yolov8n_classify_batch8` | `GeneralClassifyBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 1000` | `f6bdb116cff2dbb19f8d23d3ec04a46dde18bf07d9ac02aaac6d9f05e843e4ce` |
+| `yolov8n_detect_batch8` | `GeneralDetectBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 84 x 8400` | `dc8f6cd8c46ccb2021f30663f97e96099d8675630fba64102e2f5f09393cfaee` |
+| `yolov8n_pose_batch8` | `GeneralYoloPoseBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 56 x 8400` | `58bd37d656e7a3e3139d71a6408baf5795a09ca21843cdc2dee75f99f828235d` |
+| `yolov8n_segment_batch8` | `GeneralYoloSegmentBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 116 x 8400; 8 x 32 x 160 x 160` | `c0c2d436f510efdc26912b95311c0503b2f0bc2b7ebce23c6c151abf3a8e4ee1` |
 
 Additional OCR fixtures use official PaddlePaddle ONNX weights. The `ppocrv6_tiny_det`,
 `ppocrv6_tiny_rec`, `ppocrv6_tiny_rec_batch8` and `ppocrv6_small_rec` template algos run through
@@ -526,8 +532,9 @@ detection resolution (native size, multiple of 32), 24 of 33 lines match with ti
 Sources and export steps for the current collection:
 
 - `GeneralDetect`, `GeneralYoloPose`, `GeneralRotated` and `GeneralClassify` are the
-  decoded binding exports of the official YOLOv8 weights below (640, 640, 1024 and 224
-  inputs). `GeneralYoloSegment` is the default `yolov8n-seg.pt` export at 480 x 640.
+  decoded binding exports of the official YOLOv8 weights below (640 x 640, 640 x 640, 1024 and
+  640 x 640 inputs). `GeneralYoloSegment` is the default `yolov8n-seg.pt` export at 640 x 640.
+  These four batch-1 models come from `export_static_batch.py`, with the static batch fixtures.
   Raw `YoloV8Detect`, `YoloV8Rotated` and `YoloV8Segment` come from `yolov8n.pt`,
   `yolov8n-obb.pt` and `yolov8n-seg.pt` through `yolo_export_raw.py` at 480 x 640: one
   output per stride holding the head convolutions before decoding, concatenated as box
@@ -658,7 +665,11 @@ Results checked against independent references on bus.jpg (ONNX Runtime 1.31.0, 
 ### RKNN on RK3588
 
 `rknn_convert.py` in the local assets/test/scripts/ directory (rknn-toolkit2 2.3.2, matching the board runtime) converts each ONNX test model to
-an fp16 `.rknn` beside it, with the model's mean/std built in. Its algo then runs on RKNN with the same
+an fp16 `.rknn` of the same name in `assets/test/rknn/`, with the model's mean/std built in. The four basic
+640 x 640 models and their batch-4 and batch-8 exports are converted with the defaults (mean 0, std 255);
+`ImageModelTest.MatchesBatchOneOnRknnStaticBatchModels` compares them with RGA preprocessing on the board.
+The four batch-1 basic models are also converted to int8 as `<model>Int8.rknn`, with
+`--dataset assets/test/calib/coco64.txt` (64 COCO128 images), for `hybridrt_bench_postprocess` `BM_Rknn`. Its algo then runs on RKNN with the same
 `postprocess`; `preprocess` drops `mean`/`std` and takes `dst_image_format: "inter_rgb"` (`inter_bgr` for
 RTMO), and the backend is `{"engine_type": "rknn", "config": {"image_input": true}}`. A raw-head pose model
 uses the `yolov8n_face` postprocess with `reg_max: 16` and the default `keypoint_num` of 17.

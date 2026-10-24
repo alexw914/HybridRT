@@ -6,10 +6,13 @@
 
 #include <hrt/model/image_model.hpp>
 
-#ifdef HRT_TEST_TENSORRT
 #include <kitzoo/log/logger.hpp>
-#endif
 #include <kitzoo/os/filesys.hpp>
+#ifdef HRT_RKNN_MODEL_TEST
+#include <kitzoo/core/scopeguard.hpp>
+
+#include <rknn_api.h>
+#endif
 
 #ifdef HRT_TEST_TENSORRT
 #include <NvInfer.h>
@@ -19,15 +22,16 @@
 #include <filesystem>
 #include <future>
 #include <gtest/gtest.h>
+#include <type_traits>
 
-#ifdef HRT_ORT_MODEL_TEST
+#if defined(HRT_ORT_MODEL_TEST) || defined(HRT_RKNN_MODEL_TEST)
 #include <opencv2/imgcodecs.hpp>
 #endif
 
 #ifdef HRT_TEST_ORT
 #include "../engine/onnx_model.hpp"
 #endif
-#ifdef HRT_ORT_MODEL_TEST
+#if defined(HRT_ORT_MODEL_TEST) || defined(HRT_RKNN_MODEL_TEST)
 #include "../engine/template_config.hpp"
 #endif
 
@@ -549,7 +553,15 @@ TEST_F(ImageModelTest, RunsTheBatchOverloadOnABatchOfOne) {
   EXPECT_FALSE(model->process_sync(Images{image}, {outside}));
 }
 
-#ifdef HRT_ORT_MODEL_TEST
+} // namespace
+#endif
+
+#if defined(HRT_ORT_MODEL_TEST) || defined(HRT_RKNN_MODEL_TEST)
+namespace {
+#ifndef HRT_TEST_ORT
+class ImageModelTest : public ::testing::Test {};
+#endif
+
 auto expect_same(const hrt::postprocess::ObjectBox& batched, const hrt::postprocess::ObjectBox& single) -> void {
   EXPECT_EQ(batched.type, single.type);
   EXPECT_NEAR(batched.score, single.score, 1e-4F);
@@ -558,7 +570,6 @@ auto expect_same(const hrt::postprocess::ObjectBox& batched, const hrt::postproc
   EXPECT_NEAR(batched.rect.width, single.rect.width, 1e-2F);
   EXPECT_NEAR(batched.rect.height, single.rect.height, 1e-2F);
 }
-
 auto expect_same(const hrt::postprocess::KeypointObject& batched, const hrt::postprocess::KeypointObject& single)
     -> void {
   expect_same(batched.box, single.box);
@@ -569,14 +580,26 @@ auto expect_same(const hrt::postprocess::KeypointObject& batched, const hrt::pos
     EXPECT_NEAR(batched.keypoints[i].score, single.keypoints[i].score, 1e-4F);
   }
 }
-
-auto expect_same(const hrt::postprocess::SegmentObject& batched, const hrt::postprocess::SegmentObject& single)
-    -> void {
+auto expect_same(const hrt::postprocess::SegmentObject& batched, const hrt::postprocess::SegmentObject& single,
+                 double min_mask_iou) -> void {
   expect_same(batched.box, single.box);
   EXPECT_EQ(batched.mask.rect, single.mask.rect);
-  EXPECT_EQ(batched.mask.data, single.mask.data);
+  ASSERT_EQ(batched.mask.data.size(), single.mask.data.size());
+  std::size_t different = 0, intersection = 0, combined = 0;
+  for (std::size_t i = 0; i < batched.mask.data.size(); ++i) {
+    const auto lhs = batched.mask.data[i] != 0;
+    const auto rhs = single.mask.data[i] != 0;
+    different += lhs != rhs;
+    intersection += lhs && rhs;
+    combined += lhs || rhs;
+  }
+  if (different != 0)
+    KZ_LOG_INFO("batch mask: {} / {} pixels differ, intersection={}, union={}, IoU={}", different,
+                batched.mask.data.size(), intersection, combined,
+                combined == 0 ? 1.0 : static_cast<double>(intersection) / static_cast<double>(combined));
+  const auto iou = combined == 0 ? 1.0 : static_cast<double>(intersection) / static_cast<double>(combined);
+  EXPECT_GE(iou, min_mask_iou) << different << " differing mask pixels";
 }
-
 auto expect_same(const hrt::postprocess::ClassifyResult& batched, const hrt::postprocess::ClassifyResult& single)
     -> void {
   ASSERT_EQ(batched.size(), single.size());
@@ -586,25 +609,44 @@ auto expect_same(const hrt::postprocess::ClassifyResult& batched, const hrt::pos
       EXPECT_NEAR(batched[output][i], single[output][i], 1e-4F);
   }
 }
-
 template <typename Map>
-auto expect_same(const Map& batched, const Map& single) -> void {
+auto expect_same(const Map& batched, const Map& single, double min_mask_iou = 1.0) -> void {
   ASSERT_EQ(batched.size(), single.size());
   for (const auto& [cls, objects] : single) {
     ASSERT_TRUE(batched.contains(cls)) << "class " << cls;
     ASSERT_EQ(batched.at(cls).size(), objects.size()) << "class " << cls;
-    for (std::size_t i = 0; i < objects.size(); ++i)
-      expect_same(batched.at(cls)[i], objects[i]);
+    for (std::size_t i = 0; i < objects.size(); ++i) {
+      if constexpr (std::is_same_v<typename Map::mapped_type, hrt::postprocess::SegmentResult>)
+        expect_same(batched.at(cls)[i], objects[i], min_mask_iou);
+      else
+        expect_same(batched.at(cls)[i], objects[i]);
+    }
   }
 }
 
-// Runs bus.jpg and zidane.jpg through the static batch-4 copy of `name` in
-// full, partial and split batches and expects the results of the batch-1
-// model, image by image.
+// Compares native batch-1 and batch-`batch` models with identical 3/2/3 pools on
+// bus, zidane and up to 32 sorted COCO images, including partial and split batches.
 template <typename Result>
-auto expect_batch_matches_single(std::string_view name, std::string_view device = "cpu") -> void {
-  const auto single_algo = hrt::test::template_algo(name);
-  auto batch_algo = hrt::test::template_algo(hrt::String(name) + "_batch4");
+auto expect_batch_matches_single(std::string_view name, std::string_view device = "cpu", std::size_t batch = 4)
+    -> void {
+  SCOPED_TRACE(hrt::String(name) + "_batch" + std::to_string(batch));
+  cv::setNumThreads(-1);
+  auto single_algo = hrt::test::template_algo(name);
+  auto batch_algo = hrt::test::template_algo(hrt::String(name) + "_batch" + std::to_string(batch));
+  if (device == "rga") {
+    for (auto* algo : {&single_algo, &batch_algo}) {
+      if (algo->is_null())
+        continue;
+      auto path = hrt::test::template_model(*algo);
+      path = hrt::test::source_root() / "assets/test/rknn" / path.filename().replace_extension("rknn");
+      (*algo)["config"]["engine"]["backends"] = {
+          {{"engine_type", "rknn"}, {"data", path.string()}, {"config", {{"image_input", true}}}}};
+      auto& preprocess = (*algo)["config"]["preprocess"];
+      preprocess["device"] = "rga";
+      preprocess["dst_image_format"] = "inter_rgb";
+      preprocess["std"] = {1, 1, 1};
+    }
+  }
   const auto images_dir = hrt::test::source_root() / "assets/test/images";
   hrt::Vector<cv::Mat> frames{cv::imread((images_dir / "bus.jpg").string()),
                               cv::imread((images_dir / "zidane.jpg").string())};
@@ -612,39 +654,54 @@ auto expect_batch_matches_single(std::string_view name, std::string_view device 
       !std::filesystem::is_regular_file(hrt::test::template_model(single_algo)) ||
       !std::filesystem::is_regular_file(hrt::test::template_model(batch_algo)) || frames[0].empty() ||
       frames[1].empty())
-    GTEST_SKIP() << name << " batch-4 fixture, its batch-1 model or the test images are unavailable";
+    GTEST_SKIP() << name << " batch-" << batch << " fixture, its batch-1 model or the test images are unavailable";
 
+  const auto dataset = hrt::test::source_root() / "assets/test/calib/coco128/images/train2017";
+  if (std::filesystem::is_directory(dataset)) {
+    hrt::Vector<std::filesystem::path> paths;
+    for (const auto& entry : std::filesystem::directory_iterator(dataset)) {
+      if (entry.path().extension() == ".jpg")
+        paths.push_back(entry.path());
+    }
+    std::sort(paths.begin(), paths.end());
+    for (std::size_t i = 0; i < std::min(paths.size(), std::size_t{32}); ++i) {
+      auto frame = cv::imread(paths[i].string());
+      ASSERT_FALSE(frame.empty()) << paths[i];
+      frames.push_back(std::move(frame));
+    }
+  }
   hrt::Vector<hrt::core::Image> images;
   for (auto& frame : frames) {
     images.push_back(*hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, frame.data, hrt::core::ImageFormat::InterBgr,
                                              {frame.cols, frame.rows}, hrt::core::DataType::Uint8, frame.step));
   }
-  images.push_back(images[1]);
-  images.push_back(images[0]);
-  auto single = hrt::model::ImageModel<Result>::create(single_algo);
+  const hrt::model::ImageModelOptions options{3, 2, 3};
   hrt::SharedPtr<hrt::core::Context> context;
-  if (device != "cpu") {
+  if (device == "trt_cpu" || device == "trt_cuda") {
     context = hrt::core::Context::create(hrt::core::DeviceType::Cuda);
     if (context == nullptr)
       GTEST_SKIP() << "CUDA device is unavailable";
-    auto engine_path = hrt::test::template_model(batch_algo);
-    engine_path.replace_extension("engine");
-    if (!std::filesystem::is_regular_file(engine_path))
-      GTEST_SKIP() << "TensorRT batch-4 fixture is unavailable: " << engine_path;
-    batch_algo["config"]["engine"]["backends"] = {{{"engine_type", "trt"}, {"data", engine_path.string()}}};
-    batch_algo["config"]["preprocess"]["device"] = device == "trt_cpu" ? "cpu" : "cuda";
-    // Plans load only on the TensorRT version and platform that built them.
-    const auto param = hrt::hrtc::load_algo(batch_algo);
     context->set_current();
-    auto probe = hrt::engine::Engine::create(hrt::engine::engine_type_from("trt"));
-    if (!param || !probe || !probe->initialize(param->engines.front()))
-      GTEST_SKIP() << "TensorRT batch-4 fixture does not load here: " << engine_path;
-    single = hrt::model::ImageModel<Result>::create(batch_algo, context);
+    for (auto* algo : {&single_algo, &batch_algo}) {
+      auto engine_path = hrt::test::template_model(*algo);
+      engine_path = hrt::test::source_root() / "assets/test/trt" / engine_path.filename().replace_extension("engine");
+      if (!std::filesystem::is_regular_file(engine_path))
+        GTEST_SKIP() << "TensorRT fixture is unavailable: " << engine_path;
+      (*algo)["config"]["engine"]["backends"] = {{{"engine_type", "trt"}, {"data", engine_path.string()}}};
+      (*algo)["config"]["preprocess"]["device"] = device == "trt_cpu" ? "cpu" : "cuda";
+      const auto param = hrt::hrtc::load_algo(*algo);
+      auto probe = hrt::engine::Engine::create(hrt::engine::engine_type_from("trt"));
+      if (!param || !probe || !probe->initialize(param->engines.front()))
+        GTEST_SKIP() << "TensorRT fixture does not load here: " << engine_path;
+    }
   }
-  const auto batched = context ? hrt::model::ImageModel<Result>::create(batch_algo, context)
-                               : hrt::model::ImageModel<Result>::create(batch_algo);
+  const auto single = context ? hrt::model::ImageModel<Result>::create(single_algo, context, options)
+                              : hrt::model::ImageModel<Result>::create(single_algo, options);
+  const auto batched = context ? hrt::model::ImageModel<Result>::create(batch_algo, context, options)
+                               : hrt::model::ImageModel<Result>::create(batch_algo, options);
+  ASSERT_EQ(single->batch(), 1U);
   ASSERT_NE(batched, nullptr);
-  ASSERT_EQ(batched->batch(), 4U);
+  ASSERT_EQ(batched->batch(), batch);
   const auto results = batched->process_sync(images);
   ASSERT_TRUE(results);
   ASSERT_EQ(results->size(), images.size());
@@ -652,8 +709,13 @@ auto expect_batch_matches_single(std::string_view name, std::string_view device 
     SCOPED_TRACE(i);
     const auto expected = single->process_sync(images[i]);
     ASSERT_TRUE(expected);
-    EXPECT_FALSE(expected->empty());
-    expect_same((*results)[i], *expected);
+    // Independent TensorRT plans can differ by a pixel at the binary mask
+    // threshold; within one plan (the partial/split checks below), masks must
+    // still match exactly.
+    if constexpr (std::is_same_v<Result, hrt::postprocess::SegmentResultMap>)
+      expect_same((*results)[i], *expected, device == "cpu" ? 1.0 : 0.9999);
+    else
+      expect_same((*results)[i], *expected);
   }
   images.pop_back();
   const auto partial = batched->process_sync(images);
@@ -661,7 +723,7 @@ auto expect_batch_matches_single(std::string_view name, std::string_view device 
   ASSERT_EQ(partial->size(), images.size());
   for (std::size_t i = 0; i < images.size(); ++i)
     expect_same((*partial)[i], (*results)[i]);
-  // Six images run as a full batch and a partial one.
+  // Repeating the partial request also exercises splitting across engine batches.
   auto more = images;
   more.insert(more.end(), images.begin(), images.end());
   const auto split = batched->process_sync(more);
@@ -669,27 +731,91 @@ auto expect_batch_matches_single(std::string_view name, std::string_view device 
   ASSERT_EQ(split->size(), more.size());
   for (std::size_t i = 0; i < more.size(); ++i)
     expect_same((*split)[i], (*results)[i % images.size()]);
+
+  hrt::Vector<std::future<std::optional<hrt::Vector<Result>>>> calls;
+  for (int i = 0; i < 4; ++i)
+    calls.push_back(std::async(std::launch::async, [&] { return batched->process_sync(images); }));
+  for (auto& call : calls) {
+    const auto concurrent = call.get();
+    ASSERT_TRUE(concurrent);
+    ASSERT_EQ(concurrent->size(), images.size());
+    for (std::size_t i = 0; i < images.size(); ++i)
+      expect_same((*concurrent)[i], (*partial)[i]);
+  }
 }
 
+#ifdef HRT_ORT_MODEL_TEST
 TEST_F(ImageModelTest, MatchesBatchOneOnStaticBatchModels) {
-  expect_batch_matches_single<hrt::postprocess::ClassifyResult>("yolov8n_classify");
-  expect_batch_matches_single<hrt::postprocess::DetectResultMap>("yolov8n_detect");
-  expect_batch_matches_single<hrt::postprocess::KeypointResultMap>("yolov8n_pose");
-  expect_batch_matches_single<hrt::postprocess::SegmentResultMap>("yolov8n_segment");
+  for (const auto batch : {std::size_t{4}, std::size_t{8}}) {
+    expect_batch_matches_single<hrt::postprocess::ClassifyResult>("yolov8n_classify", "cpu", batch);
+    expect_batch_matches_single<hrt::postprocess::DetectResultMap>("yolov8n_detect", "cpu", batch);
+    expect_batch_matches_single<hrt::postprocess::KeypointResultMap>("yolov8n_pose", "cpu", batch);
+    expect_batch_matches_single<hrt::postprocess::SegmentResultMap>("yolov8n_segment", "cpu", batch);
+  }
 }
 
 #ifdef HRT_TEST_TENSORRT
 TEST_F(ImageModelTest, MatchesBatchOneOnTensorRtStaticBatchModels) {
   for (const auto device : {"trt_cpu", "trt_cuda"}) {
     SCOPED_TRACE(device);
-    expect_batch_matches_single<hrt::postprocess::ClassifyResult>("yolov8n_classify", device);
-    expect_batch_matches_single<hrt::postprocess::DetectResultMap>("yolov8n_detect", device);
-    expect_batch_matches_single<hrt::postprocess::KeypointResultMap>("yolov8n_pose", device);
-    expect_batch_matches_single<hrt::postprocess::SegmentResultMap>("yolov8n_segment", device);
+    for (const auto batch : {std::size_t{4}, std::size_t{8}}) {
+      expect_batch_matches_single<hrt::postprocess::ClassifyResult>("yolov8n_classify", device, batch);
+      expect_batch_matches_single<hrt::postprocess::DetectResultMap>("yolov8n_detect", device, batch);
+      expect_batch_matches_single<hrt::postprocess::KeypointResultMap>("yolov8n_pose", device, batch);
+      expect_batch_matches_single<hrt::postprocess::SegmentResultMap>("yolov8n_segment", device, batch);
+    }
   }
 }
 
 #endif
+#endif
+
+#ifdef HRT_RKNN_MODEL_TEST
+TEST_F(ImageModelTest, QueriesRknnBatchFixtures) {
+  for (const auto name : {"GeneralClassify", "GeneralDetect", "GeneralYoloPose", "GeneralYoloSegment"}) {
+    for (const auto suffix : {"", "Batch4", "Batch8"}) {
+      const auto path = hrt::test::source_root() / "assets/test/rknn" / (hrt::String(name) + suffix + ".rknn");
+      if (!std::filesystem::is_regular_file(path))
+        GTEST_SKIP() << path;
+      std::error_code error;
+      auto bytes = kitzoo::os::read_file(path, error);
+      ASSERT_FALSE(error) << path;
+      rknn_context context = 0;
+      ASSERT_EQ(rknn_init(&context, bytes.data(), static_cast<std::uint32_t>(bytes.size()), 0, nullptr), RKNN_SUCC);
+      KZ_SCOPE_EXIT {
+        rknn_destroy(context);
+      };
+      rknn_sdk_version version{};
+      ASSERT_EQ(rknn_query(context, RKNN_QUERY_SDK_VERSION, &version, sizeof(version)), RKNN_SUCC);
+      KZ_LOG_INFO("RKNN {}: runtime={}, driver={}, embedded mean=0 std=255, RGB input", path.filename().string(),
+                  version.api_version, version.drv_version);
+      rknn_input_output_num count{};
+      ASSERT_EQ(rknn_query(context, RKNN_QUERY_IN_OUT_NUM, &count, sizeof(count)), RKNN_SUCC);
+      for (const auto query : {RKNN_QUERY_INPUT_ATTR, RKNN_QUERY_NATIVE_INPUT_ATTR, RKNN_QUERY_OUTPUT_ATTR}) {
+        const auto size = query == RKNN_QUERY_OUTPUT_ATTR ? count.n_output : count.n_input;
+        for (std::uint32_t i = 0; i < size; ++i) {
+          rknn_tensor_attr attr{};
+          attr.index = i;
+          ASSERT_EQ(rknn_query(context, query, &attr, sizeof(attr)), RKNN_SUCC);
+          KZ_LOG_INFO("RKNN query={} index={} name={} ndims={} dims=[{},{},{},{}] fmt={} type={} zp={} scale={} "
+                      "w_stride={} h_stride={}",
+                      static_cast<int>(query), i, attr.name, attr.n_dims, attr.dims[0], attr.dims[1], attr.dims[2],
+                      attr.dims[3], static_cast<int>(attr.fmt), static_cast<int>(attr.type), attr.zp, attr.scale,
+                      attr.w_stride, attr.h_stride);
+        }
+      }
+    }
+  }
+}
+
+TEST_F(ImageModelTest, MatchesBatchOneOnRknnStaticBatchModels) {
+  for (const auto batch : {std::size_t{4}, std::size_t{8}}) {
+    expect_batch_matches_single<hrt::postprocess::ClassifyResult>("yolov8n_classify", "rga", batch);
+    expect_batch_matches_single<hrt::postprocess::DetectResultMap>("yolov8n_detect", "rga", batch);
+    expect_batch_matches_single<hrt::postprocess::KeypointResultMap>("yolov8n_pose", "rga", batch);
+    expect_batch_matches_single<hrt::postprocess::SegmentResultMap>("yolov8n_segment", "rga", batch);
+  }
+}
 #endif
 
 } // namespace
@@ -706,7 +832,7 @@ public:
   }
 };
 
-#ifndef HRT_TEST_ORT
+#if !defined(HRT_TEST_ORT) && !defined(HRT_RKNN_MODEL_TEST)
 class ImageModelTest : public ::testing::Test {};
 #endif
 

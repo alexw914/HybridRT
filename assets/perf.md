@@ -1,54 +1,27 @@
-# Performance notes
+# Performance changes
 
-Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, newest first. Each entry
-records the bottleneck, the change, how it was measured and the numbers before and after, so later
-work can rerun the same measurement. Plain feature work is not listed here.
+Before/after optimization records, newest first. Current benchmark results and reproduction commands are in [benchmark.md](benchmark.md).
+
+Each entry states the cause/change, measurement conditions, data, and validation or limits. Values are historical for that source revision; later entries may supersede them. Missing historical settings are marked rather than inferred.
 
 ## 2026-10-24: recognize all OCR lines of an image in one call
 
-**Bottleneck.** `OcrModel` called the recognizer once per detected line, so a recognition model
-with a static batch would still run one line per inference, and every line paid a separate
-preprocessing, inference and postprocessing call.
+OCR recognition ran once per detected line. Collecting all line regions in one ImageModel call lets a native batch-8 recognizer process eight lines per inference; tall lines still rotate on the host.
 
-**Change.** `OcrModel::process_sync` collects every line, wide ones as their region of the source
-and tall ones rotated on the host (each into its own buffer), and passes them to one
-`ImageModel::process_sync` call, which runs them in batches of the recognizer's static batch. A
-batch-1 recognizer still runs one line at a time and gives identical JSON output. The template
-gains `ppocrv6_tiny_rec_batch8`, the tiny recognizer exported with a batch of 8.
-
-**Measurement.** WSL2, Ryzen 5 5600X, RTX 3060, TensorRT 10.14.1 FP32 `--noTF32` engines built
-locally from `OcrDetection.onnx`, `OcrRecognition.onnx` and `OcrRecognitionBatch8.onnx`, CUDA
-preprocessing; `hrt-ocr` over 20 copies of `ocr_document.png` (37 lines each), three runs.
-ONNX Runtime CPU numbers come from `hybridrt_bench_pipeline` `BM_Ocr` (one OpenCV thread,
-`taskset -c 2-5`, median of three repetitions of at least 0.5 s).
+**Measurement:** WSL2, Ryzen 5 5600X / RTX 3060, TensorRT 10.14.1 FP32 noTF32, CUDA preprocessing. hrt-ocr: 20 copies of ocr_document.png, 37 lines each, three runs. ORT CPU: pipeline BM_Ocr, one OpenCV thread, CPUs 2-5, median of 3 repetitions >=0.5 s.
 
 | Recognizer | TensorRT, ms per image | ORT CPU, ms per image |
 | --- | ---: | ---: |
 | `ppocrv6_tiny_rec` (batch 1) | 52.9 / 56.2 / 50.2 | 228 |
 | `ppocrv6_tiny_rec_batch8` | 24.7 / 24.8 / 25.3 | 219 |
 
-All 740 TensorRT lines have the same text with both recognizers (scores within 1e-4); the ORT
-CPU gain is within noise. `RecognizesLinesInBatchesLikeOneByOne` compares both recognizers on
-the upright and the rotated document; the OCR model, tool and example tests pass.
-
-**Remaining.** Only the tiny recognizer has a batch fixture, and the OCR fixtures were rebuilt on
-this machine. RKNN and Windows were not measured.
+**Validation / limits:** All 740 TensorRT lines retain their text, scores within 1e-4. CPU gain is within noise; only the tiny recognizer has a batch fixture. RKNN and Windows were not measured.
 
 ## 2026-10-24: decode instance masks on OpenCV's threads
 
-**Bottleneck.** Instance segmentation decoders (`GeneralYoloSegment`, `YoloV8Segment`,
-`Yolo26Segment`, `E2ESegment`) decoded each kept object's mask right after creating it, with one
-shared `MaskDecoder` scratch, so mask decoding, the larger part of their time, ran on one thread.
+Per-object mask decoding serialized the expensive prototype sampling. MaskBatch queues retained objects and decodes independent stripes with reusable per-thread scratch.
 
-**Change.** The decoders queue every mask in a `MaskBatch` (coefficients, network box, source box
-and the object's index) and decode them together once all objects are known: stripe `s` of the
-objects runs on one OpenCV thread with its own `MaskDecoder` scratch. With one OpenCV thread the
-work is the same as before; results do not depend on the thread count.
-
-**Measurement.** WSL2 Ubuntu 24.04, AMD Ryzen 5 5600X, Release GCC 13, OpenCV 4.6.0,
-`hybridrt_bench_postprocess` `BM_Type/<index>/<threads>` on real ORT outputs of `bus.jpg`,
-pinned with `taskset -c 2-5`. The baseline is commit `a30868b` built with the same benchmark
-source; both alternated for three rounds of three repetitions of at least 0.5 s; medians in ms.
+**Measurement:** WSL2 Ryzen 5 5600X, GCC 13 Release, OpenCV 4.6.0, ORT outputs of bus.jpg. postprocess BM_Type, CPUs 2-5; baseline a30868b, alternating 3 rounds x 3 repetitions >=0.5 s; median ms.
 
 | Postprocessor | Before, 1 / 4 threads | After, 1 / 4 threads |
 | --- | ---: | ---: |
@@ -57,28 +30,13 @@ source; both alternated for three rounds of three repetitions of at least 0.5 s;
 | Yolo26Segment (raw heads) | 0.395 / 0.401 | 0.370 / 0.324 |
 | E2ESegment | 0.278 / 0.279 | 0.277 / 0.179 |
 
-**Validation.** `DecodesManyMasksAlikeOnOneAndSeveralThreads` decodes 24 objects of two classes
-with one and four OpenCV threads and compares every box and mask; the segment tests pass.
-
-**Remaining.** Score scanning and NMS stay serial, and `bus.jpg` keeps only about five objects,
-so four threads give 19-36%, not four times. RK3588 was not measured.
+**Validation / limits:** Masks match with one and four OpenCV threads. Only about five objects survive on bus.jpg, limiting scaling; NMS and score scans remain serial. RK3588 was not measured.
 
 ## 2026-10-24: launch a fused CUDA batch at once
 
-**Bottleneck.** A batched `ImagePreprocessor::process` on CUDA still ran each sample through the
-single-sample flow: stage the source, launch the kernel, then the next sample reused the same
-staging image, so uploads and launches alternated sample by sample.
+Per-sample staging alternated uploads and kernel launches. Stage each sample separately, then launch descriptors together, up to 16 samples per CUDA kernel.
 
-**Change.** When every sample of a device batch passes `supports_fused`, the shared flow stages
-each sample into its own images (`stage()`, split out of the single-sample `process()`) and
-calls the new virtual `fused_batch()` once; its default runs `fused()` per sample, and
-`CudaImagePreprocessor` builds all tasks and launches them together, up to 16 per kernel.
-Other batches keep the per-sample flow, and the CPU keeps running samples on OpenCV threads.
-
-**Measurement.** Same machine, tools and `BM_Batch` cases as the entries below, pinned with
-`taskset -c 2-5`; baseline commit `1b7d231` with the same benchmark source, both alternating for
-five rounds of three repetitions of at least 0.5 s; medians in ms per batch of four 1920 x 1080
-frames.
+**Measurement:** WSL2 Ryzen 5 5600X / RTX 3060, CUDA 13.0, batch of four 1920x1080 frames to 640x640 RGB float32. preprocess BM_Batch, CPUs 2-5; baseline 1b7d231; alternating 5 rounds x 3 repetitions >=0.5 s, median ms/batch.
 
 | Case | Before | After | Change |
 | --- | ---: | ---: | ---: |
@@ -88,34 +46,13 @@ frames.
 | NV12 device frames | 0.154 | 0.148 | -4% |
 | Batch 1, all four modes | | | within 1% |
 
-Host frames gain most: their uploads now queue back to back instead of alternating with
-kernels. For device frames the kernel itself dominates; launch overhead was small.
-
-**Validation.** `CudaBatchMatchesSingleCalls` runs 20 samples (two launches) mixing BGR and
-NV12, host and device sources, sizes and crops, into host and device targets twice, and
-compares every byte and transform with single calls.
-
-**Remaining.** Host uploads still dominate host-frame batches. RKNN, Ascend, Metal (which keeps
-the per-sample default) and Windows were not measured.
+**Validation / limits:** CudaBatchMatchesSingleCalls checks 20 mixed host/device BGR/NV12 samples across two launches. Host uploads still dominate. RKNN, Ascend, Metal and Windows were not measured.
 
 ## 2026-10-24: convert NV12 and NV21 in the fused CUDA kernel and drop NPP
 
-**Bottleneck.** After the fused kernel, NV12 sources still ran NPP step by step: NV12 to BGR at
-full source size, then fill, resize, conversion and normalization. `BM_Batch` with 1920 x 1080
-NV12 frames measured 0.321 ms per frame from device memory against 0.040 ms for BGR, and host
-NV12 frames, which upload half the bytes of BGR, took as long as BGR (0.575 ms per frame).
+NV12/NV21 still used staged NPP conversion. The fused kernel now converts sampled YUV taps with OpenCV BT.601 fixed-point arithmetic; NPP operators and linkage were removed.
 
-**Change.** The kernel reads NV12 and NV21: each tap converts its Y and the shared U, V to BGR
-with OpenCV's fixed-point BT.601 video-range formula (20 fractional bits), then the existing
-OpenCV-style sampling, padding and normalization apply, as the CPU flow converts the whole
-frame before resizing. With every template configuration covered, the NPP operators were
-removed: the CUDA preprocessor has no step operators, so `cubic`, gray inputs and other source
-formats run on the CPU through the shared fallback, and HybridRT no longer links NPP.
-
-**Measurement.** Same machine and tools as the entry below, CUDA 13.0, `BM_Batch` letterboxing
-distinct 1920 x 1080 frames into 640 x 640 planar RGB float32, pinned with `taskset -c 2-5`.
-The baseline is commit `b88a223` built with the same benchmark source; both ran alternately
-for three rounds of three repetitions of at least 0.5 s; medians in ms per frame.
+**Measurement:** Same WSL2 RTX 3060 environment, CUDA 13.0; distinct 1920x1080 frames to 640x640 RGB float32, CPUs 2-5. Baseline b88a223, alternating 3 rounds x 3 repetitions >=0.5 s; median ms/frame.
 
 | Case | Before | After | Change |
 | --- | ---: | ---: | ---: |
@@ -126,40 +63,13 @@ for three rounds of three repetitions of at least 0.5 s; medians in ms per frame
 | BGR host frames, batch 4 | 0.596 | 0.588 | noise |
 | BGR device frames, batch 4 | 0.041 | 0.040 | noise |
 
-**Validation.** `CudaFusedKernelMatchesCpu` adds NV12 and NV21 sources with a padded pitch and
-a crop at odd coordinates; every value stays within one uint8 step of the CPU and more than
-99.8% are identical. `CudaLeavesUnfusedConversionsToTheCpu` checks that cubic, gray output and
-gray sources from host and device memory give the CPU result byte for byte.
-
-**Remaining.** I420/YV12 sources and cubic interpolation run on the CPU with a download and an
-upload; a batch still launches the kernel once per sample. RKNN, Ascend, Metal and Windows were
-not measured.
+**Validation / limits:** CPU comparison: differences <=1 uint8 step, >99.8% identical. Unsupported formats kept CPU fallback in this version. Later CUDA changes may supersede those format limits.
 
 ## 2026-10-24: replace staged NPP preprocessing with one fused CUDA kernel
 
-**Bottleneck.** For interleaved uint8 BGR/RGB sources, CUDA preprocessing ran NPP step by step:
-fill the uint8 input-sized scratch, resize into its region, convert the whole image to float,
-split it into planes and subtract and divide per plane, about ten launches with several full
-passes over float data. `BM_CudaResolution` with a device source showed 0.226 ms for
-1920 x 1080 to 640 x 640 and 0.643 ms to 1280 x 1280.
+About ten NPP launches repeatedly traversed the output. One CUDA kernel combines sampling, padding, channel order and affine normalization; descriptors are passed by value, up to 16 per launch.
 
-**Change.** `CudaImagePreprocessor` implements the fused operator in
-`source/backend/cuda/kernels/image_kernels.cu`: one thread per input pixel writes the padding value
-or samples the source region, then applies the channel order and `value * alpha + beta` and
-stores planar or interleaved uint8 or float32. Sampling follows OpenCV: INTER_LINEAR with
-half-pixel centers and coordinates in double, its 11-bit fixed-point weights and the rounding
-of its vectorized vertical pass, and INTER_NEAREST with `floor(x * scale)` in double. Padding
-and normalization follow the CPU flow. Task descriptors are kernel parameters, at most 16 per
-launch, so no device copy has to outlive the call. NV12 sources and `cubic` keep the NPP flow.
-The kernel builds as a separate CUDA object library; `CMAKE_CUDA_ARCHITECTURES` defaults to
-`all-major`.
-
-**Measurement.** WSL2 Ubuntu 24.04, AMD Ryzen 5 5600X, RTX 3060 12 GiB, Release GCC 13, CUDA 13.0,
-`hybridrt_bench_preprocess` pinned with `taskset -c 4`. The baseline binary is commit `aa3f2d9`,
-whose CUDA path equals `18dcc22` for these integer-ratio cases. Both ran in alternating order
-for five rounds of three repetitions of at least 0.5 s after 0.2 s warm-up; numbers are the
-median of round medians in ms. Letterbox, linear, padding 114, planar RGB float32, mean 0,
-std 255; the host-source cases include the pageable upload and stream completion.
+**Measurement:** WSL2 Ryzen 5 5600X / RTX 3060, GCC 13 Release, CUDA 13.0. preprocess BM_CudaResolution, CPU 4; baseline aa3f2d9; alternating 5 rounds x 3 repetitions >=0.5 s after 0.2 s warm-up. Linear letterbox, pad 114, planar RGB float32, std 255; median ms.
 
 | Case | Before | After | Change |
 | --- | ---: | ---: | ---: |
@@ -172,43 +82,13 @@ std 255; the host-source cases include the pageable upload and stream completion
 | 3840 x 2160 crop to 224 x 224, host source | 0.418 | 0.344 | -18% |
 | 1920 x 1080 upload only | 0.538 | 0.527 | noise |
 
-**Validation.** `CudaFusedKernelMatchesCpu` compares the kernel with the CPU on a random
-97 x 61 image for BGR and RGB sources, planar and interleaved RGB/BGR outputs, uint8 and
-float32, letterbox, normal and keep_ratio, linear and nearest, all normalize types,
-downscaling and upscaling, whole and cropped sources: every value is within one uint8 step
-and 99.87% of 18.8 million are identical; OpenCV's scalar row tails round differently from
-its vectorized loop.
-
-**Remaining.** With host sources the pageable upload now dominates (0.53 ms of 0.60 ms at
-1080p, 2.0 ms at 4K). Pinned staging, uploading only the source region and overlapping the
-upload of one sample with the kernel of another are the next steps, as is launching a whole
-batch at once. RKNN, Ascend, Metal and Windows were not measured.
+**Validation / limits:** 97x61 random inputs cover formats, crops, resize and normalize modes: 99.87% of 18.8M values identical, all within one uint8 step. Pageable upload dominates host cases; later entries address NV12 and batched launches.
 
 ## 2026-10-24: fuse CPU letterbox padding, conversion and normalization
 
-**Bottleneck.** For interleaved uint8 BGR/RGB sources and planar float32 inputs, the CPU flow
-filled the whole uint8 input-sized scratch with the padding color, resized into its region, then
-split and converted the whole image, padding included, to float. Letterbox inputs therefore
-filled, split and converted the padding area twice. Timing the steps separately (OpenCV 4.6,
-one thread, 1920 x 1080 random source) showed that `cv::resize` to 640 x 360 takes 0.413 ms,
-while `split` takes 0.039 ms and three `convertTo` take 0.046 ms.
+CPU letterbox filled and converted padding twice. Resize into an ROI-sized uint8 scratch, convert only that region, and fill final float padding strips; reuse scratch allocations.
 
-**Change.** `CpuImagePreprocessor` implements the fused operator for that format pair:
-`cv::resize` writes a region-sized uint8 buffer, `split` and `convertTo` (with the RGB/BGR swap
-and normalization) process only the region, and the four padding strips receive their final
-float value with `setTo`. The buffers grow to the largest region and are reused. Results are
-those of the previous flow: `cv::resize` output depends only on the source region and the
-region size, and the padding is the default color saturated to uint8, normalized unless
-`normalize_type` is `roi`. Other format pairs keep the step-by-step flow.
-
-**Measurement.** WSL2 Ubuntu 24.04, AMD Ryzen 5 5600X, Release GCC 13, OpenCV 4.6.0,
-`hybridrt_bench_preprocess`, OpenCV threads = 1, pinned to one core with `taskset -c 4`. The
-baseline binary is commit `885505a`; both binaries used the same benchmark source and ran in
-alternating order for five rounds, each with three repetitions of at least 0.5 s after 0.2 s
-warm-up; numbers are the median of the round medians, with the range of round medians. No
-build, CTest or other benchmark ran meanwhile. Letterbox with linear resize, padding 114,
-planar RGB float32, mean 0, std 255; `BM_Task/0` letterboxes `bus.jpg` (810 x 1080) into
-640 x 480, `BM_Resolution` uses synthetic uint8 BGR frames.
+**Measurement:** WSL2 Ryzen 5 5600X, GCC 13 Release, OpenCV 4.6.0, one OpenCV thread, CPU 4. preprocess BM_Task/0 and BM_Resolution; baseline 885505a, alternating 5 rounds x 3 repetitions >=0.5 s after 0.2 s warm-up. Linear letterbox, pad 114, RGB float32, std 255; median ms (round range).
 
 | Case | Before, ms | After, ms | Change |
 | --- | ---: | ---: | ---: |
@@ -218,36 +98,13 @@ planar RGB float32, mean 0, std 255; `BM_Task/0` letterboxes `bus.jpg` (810 x 10
 | 1920 x 1080 to 960 x 960 | 1.187 (1.103-1.316) | 0.951 (0.904-1.016) | -19.9% |
 | 3840 x 2160 to 640 x 360 (no padding) | 0.583 (0.556-0.597) | 0.578 (0.545-0.640) | -0.9% |
 
-The cases without padding do the same work as before; their differences lie within the
-round-to-round range. Unpinned runs on this machine varied by up to 20% between rounds and
-were not used.
-
-**Validation.** The CPU preprocessing tests, which check every byte value with both channel
-orders, all three normalize types and padding, and the ImageModel tests pass.
-
-**Remaining.** `cv::resize` of the large source dominates CPU preprocessing; fusing the
-conversion further cannot save more than the 0.085 ms of split and conversion above. Batches
-gain from running samples on OpenCV threads (previous commit); a faster host path would need
-a cheaper resize, for example on the GPU. NV12 and other format pairs, RKNN/RGA, Ascend/DVPP,
-Metal and Windows were not measured.
+**Validation / limits:** Byte-value and pipeline tests pass. No-padding cases overlap run-to-run noise. Resize dominates; non-BGR/RGB format pairs and other devices were not measured.
 
 ## 2026-10-23: avoid resetting image layouts and rechecking unchanged explicit strides
 
-**Bottleneck.** Code inspection found that `Image::wrap()` established the final memory
-layout, but the intermediate `Buffer` constructor reset it to `{0}` before image initialization
-restored it. Repeated explicit-stride `resize()` also copied and checked the same layout again.
+Image construction temporarily reset an already final layout; explicit-stride resize revalidated unchanged metadata. Preserve final layouts and reuse checked strides while the allocation fits.
 
-**Change.** Memory-backed images construct their buffer with the final element shape, type
-and stride. CPU, DMA-buffer, CUDA, pinned-host and Ascend memory reuse an unchanged explicit
-layout while its allocation still fits; new explicit layouts remain checked. Default strides
-are computed directly without an extra equality comparison.
-
-**Measurement.** Apple M5 Pro, macOS arm64, Release, Google Benchmark
-`hybridrt_bench_preprocess`, one caller, OpenCV threads = 1. The baseline was commit `233982d`;
-both versions used the same benchmark source. The two binaries ran sequentially in alternating
-order for three rounds, each with three repetitions of at least 0.2 s; numbers are the median
-of the round medians. No concurrent CTest or other benchmark process was launched. Layout
-cases use a synthetic 640 x 480 RGB uint8 image with a 1984-byte row pitch, without inference.
+**Measurement:** Apple M5 Pro, macOS Release, one caller/OpenCV thread. preprocess BM_ImageLayout, synthetic 640x480 RGB uint8, pitch 1984; baseline 233982d, alternating 3 rounds x 3 repetitions >=0.2 s, median of round medians.
 
 | Case | Before | After |
 | --- | ---: | ---: |
@@ -255,40 +112,13 @@ cases use a synthetic 640 x 480 RGB uint8 image with a 1984-byte row pitch, with
 | `BM_ImageLayout/1`: resize with the same explicit stride | 29.14 ns | 4.23 ns |
 | `BM_ImageLayout/2`: reshape with a default stride | 47.27 ns | 47.17 ns |
 
-A separate six-round alternating comparison of `BM_Convert/0`, with three repetitions of
-at least 0.5 s per round, gave 0.03754 ms before
-and 0.03637 ms after. This is a CPU RGB identity copy on the 810 x 1080 `bus.jpg`; the
-round medians ranged from 0.03663 to 0.03807 ms before and 0.03229 to 0.03754 ms after.
-No general preprocessing throughput gain is claimed.
-
-**Remaining.** Default stride computation still runs when no explicit stride is supplied.
-A layout transferred to a different destination is checked when first established there;
-subsequent identical explicit resizes reuse it. CUDA, DMA/RGA and Ascend were not measured
-on hardware. Allocation, mapping and synchronization failures retain their existing handling.
+**Validation / limits:** BM_Convert/0 separately measured 0.03754 -> 0.03637 ms, with overlapping round ranges (before 0.03663-0.03807, after 0.03229-0.03754); no general throughput gain claimed. Default-stride work remains; CUDA/RGA/Ascend hardware unmeasured.
 
 ## 2026-10-22: skip score blocks below the threshold and argmax semantic maps in pixel blocks
 
-**Bottleneck.** Profiling `hybridrt_bench_postprocess` with `sample` showed two hot loops.
-`CellScanner::scan_channel()`, which `GeneralDetect`, `GeneralRotated`, `GeneralYoloSegment` and
-`GeneralYoloPose` run over each class row of their `[1, 4 + classes, N]` output, checked every
-anchor with a branch, although almost no score reaches the threshold (80 x 8400 checks per
-`yolov8n_detect` run). `SemanticSegment` took the channel argmax as one pass over the whole map
-per channel, reading and writing the running maxima and labels 21 times for `lraspp_voc_segment`;
-clang did not vectorize that loop (mixed float and uint16 stores, possible aliasing).
+Decoded score rows branched on every anchor; semantic argmax repeatedly wrote maxima and labels. Skip 16-score blocks below threshold and keep blocked argmax state in NEON/SSE2 registers, with scalar tails.
 
-**Change.** `scan_channel()` first asks `any_at_least()` whether any of 16 contiguous scores
-reaches the bound (NEON `vcgeq` + `vmaxvq`, SSE2 `cmpge` + `movemask`, int8 compared as int8,
-a branch-free loop elsewhere) and skips the block if none does; rows with a column step take the
-scalar loop as before. `argmax_channels()` now walks blocks of pixels against every channel: float
-scores take 16 pixels per step with NEON or SSE2, maxima and labels in registers, and the rest
-(int8 scores, the tail, other targets) a blocked scalar loop of 64 pixels. Both keep the scalar
-results: a later channel wins only when strictly greater, so ties go to the lower class and NaN
-never wins.
-
-**Measurement.** Apple M5 Pro, macOS, Release, ONNX Runtime 1.31.0 CPU, `hybridrt_bench_postprocess`
-`BM_Type`, 3 repetitions of at least 0.3 s, median; the previous build and this change were run
-interleaved over 3 rounds and the median of rounds is shown. The other template algos stayed
-within noise (+/-1 us).
+**Measurement:** Apple M5 Pro, macOS Release, ORT 1.31.0 CPU. postprocess BM_Type, alternating 3 rounds x 3 repetitions >=0.3 s; median of rounds. Other template algos stayed within +/-1 us.
 
 | Type (algo) | Before | After |
 | --- | ---: | ---: |
@@ -298,42 +128,13 @@ within noise (+/-1 us).
 | `GeneralYoloPose` (`yolov8n_pose`) | 0.002 ms | 0.001 ms |
 | `SemanticSegment` (`lraspp_voc_segment`) | 2.84 ms | 1.63 ms |
 
-In a standalone driver, the 21 x 512 x 512 argmax alone took 1.73 ms before, 0.75 ms with the
-blocked scalar loop and 0.59 ms with NEON on smooth scores (6.0 ms before on random scores, where
-the old loop mispredicted). `hrt-validate` on `assets/test/images` gives byte-identical JSON before
-and after for `yolov8n_detect`, `yolov8n_obb`, `yolov8n_segment`, `yolov8n_pose` and
-`lraspp_voc_segment`. The SSE2 paths were checked for identical results on x86_64 under Rosetta
-only, not timed.
-
-**Remaining.** `SemanticSegment` still spends most of its time in `cv::warpAffine` (nearest) to
-source size and in per-class mask building. OCR detection is dominated by OpenCV contour search.
-OCR recognition takes a scalar `std::max_element` per step in `Ocr::decode`; in a standalone
-driver a NEON vector maximum followed by a search for its first index took 31 us instead of
-116 us on 40 x 6625 rows, not applied here because `vmaxq` propagates NaN where
-`std::max_element` skips it, which changes the CTC probability check. The YOLOv8/YOLO26 raw heads
-already use `scan_max_score()`, which the compiler vectorizes. RK3588 and x86_64 hardware were
-not measured.
+**Validation / limits:** hrt-validate JSON is byte-identical for five affected model types. Standalone semantic argmax: 1.73 -> 0.75 ms blocked scalar -> 0.59 ms NEON. SSE2 correctness checked under Rosetta, not timed; RK3588 unmeasured. Warp/mask construction and OCR remain bottlenecks.
 
 ## 2026-10-22: vector int8 dequantization in dequantize_buffer
 
-**Bottleneck.** `dequantize_buffer()` turns whole int8 outputs (classify, embedding, general
-keypoint, OCR, semantic segment) into float32 with a scalar loop, so whether it is vectorized
-depends on the compiler and flags. Clang -O3 on AArch64 vectorizes it (a `tbl` that puts each
-byte in the top of a 32-bit lane, then `scvtf #24`), but per strided row it pays the vector
-entry checks and a 4-wide plus scalar tail.
+Whole-output int8 conversion depended on compiler vectorization and repeated row checks. Convert 16 values with NEON tbl/scvtf or SSE2 unpack/shifts, then scalar tails; preserve subtraction/multiplication order.
 
-**Change.** `dequantize_values()` converts 16 values per step with AArch64 NEON (the same
-`tbl` + fixed-point convert) or SSE2 (unpack and arithmetic shifts, as SSE2 lacks sign
-extension), then the scalar loop takes the tail. Both subtract the zero point and then multiply
-without fusing, so results are bit-identical to `core::dequantize()`. The path follows the
-compiler's target macros (`__ARM_NEON` with `__aarch64__`, `__SSE2__` or `_M_X64`); other
-targets keep the scalar loop. A first NEON version that widened with `vmovl` (two widening steps per four values)
-was 12% slower than the compiler's loop on contiguous outputs and was dropped.
-
-**Measurement.** Apple M5 Pro, macOS, Release (-O3, Apple clang), one thread; an ad-hoc driver
-linking `libhybridrt.a` times `dequantize_buffer()` on random int8 data, 15 rounds, median;
-the previous commit, this change and this change with the vector paths compiled out were run
-interleaved over 3 rounds, all medians agreeing within 1% except where noted.
+**Measurement:** Apple M5 Pro, macOS Release Apple clang, one thread. Ad-hoc dequantize_buffer driver, random int8, 15 rounds; baseline/vector/scalar builds interleaved across 3 rounds, medians within 1%.
 
 | Output (int8 to float32) | Before | After | After, scalar loop |
 | --- | ---: | ---: | ---: |
@@ -342,62 +143,25 @@ interleaved over 3 rounds, all medians agreeing within 1% except where noted.
 | 1 x 21 x 512 x 512 (semantic segment) | 325 us | 323 us | 324 us |
 | 1 x 40 x 6625, rows padded to 6640 bytes | 18.2 us | 15.6 us | 18.2 us |
 
-The SSE2 path was checked for exact results on x86_64 under Rosetta only, not timed.
-
-**Remaining.** Contiguous outputs gain nothing on Apple clang, which already emits the same
-loop; the gain there is expected only from compilers or flags that leave the loop scalar, such
-as GCC at -O2, which was not available to measure. RK3588, x86_64 hardware and 32-bit ARM (which
-takes the scalar loop) were not measured.
+**Validation / limits:** Bit-identical to scalar dequantization; contiguous data already vectorizes, so gains are on padded rows. SSE2 checked under Rosetta only. RK3588, native x86 hardware and 32-bit ARM unmeasured.
 
 ## 2026-10-20: accumulate mask prototypes in place over the box region
 
-**Bottleneck.** Instance segmentation decoders turned the whole prototype output into float32
-before decoding: int8 prototypes, e.g. 32 x 160 x 160, were dequantized on every run even with
-no detections, although each mask reads only its box region. Float32 prototypes were read in
-place, but `cv::scaleAdd` per channel and mask cost more than the arithmetic on small regions.
+Whole int8 prototypes were dequantized even when few boxes survived. Accumulate coefficient-weighted prototypes only over each box ROI, folding scale/zero point into coefficients; fix NHWC access.
 
-**Change.** `MaskDecoder` reads the prototypes through `HeadGrid` and accumulates
-`coefficients . prototypes` row by row over the box region only. For int8 the scale is folded
-into the coefficients and the zero point into the starting value, so prototypes are never
-dequantized. `YoloV8Segment`, `Yolo26Segment`, `GeneralYoloSegment` and `E2ESegment` drop their
-prototype scratch buffers. NHWC prototypes are now read in their layout; before, they were read as
-NCHW and gave wrong masks.
-
-**Measurement.** Apple M5 Pro, macOS, Release, ONNX Runtime 1.31.0 CPU, one OpenCV thread,
-`hybridrt_bench_postprocess` `BM_Type`, 3 repetitions of at least 0.3 s, median; the previous
-commit and this change were run interleaved over 3 rounds and the median of rounds is shown.
+**Measurement:** Apple M5 Pro, macOS Release, ORT 1.31.0 CPU, one OpenCV thread. postprocess BM_Type, alternating 3 rounds x 3 repetitions >=0.3 s, median of rounds.
 
 | Type (algo) | Before | After |
 | --- | ---: | ---: |
 | `E2ESegment` (`yolo26n_e2e_segment`) | 0.1603 ms | 0.1238 ms |
 
-The other available template algos (detect, rotated, pose, classify, OCR detection) stayed
-within +/-0.5%. Masks of `yolo26n_e2e_segment` on `bus.jpg` (4 objects) are byte-identical
-before and after.
-
-**Remaining.** int8 prototypes are covered by unit tests only; no int8 segmentation model was
-measured and RK3588 was not rerun. The `YoloV8Segment`, `Yolo26Segment` and
-`GeneralYoloSegment` template models were missing locally. NHWC prototypes take a strided loop
-that does not vectorize.
+**Validation / limits:** Four bus.jpg masks are byte-identical; other available algos stayed within +/-0.5%. Int8 models and RK3588 were not timed; NHWC remains strided. Other segmentation fixtures were missing.
 
 ## 2026-10-20: read end-to-end rows lazily instead of dequantizing whole outputs
 
-**Bottleneck.** `float_data()` turned every int8 or strided output into a float32 copy each run,
-even for decoders that read a fraction of it: end-to-end detect, rotated, keypoint and segment
-outputs skip most rows after the label and score, and RTMO reads keypoints only for boxes kept
-by NMS. Strided int8 outputs also allocated a temporary packed buffer on every call.
+End-to-end decoders copied entire int8/strided outputs before filtering. Read only labels/scores and passing rows through HeadGrid; remove temporary packed buffers and retain scratch only for whole-output consumers.
 
-**Change.** `E2EDetect`, `E2ERotated`, `E2EKeypoint`, `E2ESegment` (detections), `DetrDetect` and
-`RtmoKeypoint` read their outputs through `HeadGrid`, which dequantizes only the elements read,
-in the order label, score, box, then keypoints or mask coefficients of passing rows; their
-scratch buffers are gone. `float_data()` dequantizes or packs strided rows straight into
-the scratch buffer, without the temporary packed buffer. Classify, embedding, OCR, semantic
-segmentation, `GeneralKeypoint` and mask prototypes still read whole outputs through it.
-
-**Measurement.** Apple M5 Pro, macOS, Release, ONNX Runtime 1.31.0 CPU, one OpenCV thread,
-`hybridrt_bench_postprocess` `BM_Type`, 3 repetitions of at least 0.3 s, median; the previous
-commit and this change were run interleaved over 3 rounds and the median of rounds is shown.
-Only these template models were available locally, all float32:
+**Measurement:** Apple M5 Pro, macOS Release, ORT 1.31.0 CPU, one OpenCV thread. postprocess BM_Type, alternating 3 rounds x 3 repetitions >=0.3 s; median of rounds. Available fixtures were float32.
 
 | Type (algo) | Before | After |
 | --- | ---: | ---: |
@@ -408,31 +172,13 @@ Only these template models were available locally, all float32:
 | `GeneralClassify` (`yolov8n_classify`) | 0.00006 ms | 0.00006 ms |
 | `Ocr` (`ppocrv6_tiny_det`) | 0.3462 ms | 0.3437 ms |
 
-Float32 outputs stay zero-copy, so these are unchanged within noise. Writing classify and
-embedding scores straight into the result was tried and dropped: value-initializing the
-result first took classify from 0.056 to 0.085 us.
-
-**Remaining.** The int8 gain was not measured: no int8 end-to-end template model is available
-locally and RK3588 was not rerun. The E2EDetect, E2ERotated, E2EKeypoint, DetrDetect and
-RtmoKeypoint template models were missing, so they were not benchmarked. Mask prototypes are
-still dequantized whole.
+**Validation / limits:** Float32 remains zero-copy and timings are within noise. Int8 end-to-end gains were not measured; several E2E/DETR/RTMO fixtures were missing. Direct classify-result writes were rejected after a 0.056 -> 0.085 us regression.
 
 ## 2026-10-20: single-channel cell scans for YOLOv5 objectness and one-class heads
 
-**Bottleneck.** `HeadGrid` became a plain class whose element type (float32 or int8) is checked
-at run time. `YoloV5Detect` and `YoloV5Rotated` read the objectness of every cell and anchor
-through `HeadGrid::raw()`, so that check ran in their innermost loop: with the class template
-they took 0.024 and 0.064 ms, with the plain class 0.031 and 0.088 ms.
+A runtime element-type check slowed YOLOv5 objectness scans. Scan a typed score plane against the raw threshold, then decode passing cells; one-class YOLOv8/26 heads reuse this path.
 
-**Change.** `CellScanner::scan()` with one channel compares the typed row directly against the
-raw bound and returns the passing cells, without the running-maximum buffer. The YOLOv5
-decoders scan each anchor's objectness plane this way and decode only the passing cells.
-Raw YOLOv8/YOLO26 heads with one class (face, pose) take the same path. Decoding is otherwise
-unchanged; candidates are pushed anchor by anchor instead of cell by cell before NMS.
-
-**Measurement.** Apple M4, macOS, Release, ONNX Runtime 1.31.0 CPU, one OpenCV thread,
-`hybridrt_bench_postprocess` `BM_Type`, 3 repetitions of at least 0.3 s, median; the previous
-commit and this change were run interleaved over 3 rounds and the median of rounds is shown.
+**Measurement:** Apple M4, macOS Release, ORT 1.31.0 CPU, one OpenCV thread. postprocess BM_Type, alternating 3 rounds x 3 repetitions >=0.3 s; median of rounds.
 
 | Type (algo) | Before (template `HeadGrid`) | After |
 | --- | ---: | ---: |
@@ -441,34 +187,13 @@ commit and this change were run interleaved over 3 rounds and the median of roun
 | `YoloV8Keypoint` (`yolov8n_face`) | 0.0058 ms | 0.0050 ms |
 | `Yolo26Keypoint` (`yolo26n_pose_raw`) | 0.0052 ms | 0.0045 ms |
 
-All other types stayed within +/-2.5% (within run-to-run noise). `hrt-validate` and `hrt-ocr`
-outputs of all 24 template algos and both OCR recognizers on the test images are identical
-before and after.
-
-**Remaining.** Only float32 template models were compared end to end; int8 decoding is covered
-by the unit tests. RK3588 int8 timings were not remeasured.
+**Validation / limits:** All 24 image algos and both OCR recognizers keep identical outputs; other types stayed within +/-2.5%. End-to-end models were float32; int8 unit-tested, RK3588 not retimed.
 
 ## 2026-10-20: restore non-fused device preprocessing stages
 
-**Bottleneck.** The shared flow treated a missing fused implementation as requiring
-whole-call CPU processing for device-only buffers. CUDA's NPP implementation already
-supported fill, resize, conversion and normalization separately, but none ran. Even
-CUDA-resident input was downloaded, processed on the host and uploaded again.
+Missing fused support incorrectly forced complete CPU fallback. Check whether every required independent operator is supported before falling back; run existing device stages when possible.
 
-**Change.** Check every required independent operator before taking the existing host
-fallback. When the device supports the complete sequence, run the existing stages.
-Otherwise preserve the previous whole-call CPU fallback, including synchronization
-and staging; fused and host-accessible paths are unchanged. No SDK implementation or
-public interface was changed, and no fused CUDA kernel was added.
-
-**Measurement.** Linux x86_64, Xeon Gold 6462C, physical RTX 4090 GPU 1 (shared, idle at
-start), driver 550.54.14, CUDA 12.4.131, OpenCV 4.5.4, Release. Current source was synced,
-reconfigured and rebuilt in the fixed validation directory. `hybridrt_bench_preprocess`
-`BM_CudaResolution`, one caller, 20 explicit warm-up calls, 0.2 s benchmark warm-up,
-minimum 0.5 s per repetition, wall-clock median of 3 repetitions. Synthetic uint8 BGR,
-linear letterbox, padding 114, planar RGB float32 with std 255. Outputs remain in CUDA
-memory. Host cases include uploading the frame; device cases start with resident input.
-Every call ends with stream synchronization. Units below are ms/call.
+**Measurement:** Xeon Gold 6462C / RTX 4090 GPU 1, Linux Release, driver 550.54.14, CUDA 12.4.131, OpenCV 4.5.4. preprocess BM_CudaResolution: one caller, 20 warm-ups +0.2 s, 3 repetitions >=0.5 s, wall median ms. Synthetic BGR, linear letterbox, pad 114, RGB float32/std 255, CUDA output; host includes upload, all calls synchronize.
 
 | Source -> target | Input location | Before (CPU fallback) | After (NPP stages) |
 | --- | --- | ---: | ---: |
@@ -481,50 +206,13 @@ Every call ends with stream synchronization. Units below are ms/call.
 | 3840 x 2160 -> 1280 x 1280 | Host | 8.874 | 1.334 |
 | 3840 x 2160 -> 1280 x 1280 | CUDA | 6.581 | 0.106 |
 
-Six current size pairs (1080p, 2560 x 1440 and 4K, each to 640 x 640 / 1280 x 1280)
-for CUDA, Xeon CPU, M4 CPU and Metal are recorded in [benchmark.md](benchmark.md).
-The earlier fallback baseline has no 2560 x 1440 measurements. M4 timings were rerun,
-not interpreted as an optimization of the unchanged CPU/Metal implementations.
-
-**Validation.** A CUDA operator-counting regression checks that all four device stages
-execute, and that disabling each required stage preserves whole-call CPU fallback,
-for full/ROI normalization, padding and repeated calls. CUDA crop staging also passed.
-`ImageModelTest.KeepsCudaPreprocessorScratchAliveUntilStreamCompletes` passed 20
-consecutive runs on the selected GPU, followed by full CTest: 180 entries on Linux
-(6 hardware-dependent skips), 192 on macOS (8 hardware-dependent skips), no failures.
-macOS Metal geometry and NV12 fallback tests passed with GPU access enabled.
-The raw segmentation test expectation was updated for the current 640 x 480 YOLOv8
-fixture (three people, no tie), distinct from the 640 x 640 YOLO26 fixture (four people).
-
-**Other devices.** The check runs only for a non-CPU preprocessor without a fused path whose
-source or target lacks host access. CPU and Metal (fused only, unified host memory) never
-reach it. DVPP is fused only, so the check fails and the whole-call fallback is unchanged.
-RGA supports only fill and resize: float or planar targets still fall back, while
-uint8 interleaved targets without normalization may now stay on RGA. CUDA still falls back
-for InterRgba sources (CPU resizes them, NPP does not) and Gray to three-channel output.
-
-**Remaining.** NPP still launches multiple operations. For host input, PCIe upload is
-now the main cost. RKNN/RGA and DVPP hardware were not revalidated in this run; their
-SDK implementations and unsupported-stage fallback are retained. Local raw timing
-JSON and test logs remain under `assets/test/benchmark_results/` and are untracked.
+**Validation / limits:** Operator-count and fallback tests pass; CUDA scratch-lifetime regression passed 20 runs, followed by Linux/macOS full CTest. NPP was still multi-stage in this version; later entries replace it. RKNN/RGA and DVPP hardware were not revalidated.
 
 ## 2026-10-19: OCR line regions on the source device
 
-**Bottleneck.** `OcrModel` cropped every detected line on the host (`TextCropper`) before
-recognition, so a source that was not host uint8 BGR/RGB, such as a CUDA image, was first converted
-and copied to host BGR in full, even though the recognition preprocessor already reads a region of
-its source and only lines at least 1.5 times taller than wide need a host rotation.
+OCR cropped every line on the host. Recognize directly from source-image regions; only tall lines need a host conversion and counterclockwise rotation into reused storage.
 
-**Change.** Lines are recognized from their truncated region of the source through
-`ImageModel::process_sync(src, region)`, on the recognition preprocessor's device. Only tall lines
-use the host: the source directly when it is host BGR/RGB, otherwise one conversion per call, then
-a counterclockwise rotation into reused storage. `TextCropper` is removed.
-
-**Measurement.** RTX 4090 (GPU 1, shared), CUDA 12.4, TensorRT 10.16.1.11 FP16 engines from
-`trtexec --fp16`, preprocessing on CUDA; a scratch driver times 300 `OcrModel::process_sync` calls
-after 6 warm-up calls, tiny det + tiny rec, with the image in host memory and in CUDA memory; mean
-of 4 interleaved rounds. Images: a local 896 x 528 document (8 lines, one tall) and the same page
-turned 90 degrees clockwise (12 lines, all tall).
+**Measurement:** RTX 4090 GPU 1, CUDA 12.4, TensorRT 10.16.1.11 FP16, CUDA preprocessing, tiny det+rec. 300 calls after 6 warm-ups, mean of 4 interleaved rounds; 896x528 document (8 lines, one tall) and rotated page (12 tall lines), host/CUDA sources.
 
 | Case | Before | After |
 | --- | --- | --- |
@@ -533,28 +221,13 @@ turned 90 degrees clockwise (12 lines, all tall).
 | Turned document, host input | 8.630 ms | 8.669 ms |
 | Turned document, CUDA input | 8.794 ms | 8.793 ms |
 
-Texts, boxes and scores are identical, except one noise box on the turned page whose score moves
-from 0.2729 to 0.2871, likely because region resizing reads source pixels next to the region where a crop
-replicated its border. On macOS ORT CPU the JSON results of `hrt-ocr` are byte-identical.
-
-**Remaining.** The CUDA input now costs only 0.03 ms more than host input on this image; the saved
-copy grows with resolution. Tall lines still need the host conversion, as preprocessors cannot
-rotate; recognition is still one batch-1 inference per line.
+**Validation / limits:** Texts/boxes match except one noise-box score 0.2729 -> 0.2871, consistent with crop-border sampling differences. ORT CPU JSON is byte-identical. Tall lines retain host rotation; later entry batches recognition.
 
 ## 2026-10-18: OCR CTC decoding
 
-**Bottleneck.** `OcrModel` recognizes each detected line separately, so CTC decoding runs once per
-line. Each of the 40 time steps scanned all classes twice, once to check every value was a finite
-probability and once for the maximum: 0.31 ms per PP-OCRv6 tiny line (6906 classes), a third of
-the 0.92 ms ORT CPU inference, about 11 ms of a 37-line document.
+CTC scanned every class twice per step. One maximum pass plus validation of its probability removes the redundant scan while retaining text and scores.
 
-**Change.** One `max_element` pass per step; only the maximum is checked to lie in [0, 1], which
-still rejects logits. Decoded text and scores are unchanged.
-
-**Measurement.** Apple M5 Pro, macOS, ONNX Runtime 1.31.0, `hybridrt_bench_postprocess` and
-`hybridrt_bench_pipeline` (`BM_Ocr`), one OpenCV thread, median of 3 repetitions, on the local
-`ocr_document.png` (896 x 528, 37 lines); CoreML uses the MLProgram options of
-`hrtc_device_config.json`.
+**Measurement:** Apple M5 Pro, macOS, ORT 1.31.0 CPU/CoreML MLProgram, one OpenCV thread, 3-repetition median. postprocess/pipeline BM_Ocr on 896x528 ocr_document.png (37 lines); one-line crop 241x50 into 320x48.
 
 | Case | Before | After |
 | --- | --- | --- |
@@ -564,40 +237,13 @@ still rejects logits. Decoded text and scores are unchanged.
 | `OcrModel`, tiny det + tiny rec, ORT CoreML | not measured | 37.9 ms |
 | `OcrModel`, tiny det + small rec, ORT CoreML | not measured | 74.6 ms |
 
-Other stages, unchanged: detection preprocess 0.48 ms, line crop plus `text_line` preprocess
-0.02 ms, DB postprocess 0.34 ms. `hrt-model-bench` engine means: tiny det 11.7 ms (CoreML 2.3),
-tiny rec 0.92 ms (CoreML 0.76), small rec 3.5 ms (CoreML 1.3).
-
-**Remaining.** Recognition is about 70 % of a CPU call: one batch-1 inference per line. Batched
-recognition needs batch > 1 exports, and very long lines are still squeezed into 320 pixels.
+**Validation / limits:** hrt-model-bench engine means: tiny det 11.7 ms CPU / 2.3 CoreML; tiny rec 0.92 / 0.76; small rec 3.5 / 1.3. Recognition still dominated; later entry adds static batching. Long lines remain compressed to width 320.
 
 ## 2026-10-17: candidate scans of detection heads
 
-**Bottleneck.** Raw anchor-free heads (`YoloV8Detect`, `YoloV8Rotated`, `YoloV8Keypoint`) visited every
-cell and, for each, read the score of every class from a different NCHW plane: 80 planes per cell for
-COCO heads, more concurrent streams than the prefetcher follows. Decoded single outputs
-(`GeneralDetect`, `GeneralRotated`, `GeneralYoloPose`, `GeneralYoloSegment`) walked anchors first,
-reading every class row per anchor, and converted whole int8 tensors to float before looking at
-them. On RK3588 the A55 cores (cpu0 to cpu3) run the same decoder about 3.5 times slower than the A76
-cores (cpu4 to cpu7), which made unpinned timings bimodal.
+Raw heads and decoded outputs traversed class planes per anchor. Sequential raw-score prefilters visit only passing cells; read decoded rows in place and retain reusable candidate storage.
 
-**Change.**
-
-- `scan_cells()` first reduces the class planes of a head to the best raw score per cell, one plane
-  after another into a running maximum (a sequential pass the compiler vectorizes; int8 stays int8),
-  and returns the cells reaching the threshold's raw bound. Decoders then run their unchanged
-  per-class checks, distance bins and keypoints on those cells only.
-- `RowView` reads decoded `[1, rows, N]` outputs in place: each class row is scanned in order, int8
-  scores are compared as integers against the quantized threshold (one step below it, then checked
-  exactly), and only the values of passing anchors are dequantized, with the same formula as
-  before. Per-call candidate vectors became reused members.
-- Results are identical: every ORT test model gives the same boxes, scores, keypoints, angles and
-  masks before and after; int8 decoding equals decoding the dequantized float32 tensor (largest
-  difference 6e-5 from operation order).
-
-**Measurement.** RK3588 (Rock 5B+, librknnrt 2.3.2), postprocess only on one RKNN inference, pinned
-to cpu4 with `taskset`, best of 3 rounds of 300 calls after 50 warm-up calls. x86: Ryzen 5 5600X,
-ONNX Runtime 1.31.0, `hybridrt_bench_postprocess`, pinned, median of 3 repetitions.
+**Measurement:** Rock5B+ RK3588, librknnrt 2.3.2, CPU 4: 50 warm-ups, best of 3 rounds x300 calls on RKNN outputs. x86 Ryzen 5 5600X, ORT 1.31.0 CPU, pinned postprocess benchmark, 3-repetition median.
 
 | Case | Before | After |
 | --- | --- | --- |
@@ -615,42 +261,13 @@ ONNX Runtime 1.31.0, `hybridrt_bench_postprocess`, pinned, median of 3 repetitio
 | x86 `GeneralYoloPose` (yolov8n-pose) | 0.021 ms | 0.004 ms |
 | x86 `GeneralRotated` (yolov8n-obb) | 0.223 ms | 0.207 ms |
 
-On int8 heads the integer prefilter also beats dequantizing first: 0.22 ms against 1.07 ms for the
-2-class 1280 detector before this change.
-
-Remaining: rotated NMS (polygon IoU) dominates `YoloV8Rotated` now; the RKNN engine still copies
-each output from NPU memory (0.07 ms per MB); decoding threads are not pinned to big cores by the
-framework, so applications should pin them.
+**Validation / limits:** ORT boxes/scores/keypoints/angles/masks match; int8 vs dequantized results differ by <=6e-5. RK A55 was ~3.5x slower than A76, so affinity matters. Rotated NMS and NPU-output copies (~0.07 ms/MB) remain.
 
 ## 2026-10-17: segmentation postprocessing
 
-**Bottleneck.** On the RK3588 board, `GeneralYoloSegment` took 11.4 ms and `SemanticSegment` 54 to 57 ms
-per call, against 0.05 to 1.7 ms for the other decoders. Timing each section on the board showed:
+Semantic argmax read distant planes per pixel; instance masks made repeated full-resolution passes. Use channel-major argmax, per-class candidate scans and separable ROI mask sampling.
 
-- `SemanticSegment`: the argmax over `[1, 21, 512, 512]` took 37 ms. It looped over pixels and read
-  each pixel's 21 channel values one plane (1 MB) apart, so nearly every read missed the cache.
-- `GeneralYoloSegment`: 5.9 ms scanning candidates and 6.0 ms building masks. The scan read the score of
-  every class for one anchor at a time, a row (6300 floats) apart. Each mask made four
-  source-resolution passes: `warpAffine` into a float image, `compare`, `bitwise_and`, plus the
-  prototype sum.
-- RKNN outputs were in host memory and copied at heap speed, so memory type was not the cause.
-
-**Change.**
-
-- Semantic argmax runs channel-major: each pass reads one channel plane in order against a running
-  maximum, which the compiler vectorizes. int8 outputs with a positive scale are compared without
-  dequantizing the whole map.
-- The instance candidate scan reads one class row at a time and builds boxes only above the
-  threshold; candidates keep their per-class anchor order, so NMS and results are unchanged.
-- Mask sampling is separable, since the mapping only scales and shifts: each prototype-region row is
-  interpolated across once, then each mask row blends two of them and thresholds in the same pass.
-  The float sample image and the `compare`/`bitwise_and` passes are gone. Masks match the previous
-  ones with IoU 0.991 or more; the old `warpAffine` quantized sample positions to 1/32 pixel.
-
-**Measurement.** Board: Radxa Rock 5B+ (RK3588, librknnrt 2.3.2), one thread, fp16 models,
-`bus.jpg`, mean of 100 calls after 10 warm-up calls. Stages are timed by running `ImageModel`'s steps
-through the public API (`Engine`, `ImagePreprocessor`, the postprocessor on the engine's outputs), and
-sections inside a decoder with temporary timers. Desktop: Ryzen 5 5600X, ONNX Runtime 1.31.0 CPU, `hybridrt_bench_postprocess` `BM_Task/1`.
+**Measurement:** Rock5B+ RK3588/librknnrt 2.3.2, one thread, FP16 models, bus.jpg; mean of 100 calls after 10 warm-ups, public stage API and temporary decoder timers. Desktop Ryzen 5 5600X, ORT 1.31.0 CPU, postprocess BM_Task/1.
 
 | Case | Before | After |
 | --- | --- | --- |
@@ -660,49 +277,36 @@ sections inside a decoder with temporary timers. Desktop: Ryzen 5 5600X, ONNX Ru
 | RK3588 `SemanticSegment` `process_sync` | 117 ms | 70.5 ms |
 | x86 `GeneralYoloSegment` postprocess (yolov8n-seg) | 2.72 ms | 0.67 ms |
 
-Remaining: 3 ms of the semantic time builds one source-resolution mask per class. Other decoded
-single-output types (`GeneralDetect`, `GeneralYoloPose`, `GeneralRotated`) still scan per anchor
-across class rows; they take 0.05 to 0.7 ms here and were left unchanged.
+**Validation / limits:** Mask IoU vs previous warpAffine path >=0.991; old sampling quantized coordinates to 1/32 pixel. Semantic per-class masks still cost ~3 ms; other decoded scans were addressed in the next entry.
 
 ## 2026-10-14: stage only the source ROI for host images (8f015c5)
 
-**Bottleneck.** A cascaded model crops a small region, such as a person to classify, out of a large
-frame, but a device preprocessor given a host frame uploaded the whole frame.
+Device preprocessing uploaded full host frames for small crops. Stage the interleaved source ROI plus a two-pixel interpolation margin.
 
-**Change.** Host interleaved sources (BGR, RGB, RGBA) upload only `src_roi` plus a 2-pixel margin for
-the interpolation taps; YUV, planar and device sources still stage whole.
+**Measurement:** RTX 4090, preprocess BM_CudaResolution host_crop: 480x960 crop from 3840x2160 into 224x224, 3 interleaved runs; 1.25-1.35 -> 0.39-0.40 ms.
 
-**Measurement.** RTX 4090, `BM_CudaResolution` `host_crop` (a 480 x 960 crop of a 3840 x 2160 host frame
-letterboxed into 224 x 224), 3 interleaved runs: 1.25 to 1.35 ms before, 0.39 to 0.40 ms after.
+**Validation / limits:** YUV, planar and device sources still stage whole in this version; repetition duration and thread settings were not preserved.
 
 ## 2026-10-14: preprocess Metal images in place on unified memory (bee3191)
 
-**Bottleneck.** Metal preprocessing copied host images through shared staging buffers.
+Metal copied unified-memory images through staging buffers. Wrap source/target pages as no-copy Metal buffers with image offsets (~3 us/image).
 
-**Change.** Host source and target images are wrapped as no-copy Metal buffers spanning the enclosing
-pages, with an offset to the image; about 3 us per image.
+**Measurement:** Apple M4, preprocess BM_Resolution, wall/process-CPU ms: 4K->1280x1280 1.83/1.14 -> 1.32/0.60; 1080p->640x640 0.61/0.30 -> 0.51/0.20.
 
-**Measurement.** Apple M4, `preprocess_bench` `BM_Resolution` metal cases, wall / process CPU ms per
-frame: 4K to 1280 x 1280 1.83 / 1.14 before, 1.32 / 0.60 after; 1080p to 640 x 640 0.61 / 0.30 before,
-0.51 / 0.20 after.
+**Validation / limits:** Repetition counts and statistic were not preserved; results apply to shared-memory Metal paths.
 
 ## 2026-10-13: fuse CPU tensor conversion and normalization (26e8d66)
 
-**Bottleneck.** The CPU preprocessor converted uint8 RGB/BGR to planar float and normalized in
-separate passes over the float output.
+CPU tensor conversion and normalization traversed float output separately. Fuse uint8 RGB/BGR conversion and per-channel affine normalization.
 
-**Change.** One fused pass converts and applies the per-channel affine normalization.
+**Measurement:** Apple M5 Pro, one OpenCV thread: 1080p->640x640 1.06 -> 0.566 ms; 4K->1280x1280 4.38 -> 2.28 ms.
 
-**Measurement.** Apple M5 Pro, OpenCV one thread: 1080p to 640 x 640 1.06 ms before, 0.566 ms after;
-4K to 1280 x 1280 4.38 ms before, 2.28 ms after.
+**Validation / limits:** Repetition counts and statistic were not preserved; later CPU letterbox work removes redundant padding conversion.
 
 ## 2026-10-12: copy TensorRT host IO through pinned memory (e3455d5)
 
-**Bottleneck.** Host-side engine IO used pageable memory, so host-device copies ran at reduced
-bandwidth and blocked the host thread; staging buffers were allocated and freed every frame.
+Pageable TensorRT IO reduced copy bandwidth and per-frame staging allocation added overhead. Use pinned host IO and reusable device staging buffers.
 
-**Change.** TensorRT hands out CUDA-pinned host memory through `Engine::create_host_memory()` and keeps
-its device staging buffers across calls.
+**Measurement:** RTX 4090, YOLOv8n FP16 TensorRT, pipeline_bench median of 3 rounds: CUDA-preprocessed single call 1.51 -> 1.24 ms; 3/2/3 pools with 8 callers 6.33 -> 5.03 ms.
 
-**Measurement.** RTX 4090, YOLOv8n fp16 TensorRT, `pipeline_bench` medians of 3 rounds: single call with
-CUDA preprocessing 1.51 ms before, 1.24 ms after; 3/2/3 stages on 8 threads 6.33 ms before, 5.03 ms after.
+**Validation / limits:** Exact image size, repetition duration and software versions were not preserved in this entry.

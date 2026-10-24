@@ -352,6 +352,50 @@
           "iou_threshold": [0.45]
         }
       }
+    },
+    {
+      "name": "yolov8n_classify_batch8",
+      "config": {
+        "preprocess": {"std": [255, 255, 255]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralClassifyBatch8.onnx"}]},
+        "postprocess": {"type": "GeneralClassify", "classify_postprocess_type": "none"}
+      }
+    },
+    {
+      "name": "yolov8n_detect_batch8",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralDetectBatch8.onnx"}]},
+        "postprocess": {"type": "GeneralDetect", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
+      }
+    },
+    {
+      "name": "yolov8n_pose_batch8",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralYoloPoseBatch8.onnx"}]},
+        "postprocess": {
+          "type": "GeneralYoloPose",
+          "class_num": 1,
+          "keypoint_threshold": 0.5,
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
+    },
+    {
+      "name": "yolov8n_segment_batch8",
+      "config": {
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralYoloSegmentBatch8.onnx"}]},
+        "postprocess": {
+          "type": "GeneralYoloSegment",
+          "class_num": 80,
+          "mask_threshold": 0.5,
+          "confidence_threshold": [0.25],
+          "iou_threshold": [0.45]
+        }
+      }
     }
   ]
 }

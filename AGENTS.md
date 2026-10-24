@@ -65,8 +65,8 @@
 ## 模板与资源
 
 - `assets/` 只提交 `template/`、`perf.md` 和 `benchmark.md`；模型、.hrtc、图片、夹具 manifest、输出结果、
-  下载到 `external/` 的 SDK 均不提交。测试资源统一放本地 `assets/test/`，ONNX 放其 onnx 子目录；
-  不另建夹具 README、manifest 或 sources 文件。manifest 路径为绝对路径或相对运行时工作目录。
+  下载到 `external/` 的 SDK 均不提交。测试资源统一放本地 `assets/test/`，ONNX、TensorRT plan、RKNN 模型
+  分别放其 onnx、trt、rknn 子目录；不另建夹具 README、manifest 或 sources 文件。manifest 路径为绝对路径或相对运行时工作目录。
 - `assets/template/hrtc_template.json` 展示模型参数，每种 postprocess 至少一个 algo，不要求每个模型都有 algo。
   有测试模型时以模型命名，使用其真实前后处理配置及仓库根目录相对模型路径，测试和基准从模板读取。
   引擎专用 config 示例放 `hrtc_device_config.json`。
@@ -79,6 +79,16 @@
   记录瓶颈与定位、改动、测量条件（平台、模型、输入、线程、次数、工具）、前后数据及剩余问题。
   普通功能不写入。引擎推理耗时只用 `tools/hrt-model-bench` 测量；
   benchmarks/ 只保留 preprocess_bench、postprocess_bench、pipeline_bench。
+- `assets/benchmark.md` 只记录当前数据，分前处理、后处理、Pipeline 三章，每章一张表；开头写公共方法和
+  平台表（设备、CPU、内存、加速器、OS、编译主机、编译器、CMake、构建类型、OpenCV、推理与设备 SDK、绑核），
+  各章写测试内容与方法。统一用 Release 当前源码，Google Benchmark 3 次重复、每次 >=0.5 s、预热 >=0.2 s，取中位数。
+- 前处理只测 CPU、Metal、CUDA（host、device 源）：单调用者、OpenCV 单线程，1920x1080、2560x1440、
+  3840x2160 letterbox 到 640x640、1280x1280。后处理测模板全部 algo，用 ORT CPU 的真实 FP32 输出、
+  单线程，表中列模型输出形状；RK3588 另测四个基础模型 int8 RKNN 的量化输出。
+- Pipeline 只测 yolov8n detect、segment、pose、classify 四个 640x640 模型的 batch 1、4、8 静态导出，
+  每次调用传 batch 张图；pool 3/2/3，8 个调用线程共享一个模型并循环固定的 32 张 COCO128 图；
+  路径为 CPU→ORT CoreML、Metal→ORT CoreML、CUDA→TensorRT、RGA→RKNN、DVPP→CANN。
+  模型或条件变化后整行重测，不混用旧模型数据。
 
 ## 文件、格式与命名
 
