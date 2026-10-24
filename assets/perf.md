@@ -4,6 +4,41 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-24: launch a fused CUDA batch at once
+
+**Bottleneck.** A batched `ImagePreprocessor::process` on CUDA still ran each sample through the
+single-sample flow: stage the source, launch the kernel, then the next sample reused the same
+staging image, so uploads and launches alternated sample by sample.
+
+**Change.** When every sample of a device batch passes `supports_fused`, the shared flow stages
+each sample into its own images (`stage()`, split out of the single-sample `process()`) and
+calls the new virtual `fused_batch()` once; its default runs `fused()` per sample, and
+`CudaImagePreprocessor` builds all tasks and launches them together, up to 16 per kernel.
+Other batches keep the per-sample flow, and the CPU keeps running samples on OpenCV threads.
+
+**Measurement.** Same machine, tools and `BM_Batch` cases as the entries below, pinned with
+`taskset -c 2-5`; baseline commit `1b7d231` with the same benchmark source, both alternating for
+five rounds of three repetitions of at least 0.5 s; medians in ms per batch of four 1920 x 1080
+frames.
+
+| Case | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| NV12 host frames | 1.338 | 1.126 | -16% |
+| BGR host frames | 2.292 | 2.097 | -9% |
+| BGR device frames | 0.158 | 0.150 | -5% |
+| NV12 device frames | 0.154 | 0.148 | -4% |
+| Batch 1, all four modes | | | within 1% |
+
+Host frames gain most: their uploads now queue back to back instead of alternating with
+kernels. For device frames the kernel itself dominates; launch overhead was small.
+
+**Validation.** `CudaBatchMatchesSingleCalls` runs 20 samples (two launches) mixing BGR and
+NV12, host and device sources, sizes and crops, into host and device targets twice, and
+compares every byte and transform with single calls.
+
+**Remaining.** Host uploads still dominate host-frame batches. RKNN, Ascend, Metal (which keeps
+the per-sample default) and Windows were not measured.
+
 ## 2026-10-24: convert NV12 and NV21 in the fused CUDA kernel and drop NPP
 
 **Bottleneck.** After the fused kernel, NV12 sources still ran NPP step by step: NV12 to BGR at

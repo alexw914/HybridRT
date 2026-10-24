@@ -284,6 +284,75 @@ auto value_at(const hrt::core::Image& image, int c, int x, int y) -> float {
   return static_cast<float>(*reinterpret_cast<const std::uint8_t*>(base + offset));
 }
 
+// A CUDA batch runs as one launch per 16 samples and must match single calls, whatever mix of sources it holds.
+TEST(ImagePreprocessorTest, CudaBatchMatchesSingleCalls) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto context = Context::create(DeviceType::Cuda);
+  if (!context)
+    GTEST_SKIP() << "CUDA unavailable";
+  context->set_current();
+  auto stream = context->create_stream();
+  auto batched = ImagePreprocessor::create(ImagePreprocessorType::Cuda);
+  auto single = ImagePreprocessor::create(ImagePreprocessorType::Cuda);
+  ASSERT_TRUE(stream && batched && single);
+  constexpr std::size_t kSamples = 20;
+  hrt::Vector<hrt::Vector<std::uint8_t>> pixels(kSamples);
+  hrt::Vector<Image> hosts;
+  hrt::Vector<Image> srcs;
+  hrt::Vector<Rect> rects;
+  for (std::size_t i = 0; i < kSamples; ++i) {
+    const Size size{40 + static_cast<int>(i) * 6, 30 + static_cast<int>(i % 5) * 8};
+    const auto nv12 = i % 3 == 1;
+    pixels[i].resize(static_cast<std::size_t>(size.width * size.height) * 3);
+    for (std::size_t k = 0; k < pixels[i].size(); ++k)
+      pixels[i][k] = static_cast<std::uint8_t>((k * 31 + i * 17) % 256);
+    auto host = Image::wrap(MemoryType::Cpu, pixels[i].data(), nv12 ? ImageFormat::Nv12 : ImageFormat::InterBgr, size);
+    ASSERT_TRUE(host);
+    hosts.push_back(*host);
+    if (i % 2 == 0) {
+      Image device(MemoryType::Cuda, host->format(), DataType::Uint8, size);
+      ASSERT_TRUE(Buffer::copy(*device.buffer(), *host->buffer(), CopyPolicy::AutoDstStride, stream.get()));
+      srcs.push_back(std::move(device));
+    } else {
+      srcs.push_back(*host);
+    }
+    rects.push_back(i % 4 == 3 ? Rect{3, 1, size.width - 8, size.height - 4} : Rect{});
+  }
+  ImagePreprocessorParam param;
+  param.resize_type = ResizeType::LetterBox;
+  param.mean = {2, 4, 6};
+  param.std = {2, 4, 8};
+  param.default_color = {114, 20, 250};
+  for (const bool device_target : {true, false}) {
+    SCOPED_TRACE(device_target);
+    const auto memory = device_target ? MemoryType::Cuda : MemoryType::Cpu;
+    hrt::Vector<Image> outputs;
+    hrt::Vector<Image> expected;
+    for (std::size_t i = 0; i < kSamples; ++i) {
+      outputs.emplace_back(memory, ImageFormat::PlanarRgb, DataType::Float32, Size{32, 24});
+      expected.emplace_back(memory, ImageFormat::PlanarRgb, DataType::Float32, Size{32, 24});
+    }
+    for (int run = 0; run < 2; ++run) {
+      const auto transforms = batched->process(outputs, srcs, rects, param, stream.get());
+      ASSERT_TRUE(transforms);
+      for (std::size_t i = 0; i < kSamples; ++i) {
+        SCOPED_TRACE(i);
+        const auto transform = single->process(expected[i], srcs[i], rects[i], param, stream.get());
+        ASSERT_TRUE(transform);
+        EXPECT_EQ((*transforms)[i].dst_roi, transform->dst_roi);
+        EXPECT_EQ((*transforms)[i].src_roi, transform->src_roi);
+        Image a(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, Size{32, 24});
+        Image b(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, Size{32, 24});
+        ASSERT_TRUE(Buffer::copy(*a.buffer(), *outputs[i].buffer(), CopyPolicy::DirectCopy, stream.get()));
+        ASSERT_TRUE(Buffer::copy(*b.buffer(), *expected[i].buffer(), CopyPolicy::DirectCopy, stream.get()));
+        stream->synchronize();
+        EXPECT_EQ(std::memcmp(a.memory()->cpu(), b.memory()->cpu(), a.buffer()->bytes()), 0);
+      }
+    }
+  }
+}
+
 // Conversions the CUDA kernel does not run go to the CPU operators, with the same result.
 TEST(ImagePreprocessorTest, CudaLeavesUnfusedConversionsToTheCpu) {
   using namespace hrt::core;

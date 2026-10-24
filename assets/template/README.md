@@ -47,7 +47,9 @@ it converts uint8 BGR, RGB, NV12 or NV21 sources with `linear` or `nearest` inte
 3-channel planar or interleaved uint8 or float32 inputs, following OpenCV's uint8 color
 conversion and sampling, so it matches the CPU result up to OpenCV's own rounding
 differences. Other conversions (`cubic`, gray inputs, other source formats) run on the CPU.
-NV12 halves the bytes a host frame uploads compared with BGR.
+NV12 halves the bytes a host frame uploads compared with BGR. A static batch whose samples all
+fuse runs as one kernel launch (up to 16 samples per kernel); on the CPU the samples of a batch
+run on OpenCV's threads.
 For device-only memory, an unsupported stage retains the whole-call CPU fallback,
 including source download and result upload. Host-accessible buffers can use CPU operators
 directly. Fusion and fallback decisions do not change the model's preprocess parameters.

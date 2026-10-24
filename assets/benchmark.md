@@ -123,8 +123,9 @@ random 1920 x 1080 BGR frames into 640 x 640 planar RGB float32 with one batched
 
 Batch 1 reuses one frame that stays in cache; four distinct frames (24 MB) do not, which is
 closer to a video stream. Four CPU threads run the samples in parallel but stay memory bound.
-Host-frame CUDA cases are limited by the pageable upload (about 0.53 ms per frame); device
-frames run one kernel launch per sample. NV12 rows (modes 4 and 5) were measured after NPP was
+Host-frame CUDA cases are limited by the pageable upload (about 0.53 ms per frame). These rows
+predate launching a fused CUDA batch at once; see [perf.md](perf.md) for the batch-4 numbers
+after that change. NV12 rows (modes 4 and 5) were measured after NPP was
 replaced by the fused kernel: NV12 uploads half the bytes of BGR.
 
 ### Other platforms: historical measurements

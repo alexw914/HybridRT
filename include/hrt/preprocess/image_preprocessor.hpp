@@ -171,6 +171,12 @@ public:
   virtual auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
                      const ImagePreprocessorParam& param, core::Stream* stream) -> bool;
 
+  // Every sample of a batch at once, each of which passed supports_fused;
+  // runs fused() per sample unless the device launches them together.
+  virtual auto fused_batch(std::span<core::Image* const> dsts, std::span<const ImageTransform> transforms,
+                           std::span<const core::Image* const> srcs, const ImagePreprocessorParam& param,
+                           core::Stream* stream) -> bool;
+
   KZ_NODISCARD virtual auto type() const -> ImagePreprocessorType = 0;
 
   // Memory type of scratch images.
@@ -186,7 +192,28 @@ protected:
   ImagePreprocessor();
 
 private:
+  // Where one sample runs on this device: the transform to return, the same in
+  // the staged source, and the images the operators read and write.
+  struct Staged {
+    ImageTransform transform;
+    ImageTransform local;
+    const core::Image* input = nullptr;
+    core::Image* output = nullptr;
+  };
+
   auto cpu() -> ImagePreprocessor*;
+
+  // A batch of fused device samples: stages each into its own images, then
+  // calls fused_batch() once.
+  auto process_fused(std::span<core::Image> dsts, std::span<const core::Image> srcs,
+                     std::span<const core::Rect> src_rects, const ImagePreprocessorParam& param, core::Stream* stream)
+      -> std::optional<Vector<ImageTransform>>;
+
+  // Computes the regions and stages the images this device cannot address into
+  // the slots; `to_cpu` reports a staging failure the CPU should take over.
+  auto stage(core::Image& dst, const core::Image& src, const core::Rect& src_rect, const ImagePreprocessorParam& param,
+             core::Stream* stream, UniquePtr<core::Image>& src_slot, UniquePtr<core::Image>& dst_slot, bool& to_cpu)
+      -> std::optional<Staged>;
 
   auto scratch(UniquePtr<core::Image>& slot, core::MemoryType memory_type, core::ImageFormat format,
                core::DataType data_type, core::Size size) -> core::Image*;
@@ -203,6 +230,8 @@ private:
 
   UniquePtr<ImagePreprocessor> cpu_;
   Vector<UniquePtr<ImagePreprocessor>> lanes_; // CPU preprocessors with own scratch for samples after the first.
+  Vector<UniquePtr<core::Image>> batch_srcs_;  // Per-sample staging of a fused device batch.
+  Vector<UniquePtr<core::Image>> batch_dsts_;
   UniquePtr<core::Image> staged_src_;
   UniquePtr<core::Image> staged_dst_;
   UniquePtr<core::Image> host_src_;

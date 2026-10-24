@@ -225,10 +225,16 @@ auto ImagePreprocessor::scratch(UniquePtr<core::Image>& slot, core::MemoryType m
   return slot->valid() ? slot.get() : nullptr;
 }
 
-auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const core::Rect& src_rect,
-                                const ImagePreprocessorParam& param, core::Stream* stream)
-    -> std::optional<ImageTransform> {
-  ImageTransform transform{.dst_roi = {}, .src_roi = {}, .input_size = dst.size()};
+auto ImagePreprocessor::stage(core::Image& dst, const core::Image& src, const core::Rect& src_rect,
+                              const ImagePreprocessorParam& param, core::Stream* stream,
+                              UniquePtr<core::Image>& src_slot, UniquePtr<core::Image>& dst_slot, bool& to_cpu)
+    -> std::optional<Staged> {
+  to_cpu = false;
+  Staged staged{.transform = {.dst_roi = {}, .src_roi = {}, .input_size = dst.size()},
+                .local = {},
+                .input = &src,
+                .output = &dst};
+  auto& transform = staged.transform;
   const auto rect = src_rect.empty() ? src.rect() : src_rect;
   if (!calc_resize_position(transform.dst_roi, transform.src_roi, dst.rect(), rect, src.size(), param))
     return std::nullopt;
@@ -240,8 +246,7 @@ auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const 
                   read.x, read.y, read.width, read.height, src.size().width, src.size().height);
   adjust_roi(transform.dst_roi, transform.src_roi, dst, src);
 
-  const core::Image* input = &src;
-  auto local = transform;
+  staged.local = transform;
   if (!accepts(src.memory()->memory_type())) {
     // Host interleaved sources stage only what resize reads, as in cascaded crops: src_roi plus a margin for the
     // interpolation taps. Other layouts stage whole.
@@ -264,35 +269,45 @@ auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const 
                                    format, {area.width, area.height}, src.data_type(), stride[1]);
       if (region && region->valid()) {
         from = &*region;
-        local.src_roi.x -= area.x;
-        local.src_roi.y -= area.y;
+        staged.local.src_roi.x -= area.x;
+        staged.local.src_roi.y -= area.y;
       }
     }
-    auto* staged = scratch(staged_src_, memory_type(), format, from->data_type(), from->size());
-    if (staged == nullptr ||
-        !core::Buffer::copy(*staged->buffer(), *from->buffer(), core::CopyPolicy::AutoDstStride, stream)) {
+    auto* input = scratch(src_slot, memory_type(), format, from->data_type(), from->size());
+    if (input == nullptr ||
+        !core::Buffer::copy(*input->buffer(), *from->buffer(), core::CopyPolicy::AutoDstStride, stream)) {
       // Device memory can run out (e.g. a small shared CMA heap); the CPU then runs the whole call.
-      auto* fallback = cpu();
-      if (fallback == nullptr || fallback == this)
-        return std::nullopt;
-      return fallback->process(dst, src, src_rect, param, stream);
+      to_cpu = true;
+      return std::nullopt;
     }
-    input = staged;
+    staged.input = input;
   }
 
-  core::Image* output = &dst;
-  const auto direct = accepts(dst.memory()->memory_type());
-  if (!direct) {
-    output = scratch(staged_dst_, memory_type(), dst.format(), dst.data_type(), dst.size());
-    if (output == nullptr)
+  if (!accepts(dst.memory()->memory_type())) {
+    staged.output = scratch(dst_slot, memory_type(), dst.format(), dst.data_type(), dst.size());
+    if (staged.output == nullptr)
       return std::nullopt;
   }
+  return staged;
+}
 
-  if (!run(*output, *input, local, param, stream))
+auto ImagePreprocessor::process(core::Image& dst, const core::Image& src, const core::Rect& src_rect,
+                                const ImagePreprocessorParam& param, core::Stream* stream)
+    -> std::optional<ImageTransform> {
+  bool to_cpu = false;
+  const auto staged = stage(dst, src, src_rect, param, stream, staged_src_, staged_dst_, to_cpu);
+  if (to_cpu) {
+    auto* fallback = cpu();
+    if (fallback == nullptr || fallback == this)
+      return std::nullopt;
+    return fallback->process(dst, src, src_rect, param, stream);
+  }
+  if (!staged || !run(*staged->output, *staged->input, staged->local, param, stream))
     return std::nullopt;
-  if (!direct && !core::Buffer::copy(*dst.buffer(), *output->buffer(), core::CopyPolicy::DirectCopy, stream))
+  if (staged->output != &dst &&
+      !core::Buffer::copy(*dst.buffer(), *staged->output->buffer(), core::CopyPolicy::DirectCopy, stream))
     return std::nullopt;
-  return transform;
+  return staged->transform;
 }
 
 auto ImagePreprocessor::process(std::span<core::Image> dsts, std::span<const core::Image> srcs,
@@ -305,6 +320,14 @@ auto ImagePreprocessor::process(std::span<core::Image> dsts, std::span<const cor
   auto run_sample = [&](ImagePreprocessor& processor, std::size_t i) -> void {
     done[i] = processor.process(dsts[i], srcs[i], src_rects.empty() ? core::Rect{} : src_rects[i], param, stream);
   };
+  // Staging keeps the formats, so the fused check holds before it.
+  auto fuses_all = [&]() -> bool {
+    for (std::size_t i = 0; i < srcs.size(); ++i) {
+      if (!supports_fused(dsts[i], srcs[i], param))
+        return false;
+    }
+    return true;
+  };
   if (type() == ImagePreprocessorType::Cpu && srcs.size() > 1) {
     while (lanes_.size() + 1 < srcs.size())
       lanes_.push_back(create(ImagePreprocessorType::Cpu));
@@ -312,6 +335,8 @@ auto ImagePreprocessor::process(std::span<core::Image> dsts, std::span<const cor
       for (auto i = static_cast<std::size_t>(range.start); i < static_cast<std::size_t>(range.end); ++i)
         run_sample(i == 0 ? *this : *lanes_[i - 1], i);
     });
+  } else if (srcs.size() > 1 && fuses_all()) {
+    return process_fused(dsts, srcs, src_rects, param, stream);
   } else {
     // Device samples run in stream order and reuse one set of scratch images.
     for (std::size_t i = 0; i < srcs.size(); ++i)
@@ -325,6 +350,51 @@ auto ImagePreprocessor::process(std::span<core::Image> dsts, std::span<const cor
     transforms.push_back(*transform);
   }
   return transforms;
+}
+
+auto ImagePreprocessor::process_fused(std::span<core::Image> dsts, std::span<const core::Image> srcs,
+                                      std::span<const core::Rect> src_rects, const ImagePreprocessorParam& param,
+                                      core::Stream* stream) -> std::optional<Vector<ImageTransform>> {
+  // Every sample is staged before any operator runs, so each needs its own staging images.
+  batch_srcs_.resize(std::max(batch_srcs_.size(), srcs.size()));
+  batch_dsts_.resize(std::max(batch_dsts_.size(), srcs.size()));
+  Vector<ImageTransform> transforms;
+  Vector<ImageTransform> locals;
+  Vector<const core::Image*> inputs;
+  Vector<core::Image*> outputs;
+  for (std::size_t i = 0; i < srcs.size(); ++i) {
+    bool to_cpu = false;
+    const auto rect = src_rects.empty() ? core::Rect{} : src_rects[i];
+    const auto staged = stage(dsts[i], srcs[i], rect, param, stream, batch_srcs_[i], batch_dsts_[i], to_cpu);
+    if (!staged) {
+      auto* fallback = to_cpu ? cpu() : nullptr;
+      if (fallback == nullptr || fallback == this)
+        return std::nullopt;
+      return fallback->process(dsts, srcs, src_rects, param, stream);
+    }
+    transforms.push_back(staged->transform);
+    locals.push_back(staged->local);
+    inputs.push_back(staged->input);
+    outputs.push_back(staged->output);
+  }
+  if (!fused_batch(outputs, locals, inputs, param, stream))
+    return std::nullopt;
+  for (std::size_t i = 0; i < srcs.size(); ++i) {
+    if (outputs[i] != &dsts[i] &&
+        !core::Buffer::copy(*dsts[i].buffer(), *outputs[i]->buffer(), core::CopyPolicy::DirectCopy, stream))
+      return std::nullopt;
+  }
+  return transforms;
+}
+
+auto ImagePreprocessor::fused_batch(std::span<core::Image* const> dsts, std::span<const ImageTransform> transforms,
+                                    std::span<const core::Image* const> srcs, const ImagePreprocessorParam& param,
+                                    core::Stream* stream) -> bool {
+  for (std::size_t i = 0; i < dsts.size(); ++i) {
+    if (!fused(*dsts[i], transforms[i], *srcs[i], param, stream))
+      return false;
+  }
+  return true;
 }
 
 auto ImageTransform::to_source(const core::Rect2f& rect) const -> core::Rect2f {
