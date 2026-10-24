@@ -1,11 +1,11 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: source/include/backend/metal/image_kernel.hpp
+// File: source/include/backend/metal/kernels/image_kernel.hpp
 // Description: Defines the fused host-image preprocessing Metal kernel.
 // -----------------------------------------------------------------------------
 
-#ifndef HRT_BACKEND_METAL_IMAGE_KERNEL_HPP
-#define HRT_BACKEND_METAL_IMAGE_KERNEL_HPP
+#ifndef HRT_METAL_KERNELS_IMAGE_KERNEL_HPP
+#define HRT_METAL_KERNELS_IMAGE_KERNEL_HPP
 
 namespace hrt::backend {
 
@@ -59,4 +59,4 @@ kernel void preprocess(device const uchar* src [[buffer(0)]], device float* dst 
 
 } // namespace hrt::backend
 
-#endif // HRT_BACKEND_METAL_IMAGE_KERNEL_HPP
+#endif // HRT_METAL_KERNELS_IMAGE_KERNEL_HPP

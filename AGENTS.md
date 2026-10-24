@@ -28,7 +28,8 @@
   SDK 查找脚本放 `cmake/module/`，第三方依赖配置放 `cmake/external/`。
 - `hrt::hrtc` 不依赖推理运行时。主机内存（含 Linux dma-buffer）及拷贝分发放
   `source/memory/`，设备公共代码（context、memory、SDK 辅助）放
-  `source/backend/<device>/`，任务解码放 `source/postprocess/<task>/`。
+  `source/backend/<device>/`，设备 kernel（CUDA .cu、Metal shader 等）实现放其 `kernels/`、
+  声明放 `source/include/backend/<device>/kernels/`，任务解码放 `source/postprocess/<task>/`。
 - 后端通过 SDK 根目录启用并定义 `HRT_USE_<BACKEND>`，见 `cmake/HybridrtBackends.cmake`；
   SDK 头文件和类型不得出现在公开头文件。新增后端只扩展
   `source/engine/<backend>_engine.*`、`source/CMakeLists.txt` 和 `Engine::create`；

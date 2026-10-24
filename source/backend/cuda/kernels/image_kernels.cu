@@ -1,13 +1,13 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: source/backend/cuda/cuda_image_kernels.cu
+// File: source/backend/cuda/kernels/image_kernels.cu
 // Description: Implements the fused CUDA color conversion, resize, padding
 //              and normalization kernel.
 // -----------------------------------------------------------------------------
 
 #include <algorithm>
 
-#include "include/backend/cuda/cuda_image_kernels.hpp"
+#include "include/backend/cuda/kernels/image_kernels.hpp"
 
 namespace hrt::backend {
 

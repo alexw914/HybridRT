@@ -1,12 +1,12 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: source/include/backend/cuda/cuda_image_kernels.hpp
+// File: source/include/backend/cuda/kernels/image_kernels.hpp
 // Description: Declares the fused CUDA color conversion, resize, padding
 //              and normalization kernel.
 // -----------------------------------------------------------------------------
 
-#ifndef HRT_CUDA_CUDA_IMAGE_KERNELS_HPP
-#define HRT_CUDA_CUDA_IMAGE_KERNELS_HPP
+#ifndef HRT_CUDA_KERNELS_IMAGE_KERNELS_HPP
+#define HRT_CUDA_KERNELS_IMAGE_KERNELS_HPP
 
 #include <cstddef>
 #include <cstdint>
@@ -70,4 +70,4 @@ inline constexpr std::size_t kCudaResizeTasksPerLaunch = 16;
 
 } // namespace hrt::backend
 
-#endif // HRT_CUDA_CUDA_IMAGE_KERNELS_HPP
+#endif // HRT_CUDA_KERNELS_IMAGE_KERNELS_HPP

@@ -12,7 +12,7 @@
 #include <cmath>
 
 #include "include/backend/cuda/cuda_common.hpp"
-#include "include/backend/cuda/cuda_image_kernels.hpp"
+#include "include/backend/cuda/kernels/image_kernels.hpp"
 
 namespace hrt::preprocess {
 

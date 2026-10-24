@@ -11,7 +11,7 @@
 
 #include <kitzoo/core/macro.hpp>
 
-#include "include/backend/cuda/cuda_image_kernels.hpp"
+#include "include/backend/cuda/kernels/image_kernels.hpp"
 
 namespace hrt::preprocess {
 

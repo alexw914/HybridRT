@@ -14,7 +14,7 @@
 #include <cmath>
 #include <limits>
 
-#include "include/backend/metal/image_kernel.hpp"
+#include "include/backend/metal/kernels/image_kernel.hpp"
 
 namespace hrt::preprocess {
 
