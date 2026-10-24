@@ -294,6 +294,14 @@
       }
     },
     {
+      "name": "ppocrv6_tiny_rec_batch8",
+      "config": {
+        "preprocess": {"dst_image_format": "planar_bgr", "resize_type": "text_line", "mean": [127.5, 127.5, 127.5], "std": [127.5, 127.5, 127.5], "default_color": [0, 0, 0], "normalize_type": "roi"},
+        "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/OcrRecognitionBatch8.onnx"}]},
+        "postprocess": {"type": "Ocr", "stage": "recognition", "decoder": "ctc", "dictionary": "assets/test/weights/ocr/PP-OCRv6_tiny_rec/characters.txt", "append_space": true}
+      }
+    },
+    {
       "name": "ppocrv6_small_rec",
       "config": {
         "preprocess": {"dst_image_format": "planar_bgr", "resize_type": "text_line", "mean": [127.5, 127.5, 127.5], "std": [127.5, 127.5, 127.5], "default_color": [0, 0, 0], "normalize_type": "roi"},

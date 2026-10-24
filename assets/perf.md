@@ -4,6 +4,65 @@ Optimizations of preprocessing, postprocessing and the `ImageModel` pipeline, ne
 records the bottleneck, the change, how it was measured and the numbers before and after, so later
 work can rerun the same measurement. Plain feature work is not listed here.
 
+## 2026-10-24: recognize all OCR lines of an image in one call
+
+**Bottleneck.** `OcrModel` called the recognizer once per detected line, so a recognition model
+with a static batch would still run one line per inference, and every line paid a separate
+preprocessing, inference and postprocessing call.
+
+**Change.** `OcrModel::process_sync` collects every line, wide ones as their region of the source
+and tall ones rotated on the host (each into its own buffer), and passes them to one
+`ImageModel::process_sync` call, which runs them in batches of the recognizer's static batch. A
+batch-1 recognizer still runs one line at a time and gives identical JSON output. The template
+gains `ppocrv6_tiny_rec_batch8`, the tiny recognizer exported with a batch of 8.
+
+**Measurement.** WSL2, Ryzen 5 5600X, RTX 3060, TensorRT 10.14.1 FP32 `--noTF32` engines built
+locally from `OcrDetection.onnx`, `OcrRecognition.onnx` and `OcrRecognitionBatch8.onnx`, CUDA
+preprocessing; `hrt-ocr` over 20 copies of `ocr_document.png` (37 lines each), three runs.
+ONNX Runtime CPU numbers come from `hybridrt_bench_pipeline` `BM_Ocr` (one OpenCV thread,
+`taskset -c 2-5`, median of three repetitions of at least 0.5 s).
+
+| Recognizer | TensorRT, ms per image | ORT CPU, ms per image |
+| --- | ---: | ---: |
+| `ppocrv6_tiny_rec` (batch 1) | 52.9 / 56.2 / 50.2 | 228 |
+| `ppocrv6_tiny_rec_batch8` | 24.7 / 24.8 / 25.3 | 219 |
+
+All 740 TensorRT lines have the same text with both recognizers (scores within 1e-4); the ORT
+CPU gain is within noise. `RecognizesLinesInBatchesLikeOneByOne` compares both recognizers on
+the upright and the rotated document; the OCR model, tool and example tests pass.
+
+**Remaining.** Only the tiny recognizer has a batch fixture, and the OCR fixtures were rebuilt on
+this machine. RKNN and Windows were not measured.
+
+## 2026-10-24: decode instance masks on OpenCV's threads
+
+**Bottleneck.** Instance segmentation decoders (`GeneralYoloSegment`, `YoloV8Segment`,
+`Yolo26Segment`, `E2ESegment`) decoded each kept object's mask right after creating it, with one
+shared `MaskDecoder` scratch, so mask decoding, the larger part of their time, ran on one thread.
+
+**Change.** The decoders queue every mask in a `MaskBatch` (coefficients, network box, source box
+and the object's index) and decode them together once all objects are known: stripe `s` of the
+objects runs on one OpenCV thread with its own `MaskDecoder` scratch. With one OpenCV thread the
+work is the same as before; results do not depend on the thread count.
+
+**Measurement.** WSL2 Ubuntu 24.04, AMD Ryzen 5 5600X, Release GCC 13, OpenCV 4.6.0,
+`hybridrt_bench_postprocess` `BM_Type/<index>/<threads>` on real ORT outputs of `bus.jpg`,
+pinned with `taskset -c 2-5`. The baseline is commit `a30868b` built with the same benchmark
+source; both alternated for three rounds of three repetitions of at least 0.5 s; medians in ms.
+
+| Postprocessor | Before, 1 / 4 threads | After, 1 / 4 threads |
+| --- | ---: | ---: |
+| GeneralYoloSegment | 0.267 / 0.264 | 0.267 / 0.209 |
+| YoloV8Segment (raw heads) | 0.316 / 0.315 | 0.307 / 0.248 |
+| Yolo26Segment (raw heads) | 0.395 / 0.401 | 0.370 / 0.324 |
+| E2ESegment | 0.278 / 0.279 | 0.277 / 0.179 |
+
+**Validation.** `DecodesManyMasksAlikeOnOneAndSeveralThreads` decodes 24 objects of two classes
+with one and four OpenCV threads and compares every box and mask; the segment tests pass.
+
+**Remaining.** Score scanning and NMS stay serial, and `bus.jpg` keeps only about five objects,
+so four threads give 19-36%, not four times. RK3588 was not measured.
+
 ## 2026-10-24: launch a fused CUDA batch at once
 
 **Bottleneck.** A batched `ImagePreprocessor::process` on CUDA still ran each sample through the

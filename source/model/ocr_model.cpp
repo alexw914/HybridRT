@@ -70,14 +70,14 @@ struct OcrModel::Impl {
   UniquePtr<preprocess::ImagePreprocessor> host_preprocessor =
       preprocess::ImagePreprocessor::create(preprocess::ImagePreprocessorType::Cpu);
   core::Image host{core::MemoryType::Cpu, core::ImageFormat::InterBgr};
-  cv::Mat rotated;
+  Vector<cv::Mat> rotated; // One per tall line of the current call.
 
   // src when it is host uint8 BGR/RGB, else src converted into `host`.
   auto host_image(const core::Image& src) -> const core::Image*;
 
   // PP-OCR turns crops at least 1.5 times taller than wide counterclockwise into lines; the
-  // preprocessors cannot rotate, so this runs on the host and is valid until the next call.
-  auto rotate(const core::Image& host_src, const core::Rect& region) -> std::optional<core::Image>;
+  // preprocessors cannot rotate, so this runs on the host into `out`, which the image views.
+  auto rotate(const core::Image& host_src, const core::Rect& region, cv::Mat& out) -> std::optional<core::Image>;
 };
 
 auto OcrModel::Impl::host_image(const core::Image& src) -> const core::Image* {
@@ -91,13 +91,14 @@ auto OcrModel::Impl::host_image(const core::Image& src) -> const core::Image* {
   return host_preprocessor->process(host, src, {}, param) ? &host : nullptr;
 }
 
-auto OcrModel::Impl::rotate(const core::Image& host_src, const core::Rect& region) -> std::optional<core::Image> {
+auto OcrModel::Impl::rotate(const core::Image& host_src, const core::Rect& region, cv::Mat& out)
+    -> std::optional<core::Image> {
   auto* data = static_cast<std::uint8_t*>(const_cast<void*>(host_src.memory()->cpu()));
   KZ_CHECK_RETURN(data != nullptr, std::nullopt, "OcrModel: cannot map host image");
   const cv::Mat image(host_src.size().height, host_src.size().width, CV_8UC3, data, host_src.stride()[1]);
-  cv::rotate(image(cv::Rect(region.x, region.y, region.width, region.height)), rotated, cv::ROTATE_90_COUNTERCLOCKWISE);
-  return core::Image::wrap(core::MemoryType::Cpu, rotated.data, host_src.format(), {rotated.cols, rotated.rows},
-                           core::DataType::Uint8, rotated.step);
+  cv::rotate(image(cv::Rect(region.x, region.y, region.width, region.height)), out, cv::ROTATE_90_COUNTERCLOCKWISE);
+  return core::Image::wrap(core::MemoryType::Cpu, out.data, host_src.format(), {out.cols, out.rows},
+                           core::DataType::Uint8, out.step);
 }
 
 auto check_ocr_config(const hrtc::AlgoParam& detection, const hrtc::AlgoParam& recognition) -> Vector<String> {
@@ -151,24 +152,40 @@ auto OcrModel::process_sync(const core::Image& src) -> std::optional<postprocess
       return std::nullopt;
     source = host;
   }
-  for (auto& text : *result) {
+  // Every line goes to one recognition call, which runs them in batches of the recognizer's batch: wide lines as
+  // their region of the source, tall ones rotated whole.
+  Vector<core::Image> lines;
+  Vector<core::Rect> regions;
+  lines.reserve(result->size());
+  regions.reserve(result->size());
+  std::size_t tall = 0;
+  for (const auto& text : *result) {
     const auto region = text_region(text.rect, src.size());
     if (!region)
       return std::nullopt;
-    std::optional<postprocess::OcrResult> recognition;
     if (region->height < region->width * 1.5) {
-      recognition = impl_->recognition->process_sync(*source, *region);
-    } else {
-      host = host != nullptr ? host : impl_->host_image(src);
-      const auto rotated = host != nullptr ? impl_->rotate(*host, *region) : std::nullopt;
-      if (!rotated)
-        return std::nullopt;
-      recognition = impl_->recognition->process_sync(*rotated);
+      lines.push_back(*source);
+      regions.push_back(*region);
+      continue;
     }
-    if (!recognition || recognition->size() != 1)
+    host = host != nullptr ? host : impl_->host_image(src);
+    if (impl_->rotated.size() <= tall)
+      impl_->rotated.resize(tall + 1);
+    const auto rotated = host != nullptr ? impl_->rotate(*host, *region, impl_->rotated[tall++]) : std::nullopt;
+    if (!rotated)
       return std::nullopt;
-    text.text = std::move(recognition->front().text);
-    text.recognition_score = recognition->front().recognition_score;
+    lines.push_back(*rotated);
+    regions.emplace_back();
+  }
+  auto recognitions = impl_->recognition->process_sync(lines, regions);
+  if (!recognitions || recognitions->size() != result->size())
+    return std::nullopt;
+  for (std::size_t i = 0; i < result->size(); ++i) {
+    auto& recognition = (*recognitions)[i];
+    if (recognition.size() != 1)
+      return std::nullopt;
+    (*result)[i].text = std::move(recognition.front().text);
+    (*result)[i].recognition_score = recognition.front().recognition_score;
   }
   return result;
 }

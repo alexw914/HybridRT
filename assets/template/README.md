@@ -465,13 +465,16 @@ benchmarks skip them elsewhere.
 | `yolov8n_segment_batch4` | `GeneralYoloSegmentBatch4.onnx` | `4 x 3 x 480 x 640` | `4 x 116 x 6300; 4 x 32 x 120 x 160` | `1f05bc76e1a542931f9a4b0c21f9d281ff4a8136a3cf8d03869996b0b9a5d124` | `9baa669e562fd20ebbf74744d185dda7777b52dee02c81ba77c4c871c238995c` |
 
 Additional OCR fixtures use official PaddlePaddle ONNX weights. The `ppocrv6_tiny_det`,
-`ppocrv6_tiny_rec` and `ppocrv6_small_rec` template algos run through `OcrModel`.
+`ppocrv6_tiny_rec`, `ppocrv6_tiny_rec_batch8` and `ppocrv6_small_rec` template algos run through
+`OcrModel`, which recognizes all lines of an image in one `ImageModel` call: the batch-8
+recognizer reads eight lines per inference and gives the texts of the batch-1 one.
 
 | ONNX file in `assets/test/onnx/` | Input NCHW | Output | SHA256 |
 | --- | --- | --- | --- |
 | `OcrDetection.onnx` | `1 x 3 x 640 x 640` | `1 x 1 x 640 x 640` | `7373329bed2ea0b66c173278112a6dab68a5f9f244723a302e4b1a674f9435c9` |
 | `OcrRecognition.onnx` | `1 x 3 x 48 x 320` | `1 x 40 x 6906` | `71b480e58fa36017c5e542b1157f659cc58da1233d64c716b7a26240ed2c1f31` |
 | `OcrRecognitionSmall.onnx` | `1 x 3 x 48 x 320` | `1 x 40 x 18710` | `e01ba7ec62993bd6328fd737bc7bf39873d3c8d6f146b6752a0b651bc9929920` |
+| `OcrRecognitionBatch8.onnx` | `8 x 3 x 48 x 320` | `8 x 40 x 6906` | `5d3f22468b3cacf072a0c3bd757d541901b4d419203100ee49a346b3745880ca` |
 
 Sources: [tiny detection](https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_det_onnx),
 [tiny recognition](https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_rec_onnx),
@@ -481,7 +484,11 @@ Original `inference.onnx` and `inference.yml` files live under
 dictionary entries, without the CTC blank or appended space. Tiny and small dictionaries differ.
 Local `assets/test/scripts/fix_ocr_shapes.py` fixes batch and image dimensions, sets output
 dimensions from real inference and runs ONNX shape inference; the files remain FP32 at their
-original opsets (14 for detection, 11 for recognition).
+original opsets (14 for detection, 11 for recognition). It also writes the `characters.txt`
+files from `inference.yml` and `OcrRecognitionBatch8.onnx` from the tiny recognizer with a batch
+of 8. Rerun on 2026-10-24 (ONNX 1.16.1, ONNX Runtime 1.23.2) from originals with SHA256
+`193bab7a...` (tiny det), `9ef676d6...` (tiny rec) and `5435fd74...` (small rec), it reproduced the
+three batch-1 files byte for byte.
 
 ONNX 1.17.0 checker and ONNX Runtime 1.31.0 CPU zero/random-input runs passed on macOS arm64.
 All external input/output dimensions are positive integers. Original and fixed model outputs
@@ -490,6 +497,10 @@ agree within `rtol=1e-4, atol=1e-4`; maximum absolute errors were 2.09e-7 (det),
 Fixed shapes can enable different fused runtime kernels. These checks establish runnable,
 fixed-shape models, not OCR accuracy or compatibility with other backends.
 Local `assets/test/ocr_shape_validation.json` records shapes, source hashes and comparison results.
+
+`assets/test/images/ocr_document.png` (also read as `ocr_document.jpg`; JPEG data, SHA256
+`4425af33dd163cf73bdff502bd35ee527e9bdd5725501db1da78bfdae9f538f4`) is PaddleX's boarding pass demo
+image `general_ocr_002.png` from paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/.
 
 End-to-end OCR was compared with PaddleOCR 3.7.0 (PaddlePaddle 3.3.1, CPU, macOS arm64) on
 the local `assets/test/images/ocr_document.png` (896 x 528), with document orientation,

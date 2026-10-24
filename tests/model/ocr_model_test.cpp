@@ -81,6 +81,48 @@ TEST(OcrModelTest, RunsPackedModelsWithoutExternalDictionary) {
 #endif
 }
 
+// A recognizer with a static batch reads several lines per call and must give each the text of the batch-1 one.
+TEST(OcrModelTest, RecognizesLinesInBatchesLikeOneByOne) {
+#ifdef HRT_ORT_MODEL_TEST
+  const auto det = hrt::test::template_algo("ppocrv6_tiny_det");
+  const auto single = hrt::test::template_algo("ppocrv6_tiny_rec");
+  const auto batched = hrt::test::template_algo("ppocrv6_tiny_rec_batch8");
+  const auto bgr = cv::imread((hrt::test::source_root() / "assets/test/images/ocr_document.png").string());
+  for (const auto* algo : {&det, &single, &batched}) {
+    if (algo->is_null() || !std::filesystem::exists(hrt::test::template_model(*algo)))
+      GTEST_SKIP() << "OCR models unavailable";
+  }
+  if (bgr.empty() || !std::filesystem::exists(single["config"]["postprocess"]["dictionary"].get<hrt::String>()))
+    GTEST_SKIP() << "OCR image or dictionary unavailable";
+  const auto det_algo = hrt::hrtc::load_algo(det);
+  const auto single_algo = hrt::hrtc::load_algo(single);
+  const auto batched_algo = hrt::hrtc::load_algo(batched);
+  ASSERT_TRUE(det_algo && single_algo && batched_algo);
+  auto one_by_one = hrt::model::OcrModel::create(*det_algo, *single_algo);
+  auto in_batches = hrt::model::OcrModel::create(*det_algo, *batched_algo);
+  // Upright lines read their region of the frame; turned clockwise, every line is rotated back first.
+  cv::Mat turned;
+  cv::rotate(bgr, turned, cv::ROTATE_90_CLOCKWISE);
+  for (const auto* frame : hrt::Array<const cv::Mat*, 2>{&bgr, &turned}) {
+    auto image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, frame->data, hrt::core::ImageFormat::InterBgr,
+                                        {frame->cols, frame->rows}, hrt::core::DataType::Uint8, frame->step);
+    ASSERT_TRUE(image);
+    const auto expected = one_by_one->process_sync(*image);
+    const auto actual = in_batches->process_sync(*image);
+    ASSERT_TRUE(expected && actual);
+    // More lines than one batch, so the recognizer runs several batches and a partial one.
+    ASSERT_GT(expected->size(), 8U);
+    ASSERT_EQ(actual->size(), expected->size());
+    for (std::size_t i = 0; i < expected->size(); ++i) {
+      EXPECT_EQ((*actual)[i].text, (*expected)[i].text) << i;
+      EXPECT_NEAR((*actual)[i].recognition_score, (*expected)[i].recognition_score, 1e-4F) << i;
+    }
+  }
+#else
+  GTEST_SKIP() << "Needs ONNX Runtime and OpenCV imgcodecs";
+#endif
+}
+
 TEST(OcrModelTest, RejectsStagesOnDifferentDevices) {
 #ifdef HRT_ORT_MODEL_TEST
   const auto det = hrt::test::template_algo("ppocrv6_tiny_det");
