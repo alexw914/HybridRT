@@ -49,7 +49,7 @@ TEST(Yolo26KeypointTest, DecodesDistancesAndKeypointOffsets) {
   at(6, 2, 1) = -0.25F;
   at(7, 2, 1) = 2.0F;
   hrt::postprocess::KeypointResultMap result;
-  ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(32, 32)));
+  ASSERT_TRUE(decoder->process(result, {hrt::test::create_buffer(output, values)}, hrt::test::identity(32, 32)));
   ASSERT_EQ(result.at(0).size(), 1U);
   const auto& object = result.at(0)[0];
   EXPECT_NEAR(object.box.rect.x, 4.0F, 1e-4F);

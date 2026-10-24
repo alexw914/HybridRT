@@ -81,11 +81,11 @@ protected:
       }
       for (auto k : nms_indices(rects_, scores_, param_.iou_threshold[cls])) {
         auto& object = objects[k];
-        object.box.rect = transform.clip_to_source(object.box.rect);
+        object.box.rect = transform.clip_reverse(object.box.rect);
         if (object.box.rect.empty())
           continue;
         for (auto& keypoint : object.keypoints)
-          keypoint.point = transform.to_source(keypoint.point);
+          keypoint.point = transform.reverse(keypoint.point);
         result[static_cast<std::int64_t>(cls)].push_back(std::move(object));
       }
     }

@@ -29,7 +29,7 @@ namespace hrt::engine {
 
 namespace {
 
-auto data_type_of(const MNN::Tensor& tensor) -> std::optional<core::DataType> {
+auto data_type(const MNN::Tensor& tensor) -> std::optional<core::DataType> {
   const auto type = tensor.getType();
   if (type.code == halide_type_float && type.bits == 32)
     return core::DataType::Float32;
@@ -40,7 +40,7 @@ auto data_type_of(const MNN::Tensor& tensor) -> std::optional<core::DataType> {
   return std::nullopt;
 }
 
-auto shape_of(const MNN::Tensor& tensor) -> core::Shape {
+auto tensor_shape(const MNN::Tensor& tensor) -> core::Shape {
   core::Shape shape(static_cast<std::size_t>(tensor.dimensions()));
   for (std::size_t i = 0; i < shape.size(); ++i)
     shape[i] = tensor.length(static_cast<int>(i));
@@ -111,7 +111,7 @@ auto MnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
   proto_ = {DataLayout::Nchw, DataLayout::Nchw};
   // getSession*All return name-ordered maps.
   for (const auto& [name, tensor] : interpreter_->getSessionInputAll(session_)) {
-    const auto type = data_type_of(*tensor);
+    const auto type = data_type(*tensor);
     if (!type) {
       KZ_LOG_ERROR("mnn: input {} has an unsupported type", name);
       return false;
@@ -119,18 +119,18 @@ auto MnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
     input_names_.push_back(name);
     input_tensors_.push_back(tensor);
     // Packed: host tensors wrap the buffer, and dma-bufs would otherwise pad rows for media devices.
-    const auto shape = shape_of(*tensor);
+    const auto shape = tensor_shape(*tensor);
     input_protos_.push_back({memory::host_engine_input_memory(), *type, shape, core::contiguous_stride(shape, *type)});
   }
   for (const auto& [name, tensor] : interpreter_->getSessionOutputAll(session_)) {
-    const auto type = data_type_of(*tensor);
+    const auto type = data_type(*tensor);
     if (!type) {
       KZ_LOG_ERROR("mnn: output {} has an unsupported type", name);
       return false;
     }
     output_names_.push_back(name);
     output_tensors_.push_back(tensor);
-    output_protos_.push_back({core::MemoryType::Cpu, *type, shape_of(*tensor), {}});
+    output_protos_.push_back({core::MemoryType::Cpu, *type, tensor_shape(*tensor), {}});
   }
   return true;
 }

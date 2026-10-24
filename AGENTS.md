@@ -30,6 +30,8 @@
   `source/memory/`，设备公共代码（context、memory、SDK 辅助）放
   `source/backend/<device>/`，设备 kernel（CUDA .cu、Metal shader 等）实现放其 `kernels/`、
   声明放 `source/include/backend/<device>/kernels/`，任务解码放 `source/postprocess/<task>/`。
+- `include/hrt/postprocess/<task>.hpp` 的任务工厂在 `source/postprocess/<task>.cpp` 实现；
+  `<task>/` 子目录只放具体后处理类型的解码实现及其构造入口。
 - 后端通过 SDK 根目录启用并定义 `HRT_USE_<BACKEND>`，见 `cmake/HybridrtBackends.cmake`；
   SDK 头文件和类型不得出现在公开头文件。新增后端只扩展
   `source/engine/<backend>_engine.*`、`source/CMakeLists.txt` 和 `Engine::create`；
@@ -123,6 +125,7 @@
 ## 函数与错误处理
 
 - 头文件只声明，实现放 .cpp，模板和 constexpr 除外。函数声明间空一行，同名重载（含构造函数）连续声明、不空行。
+- 同一文件实现多个类时，各类的方法分别连续放置，类内按头文件声明顺序实现，不在其中穿插其他类的方法。
 - 转发给成员的方法与被调方法同名（如 `Buffer::bytes()` 返回 `memory_->bytes()`），不另起名字造成歧义。
 - 类的每个访问区段（public、protected、private）内依次放：静态成员函数；构造函数、析构函数和拷贝、移动操作
   （依此顺序）；普通成员函数；虚函数（`virtual`、`override` 或纯虚）；以 `KZ_NODISCARD` 等属性宏开头的函数。
@@ -147,7 +150,7 @@
 - `examples/<name>.cpp` 对应 `hybridrt_example_<name>`，展示典型用法；
   资源通过命令行传入，图片用 OpenCV imgcodecs 读写。
 - 测试放 `tests/<模块>/<源文件>_test.cpp`，根目录只留构建入口，同源场景合并；
-  C API 测试放 `tests/c/`，绑定测试放 `bindings/python/tests/`（pytest）和
+  C API 测试放 `tests/capi/`，绑定测试放 `bindings/python/tests/`（pytest）和
   `bindings/rust/hybridrt/tests/`（cargo test），均经 CTest 运行。
   用例组为源文件大驼峰名加 Test，目标为 `hybridrt_test_<源文件>`，重名时加目录前缀。
   命令行程序和示例用 `tests/tools/run_tool.hpp` 做黑盒测试，检查退出码、输出、产物；

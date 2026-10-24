@@ -2,8 +2,7 @@
 // HybridRT | C++20 Model Inference Framework
 // File: source/postprocess/keypoint/general_keypoint.cpp
 // Description: Implements top-down keypoint decoding from heatmaps, SimCC
-//              distributions or coordinate outputs and the keypoint
-//              postprocessor factory.
+//              distributions or coordinate outputs.
 // -----------------------------------------------------------------------------
 
 #include <kitzoo/core/macro.hpp>
@@ -185,7 +184,7 @@ protected:
       const auto& region = transform.src_roi;
       object.box = {core::Rect2f(region), 1.0F, 0, -1};
       for (auto& keypoint : object.keypoints) {
-        keypoint.point = transform.to_source(core::Point2f{keypoint.point.x * width, keypoint.point.y * height});
+        keypoint.point = transform.reverse(core::Point2f{keypoint.point.x * width, keypoint.point.y * height});
         if (!scored)
           continue;
         if (param_.score_activation == KeypointScoreActivation::Sigmoid)
@@ -338,27 +337,6 @@ private:
 
 auto create_general_keypoint() -> UniquePtr<KeypointPostprocessor> {
   return std::make_unique<GeneralKeypoint>();
-}
-
-auto create_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor> {
-  if (type == "GeneralKeypoint")
-    return create_general_keypoint();
-  if (type == "GeneralYoloPose")
-    return create_general_yolo_pose();
-  if (type == "YoloV8Keypoint")
-    return create_yolov8_keypoint();
-  if (type == "Yolo26Keypoint")
-    return create_yolo26_keypoint();
-  if (type == "RtmoKeypoint")
-    return create_rtmo_keypoint();
-  if (type == "E2EKeypoint")
-    return create_e2e_keypoint();
-  return nullptr;
-}
-
-auto create_keypoint_postprocessor(std::string_view type, const kitzoo::json::Json& config,
-                                   const engine::Engine& engine) -> UniquePtr<KeypointPostprocessor> {
-  return check_init(create_keypoint(type), type, config, engine);
 }
 
 } // namespace hrt::postprocess

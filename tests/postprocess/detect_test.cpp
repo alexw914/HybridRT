@@ -107,7 +107,7 @@ TEST(DetectYoloV8Test, DecodesNchwFloat) {
   ASSERT_NE(postprocessor, nullptr);
 
   hrt::postprocess::DetectResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, yolov8_values(false, 1.0F))},
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, yolov8_values(false, 1.0F))},
                                      hrt::test::identity(16, 16)));
   expect_yolov8_box(result);
 }
@@ -123,7 +123,7 @@ TEST(DetectYoloV8Test, DecodesNhwcInt8) {
   quantized.reserve(real.size());
   for (const auto value : real)
     quantized.push_back(static_cast<std::int8_t>(value));
-  auto buffer = hrt::test::buffer_of(output, quantized);
+  auto buffer = hrt::test::create_buffer(output, quantized);
   buffer->set_quantization(0.2F, 0);
 
   hrt::postprocess::DetectResultMap result;
@@ -149,7 +149,7 @@ TEST(DetectYoloV8Test, FiltersInt8AtThreshold) {
   }
   at(8, 1, 0) = 10;
   at(8, 0, 1) = 9;
-  auto buffer = hrt::test::buffer_of(output, quantized);
+  auto buffer = hrt::test::create_buffer(output, quantized);
   buffer->set_quantization(0.2F, 10);
 
   hrt::postprocess::DetectResultMap result;
@@ -184,7 +184,7 @@ TEST(DetectYolo26Test, ReadsDistancesInCells) {
   for (std::size_t c = 0; c < cell.size(); ++c)
     values[c * 4 + 2] = cell[c];
   hrt::postprocess::DetectResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(16, 16)));
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, values)}, hrt::test::identity(16, 16)));
   ASSERT_EQ(result.at(0).size(), 1U);
   const auto& box = result.at(0)[0];
   // Center (0.5, 1.5) cells: (-0.5, 0.5) to (1, 2) cells, clipped at x = 0.
@@ -216,7 +216,7 @@ TEST(DetectYoloV5Test, KeepsLowObjectnessAboveThreshold) {
   values[5 * 4] = 10.0F;
 
   hrt::postprocess::DetectResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(16, 16)));
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, values)}, hrt::test::identity(16, 16)));
   ASSERT_EQ(result.at(0).size(), 1U);
   const auto& box = result.at(0)[0];
   EXPECT_FLOAT_EQ(box.rect.x, 0.0F);
@@ -259,7 +259,7 @@ TEST(DetectGeneralTest, AppliesNmsAndMapsToSource) {
   const hrt::preprocess::ImageTransform transform{{0, 10, 40, 20}, {0, 0, 80, 40}, {40, 40}};
 
   hrt::postprocess::DetectResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, transform));
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, values)}, transform));
   ASSERT_EQ(result.at(0).size(), 1U);
   const auto& box = result.at(0)[0];
   EXPECT_FLOAT_EQ(box.rect.x, 20.0F);
@@ -278,7 +278,7 @@ TEST(DetectGeneralTest, DecodesCenterSizeBoxes) {
 
   // Center (20, 15), size 10 x 6.
   hrt::postprocess::DetectResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of<float>(output, {20, 15, 10, 6, 0.9F})},
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer<float>(output, {20, 15, 10, 6, 0.9F})},
                                      hrt::test::identity(40, 40)));
   ASSERT_EQ(result.at(0).size(), 1U);
   const auto& box = result.at(0)[0];
@@ -299,7 +299,7 @@ TEST(DetectGeneralTest, SkipsNanCentersAndNonpositiveSizes) {
   const auto nan = std::numeric_limits<float>::quiet_NaN();
   const hrt::Vector<float> values{nan, 20, 20, 15, 15, 15, 10, 10, -1, 6, 6, 6, 0.9F, 0.9F, 0.9F};
   hrt::postprocess::DetectResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(40, 40)));
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, values)}, hrt::test::identity(40, 40)));
   ASSERT_EQ(result.at(0).size(), 1U);
   EXPECT_FLOAT_EQ(result.at(0)[0].rect.x, 15.0F);
 }
@@ -342,7 +342,7 @@ TEST(DetectGeneralTest, ScansScoreRowsAcrossBlocksAndTail) {
     // box(i): center 2i + 0.5, size 1; box(0) and box(-1) give cy 0.5 and size 1.
     const auto box = [](std::int64_t i) -> float { return i < 0 ? 1.0F : static_cast<float>(2 * i) + 0.5F; };
     hrt::postprocess::DetectResultMap result;
-    ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, rows(box, 0.5F, 0.9F))},
+    ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, rows(box, 0.5F, 0.9F))},
                                        hrt::test::identity(80, 80)));
     expect_hits(result, 0.0F, 2.0F);
   }
@@ -354,7 +354,7 @@ TEST(DetectGeneralTest, ScansScoreRowsAcrossBlocksAndTail) {
     // real = 0.5 * q: centers i + 0.5 and size 0.5; score q = 1 is exactly the
     // threshold and q = 2 passes.
     const auto box = [](std::int64_t i) -> std::int8_t { return static_cast<std::int8_t>(i < 0 ? 1 : 2 * i + 1); };
-    auto buffer = hrt::test::buffer_of<std::int8_t>(output, rows(box, std::int8_t{1}, std::int8_t{2}));
+    auto buffer = hrt::test::create_buffer<std::int8_t>(output, rows(box, std::int8_t{1}, std::int8_t{2}));
     buffer->set_quantization(0.5F, 0);
     hrt::postprocess::DetectResultMap result;
     ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(80, 80)));
@@ -370,7 +370,7 @@ TEST(DetectGeneralTest, DecodesInt8) {
   ASSERT_NE(postprocessor, nullptr);
 
   // real = 0.25 * (q - 4): cx, cy, w, h = 20, 20, 20, 20 and score 0.75.
-  auto buffer = hrt::test::buffer_of<std::int8_t>(output, {84, 84, 84, 84, 7});
+  auto buffer = hrt::test::create_buffer<std::int8_t>(output, {84, 84, 84, 84, 7});
   buffer->set_quantization(0.25F, 4);
 
   hrt::postprocess::DetectResultMap result;

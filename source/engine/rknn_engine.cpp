@@ -29,7 +29,7 @@ namespace hrt::engine {
 
 namespace {
 
-auto data_type_of(rknn_tensor_type type) -> std::optional<core::DataType> {
+auto data_type(rknn_tensor_type type) -> std::optional<core::DataType> {
   switch (type) {
   case RKNN_TENSOR_FLOAT32:
     return core::DataType::Float32;
@@ -46,12 +46,12 @@ auto data_type_of(rknn_tensor_type type) -> std::optional<core::DataType> {
   }
 }
 
-auto shape_of(const rknn_tensor_attr& attr) -> core::Shape {
+auto tensor_shape(const rknn_tensor_attr& attr) -> core::Shape {
   return core::Shape(attr.dims, attr.dims + attr.n_dims);
 }
 
 // Byte strides honoring the NPU's row (w_stride) and height (h_stride) padding.
-auto stride_of(const rknn_tensor_attr& attr, core::DataType type) -> core::Stride {
+auto tensor_stride(const rknn_tensor_attr& attr, core::DataType type) -> core::Stride {
   const auto dims = static_cast<std::size_t>(attr.n_dims);
   core::Stride stride(dims);
   stride[dims - 1] = attr.dims[dims - 1] * core::data_type_size(type);
@@ -148,14 +148,14 @@ auto RknnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
     default:
       break;
     }
-    const auto type = data_type_of(attr.type);
+    const auto type = data_type(attr.type);
     if (!type) {
       KZ_LOG_ERROR("rknn: input {} has an unsupported type", name);
       return false;
     }
     const auto memory = *type == core::DataType::Float32 ? core::MemoryType::Cpu : core::MemoryType::DmaBuffer;
     input_names_.push_back(name);
-    input_protos_.push_back({memory, *type, shape_of(attr), stride_of(attr, *type)});
+    input_protos_.push_back({memory, *type, tensor_shape(attr), tensor_stride(attr, *type)});
     input_attrs_.push_back(attr);
   }
 
@@ -173,13 +173,13 @@ auto RknnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
     outputs.emplace(attr.name, attr);
   }
   for (auto& [name, attr] : outputs) {
-    const auto type = data_type_of(attr.type);
+    const auto type = data_type(attr.type);
     auto mem = make_mem(rknn_create_mem(context_, attr.size));
     KZ_CHECK_RETURN(type.has_value(), false, "rknn: output {} has an unsupported data type", name);
     KZ_CHECK_MSG(mem != nullptr && rknn_set_io_mem(context_, mem.get(), &attr) == RKNN_SUCC,
                  "rknn: cannot prepare output {}", name);
     output_names_.push_back(name);
-    output_protos_.push_back({core::MemoryType::Cpu, *type, shape_of(attr), {}});
+    output_protos_.push_back({core::MemoryType::Cpu, *type, tensor_shape(attr), {}});
     output_attrs_.push_back(attr);
     output_mems_.push_back(std::move(mem));
   }

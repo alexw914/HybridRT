@@ -17,11 +17,11 @@
 
 namespace {
 
-auto size_of(const hrt::SharedPtr<const hrt::hrtc::Bytes>& bytes) -> std::size_t {
+auto blob_size(const hrt::SharedPtr<const hrt::hrtc::Bytes>& bytes) -> std::size_t {
   return bytes == nullptr ? 0 : bytes->size();
 }
 
-auto text_of(const hrt::SharedPtr<const hrt::hrtc::Bytes>& bytes) -> std::string_view {
+auto blob_text(const hrt::SharedPtr<const hrt::hrtc::Bytes>& bytes) -> std::string_view {
   return bytes == nullptr ? std::string_view{}
                           : std::string_view(reinterpret_cast<const char*>(bytes->data()), bytes->size());
 }
@@ -36,7 +36,7 @@ auto print(const hrt::hrtc::Package& package) -> void {
     for (std::size_t i = 0; i < algo.engines.size(); ++i) {
       const auto& engine = algo.engines[i];
       KZ_LOG_INFO("  [{}] {}  config={}B proto={}B data={}B", i, engine.engine_type, engine.config.size(),
-                  size_of(engine.proto), size_of(engine.data));
+                  blob_size(engine.proto), blob_size(engine.data));
     }
   }
 }
@@ -77,8 +77,8 @@ auto extract(const hrt::hrtc::Package& package, const std::filesystem::path& dir
       const auto& engine = algo.engines[i];
       const auto prefix = algo.name + ".engine." + std::to_string(i);
       if (!write_blob(dir / (prefix + ".config"), engine.config) ||
-          !write_blob(dir / (prefix + ".proto"), text_of(engine.proto)) ||
-          !write_blob(dir / (prefix + ".data"), text_of(engine.data)))
+          !write_blob(dir / (prefix + ".proto"), blob_text(engine.proto)) ||
+          !write_blob(dir / (prefix + ".data"), blob_text(engine.data)))
         return false;
     }
   }

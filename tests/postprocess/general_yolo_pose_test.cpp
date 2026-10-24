@@ -34,7 +34,7 @@ TEST(GeneralYoloPoseTest, KeepsTheBestBoxWithItsKeypoints) {
   // Network region (0, 10, 40x20) came from source region (0, 0, 80x40).
   const hrt::preprocess::ImageTransform transform{{0, 10, 40, 20}, {0, 0, 80, 40}, {40, 40}};
   hrt::postprocess::KeypointResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, transform));
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, values)}, transform));
 
   ASSERT_EQ(result.at(0).size(), 1U);
   const auto& object = result.at(0)[0];

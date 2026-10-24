@@ -69,7 +69,7 @@ TEST(E2EDetectTest, MapsRowsWithoutNms) {
   // The 40 x 20 band at y 10 of the input holds the 80 x 40 source region at (100, 200).
   const hrt::preprocess::ImageTransform transform{{0, 10, 40, 20}, {100, 200, 80, 40}, {40, 40}};
   hrt::postprocess::DetectResultMap result;
-  ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of(output, values)}, transform));
+  ASSERT_TRUE(decoder->process(result, {hrt::test::create_buffer(output, values)}, transform));
   ASSERT_EQ(result.size(), 1U);
   ASSERT_EQ(result.at(0).size(), 2U);
   const auto& box = result.at(0)[0];
@@ -89,7 +89,7 @@ TEST(E2EDetectTest, DequantizesAndClipsToSourceRegion) {
       "confidence_threshold":[0.25]})"),
                                                                engine);
   // real = q: box (-20, 30)-(60, 90), score 1 after scale, class 1.
-  auto buffer = hrt::test::buffer_of<std::int8_t>(output, {-20, 30, 60, 90, 100, 1});
+  auto buffer = hrt::test::create_buffer<std::int8_t>(output, {-20, 30, 60, 90, 100, 1});
   hrt::postprocess::DetectResultMap result;
   ASSERT_TRUE(decoder->process(result, {buffer}, hrt::test::identity(100, 100)));
   ASSERT_TRUE(result.contains(1));

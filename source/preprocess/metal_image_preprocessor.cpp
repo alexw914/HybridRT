@@ -27,8 +27,6 @@ struct Params {
   Array<float, 3> fill, mean, scale;
 };
 
-static_assert(sizeof(Params) == 92);
-
 // Views host memory without copying. Metal needs page-aligned bounds, so the buffer spans the enclosing pages and
 // `offset` locates `data`; the kernel only touches the `bytes` that follow it.
 auto wrap_host(id<MTLDevice> device, const void* data, std::size_t bytes, NSUInteger& offset) -> id<MTLBuffer> {

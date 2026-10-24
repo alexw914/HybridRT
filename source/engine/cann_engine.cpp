@@ -17,7 +17,7 @@ namespace hrt::engine {
 
 namespace {
 
-auto data_type_of(aclDataType type) -> std::optional<core::DataType> {
+auto data_type(aclDataType type) -> std::optional<core::DataType> {
   switch (type) {
   case ACL_FLOAT:
     return core::DataType::Float32;
@@ -36,7 +36,7 @@ auto data_type_of(aclDataType type) -> std::optional<core::DataType> {
   }
 }
 
-auto shape_of(const aclmdlIODims& dims) -> core::Shape {
+auto tensor_shape(const aclmdlIODims& dims) -> core::Shape {
   return core::Shape(dims.dims, dims.dims + dims.dimCount);
 }
 
@@ -105,24 +105,24 @@ auto CannEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
   for (const auto& [name, index] :
        sorted_by_name(input_count, [&](std::size_t i) { return aclmdlGetInputNameByIndex(desc_, i); })) {
     aclmdlIODims dims{};
-    const auto type = data_type_of(aclmdlGetInputDataType(desc_, index));
+    const auto type = data_type(aclmdlGetInputDataType(desc_, index));
     KZ_CHECK_MSG(aclmdlGetInputDimsV2(desc_, index, &dims) == ACL_SUCCESS, "cann: aclmdlGetInputDimsV2 failed: {}",
                  aclGetRecentErrMsg());
     KZ_CHECK_RETURN(type.has_value(), false, "cann: input {} has an unsupported data type", index);
     input_names_.push_back(name);
     // VPC writes the inputs, so they come from the DVPP pool with its row padding.
-    input_protos_.push_back({core::MemoryType::Dvpp, *type, shape_of(dims), {}});
+    input_protos_.push_back({core::MemoryType::Dvpp, *type, tensor_shape(dims), {}});
     input_indexes_.push_back(index);
   }
   for (const auto& [name, index] : sorted_by_name(
            aclmdlGetNumOutputs(desc_), [&](std::size_t i) { return aclmdlGetOutputNameByIndex(desc_, i); })) {
     aclmdlIODims dims{};
-    const auto type = data_type_of(aclmdlGetOutputDataType(desc_, index));
+    const auto type = data_type(aclmdlGetOutputDataType(desc_, index));
     KZ_CHECK_MSG(aclmdlGetOutputDims(desc_, index, &dims) == ACL_SUCCESS, "cann: aclmdlGetOutputDims failed: {}",
                  aclGetRecentErrMsg());
     KZ_CHECK_RETURN(type.has_value(), false, "cann: output {} has an unsupported data type", index);
     output_names_.push_back(name);
-    output_protos_.push_back({core::MemoryType::Acl, *type, shape_of(dims), {}});
+    output_protos_.push_back({core::MemoryType::Acl, *type, tensor_shape(dims), {}});
     output_indexes_.push_back(index);
   }
   input_staging_.resize(input_protos_.size());

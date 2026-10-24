@@ -99,7 +99,7 @@ auto load_plugins(const Vector<String>& libraries) -> void {
   }
 }
 
-auto data_type_of(nvinfer1::DataType type) -> std::optional<core::DataType> {
+auto data_type(nvinfer1::DataType type) -> std::optional<core::DataType> {
   switch (type) {
   case nvinfer1::DataType::kFLOAT:
     return core::DataType::Float32;
@@ -120,7 +120,7 @@ auto data_type_of(nvinfer1::DataType type) -> std::optional<core::DataType> {
   }
 }
 
-auto shape_of(const nvinfer1::Dims& dims) -> core::Shape {
+auto tensor_shape(const nvinfer1::Dims& dims) -> core::Shape {
   return core::Shape(dims.d, dims.d + dims.nbDims);
 }
 
@@ -158,12 +158,13 @@ auto TensorrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo:
   for (int i = 0; i < engine_->getNbIOTensors(); ++i)
     tensors.emplace(engine_->getIOTensorName(i));
   for (const auto& name : tensors) {
-    const auto type = data_type_of(engine_->getTensorDataType(name.c_str()));
+    const auto type = data_type(engine_->getTensorDataType(name.c_str()));
     if (!type) {
       KZ_LOG_ERROR("tensorrt: tensor {} has an unsupported type", name);
       return false;
     }
-    const core::BufferProto proto{core::MemoryType::Cuda, *type, shape_of(engine_->getTensorShape(name.c_str())), {}};
+    const core::BufferProto proto{
+        core::MemoryType::Cuda, *type, tensor_shape(engine_->getTensorShape(name.c_str())), {}};
     if (engine_->getTensorIOMode(name.c_str()) == nvinfer1::TensorIOMode::kINPUT) {
       input_names_.push_back(name);
       input_protos_.push_back(proto);
@@ -189,7 +190,7 @@ auto TensorrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo:
                     "tensorrt: input {} shape is outside the engine's optimization profile", input_names_[i]);
   }
   for (std::size_t i = 0; i < output_protos_.size(); ++i) {
-    output_protos_[i].shape = shape_of(context_->getTensorShape(output_names_[i].c_str()));
+    output_protos_[i].shape = tensor_shape(context_->getTensorShape(output_names_[i].c_str()));
     KZ_CHECK_RETURN(!core::is_dynamic(output_protos_[i].shape), false, "tensorrt: output {} has a data-dependent shape",
                     output_names_[i]);
   }

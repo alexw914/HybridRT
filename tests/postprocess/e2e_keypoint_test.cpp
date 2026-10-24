@@ -75,7 +75,7 @@ TEST(E2EKeypointTest, MapsRowsAndKeypointsWithoutNms) {
   // The 40 x 20 band at y 10 of the input holds the 80 x 40 source region at (100, 200).
   const hrt::preprocess::ImageTransform transform{{0, 10, 40, 20}, {100, 200, 80, 40}, {40, 40}};
   hrt::postprocess::KeypointResultMap result;
-  ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of(output, values)}, transform));
+  ASSERT_TRUE(decoder->process(result, {hrt::test::create_buffer(output, values)}, transform));
   ASSERT_EQ(result.size(), 1U);
   ASSERT_EQ(result.at(0).size(), 2U);
   const auto& object = result.at(0)[0];

@@ -29,7 +29,7 @@ TEST(GeneralKeypointTest, MapsNormalizedPointsToSource) {
   hrt::postprocess::KeypointResultMap result;
   result[0].emplace_back();
   ASSERT_TRUE(
-      postprocessor->process(result, {hrt::test::buffer_of<float>(output, {0.5F, 0.25F, 1.0F, 1.0F})}, transform));
+      postprocessor->process(result, {hrt::test::create_buffer<float>(output, {0.5F, 0.25F, 1.0F, 1.0F})}, transform));
   ASSERT_EQ(result.size(), 1U);
   ASSERT_EQ(result.at(0).size(), 1U);
   ASSERT_EQ(result.at(0)[0].keypoints.size(), 2U);
@@ -52,7 +52,7 @@ TEST(GeneralKeypointTest, DequantizesInt8Points) {
   ASSERT_NE(postprocessor, nullptr);
 
   // real = (q + 100) / 200: (0.5, 0.25).
-  auto buffer = hrt::test::buffer_of<std::int8_t>(output, {0, -50});
+  auto buffer = hrt::test::create_buffer<std::int8_t>(output, {0, -50});
   buffer->set_quantization(0.005F, -100);
   hrt::postprocess::KeypointResultMap result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(16, 16)));
@@ -74,7 +74,7 @@ TEST(GeneralKeypointTest, RefinesHeatmapPeak) {
   hrt::Vector<float> heatmap(20, 0.1F);
   heatmap[1 * 5 + 2] = 0.9F;
   hrt::postprocess::KeypointResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, heatmap)}, hrt::test::identity(10, 8)));
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, heatmap)}, hrt::test::identity(10, 8)));
   ASSERT_EQ(result.at(0).size(), 1U);
   EXPECT_NEAR(result.at(0)[0].keypoints[0].point.x, 4.0F, 0.5F);
   EXPECT_NEAR(result.at(0)[0].keypoints[0].point.y, 2.0F, 0.5F);
@@ -126,8 +126,8 @@ TEST(GeneralKeypointTest, DecodesChannelFirstPoints) {
   auto postprocessor = hrt::postprocess::create_keypoint_postprocessor(
       "GeneralKeypoint", kitzoo::json::Json::parse(R"({"general_keypoint_type":"point_channel_first"})"), engine);
   hrt::postprocess::KeypointResultMap result;
-  ASSERT_TRUE(
-      postprocessor->process(result, {hrt::test::buffer_of<float>(output, {0.25F, 0.5F})}, hrt::test::identity(8, 8)));
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer<float>(output, {0.25F, 0.5F})},
+                                     hrt::test::identity(8, 8)));
   ASSERT_EQ(result.at(0)[0].keypoints.size(), 1U);
   EXPECT_FLOAT_EQ(result.at(0)[0].keypoints[0].point.x, 2.0F);
   EXPECT_FLOAT_EQ(result.at(0)[0].keypoints[0].point.y, 4.0F);
@@ -141,11 +141,11 @@ TEST(GeneralKeypointTest, DecodesVisibilityDistributions) {
   auto postprocessor = hrt::postprocess::create_keypoint_postprocessor(
       "GeneralKeypoint", kitzoo::json::Json::parse(R"({"general_keypoint_type":"point_with_visible"})"), engine);
   hrt::postprocess::KeypointResultMap result;
-  ASSERT_TRUE(
-      postprocessor->process(result,
-                             {hrt::test::buffer_of<float>(x, {0, 1, 0, 0}), hrt::test::buffer_of<float>(y, {0, 1}),
-                              hrt::test::buffer_of<float>(visible, {0.1F, 0.2F, 0.7F})},
-                             hrt::test::identity(8, 8)));
+  ASSERT_TRUE(postprocessor->process(result,
+                                     {hrt::test::create_buffer<float>(x, {0, 1, 0, 0}),
+                                      hrt::test::create_buffer<float>(y, {0, 1}),
+                                      hrt::test::create_buffer<float>(visible, {0.1F, 0.2F, 0.7F})},
+                                     hrt::test::identity(8, 8)));
   ASSERT_EQ(result.at(0)[0].keypoints.size(), 1U);
   const auto& point = result.at(0)[0].keypoints[0];
   EXPECT_FLOAT_EQ(point.point.x, 2.0F);
@@ -179,7 +179,8 @@ TEST(GeneralKeypointTest, RefinesHeatmapToSubpixelPeak) {
     const kitzoo::json::Json config{{"general_keypoint_type", "heatmap"}, {"heatmap_refine", refine}};
     auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("GeneralKeypoint", config, engine);
     hrt::postprocess::KeypointResultMap result;
-    ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, heatmap)}, hrt::test::identity(192, 256)));
+    ASSERT_TRUE(
+        postprocessor->process(result, {hrt::test::create_buffer(output, heatmap)}, hrt::test::identity(192, 256)));
     const auto& points = result.at(0)[0].keypoints;
     ASSERT_EQ(points.size(), 2U);
     if (refine == hrt::String("dark")) {
@@ -206,7 +207,8 @@ TEST(GeneralKeypointTest, DecodesUdpHeatmapsAgainstCornerCells) {
     const kitzoo::json::Json config{{"general_keypoint_type", "heatmap_udp"}, {"heatmap_refine", refine}};
     auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("GeneralKeypoint", config, engine);
     hrt::postprocess::KeypointResultMap result;
-    ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, heatmap)}, hrt::test::identity(192, 256)));
+    ASSERT_TRUE(
+        postprocessor->process(result, {hrt::test::create_buffer(output, heatmap)}, hrt::test::identity(192, 256)));
     const auto& points = result.at(0)[0].keypoints;
     ASSERT_EQ(points.size(), 2U);
     if (refine == hrt::String("dark")) {
@@ -235,7 +237,7 @@ TEST(GeneralKeypointTest, KeepsArgmaxAndHidesLogitHeatmapPeaks) {
   auto postprocessor = hrt::postprocess::create_keypoint_postprocessor(
       "GeneralKeypoint", kitzoo::json::Json::parse(R"({"general_keypoint_type": "heatmap"})"), engine);
   hrt::postprocess::KeypointResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, heatmap)}, hrt::test::identity(64, 64)));
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, heatmap)}, hrt::test::identity(64, 64)));
   const auto& points = result.at(0)[0].keypoints;
   EXPECT_FLOAT_EQ(points[0].point.x, 36.0F);
   EXPECT_FLOAT_EQ(points[0].point.y, 28.0F);
@@ -259,7 +261,7 @@ TEST(GeneralKeypointTest, DecodesSimccDistributions) {
   const kitzoo::json::Json config{{"general_keypoint_type", "simcc"}, {"keypoint_threshold", 0.3F}};
   auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("GeneralKeypoint", config, engine);
   hrt::postprocess::KeypointResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(x, xs), hrt::test::buffer_of(y, ys)},
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(x, xs), hrt::test::create_buffer(y, ys)},
                                      hrt::test::identity(8, 4)));
   ASSERT_EQ(result.at(0).size(), 1U);
   const auto& points = result.at(0)[0].keypoints;
@@ -283,7 +285,8 @@ TEST(GeneralKeypointTest, AppliesSigmoidToScores) {
   auto postprocessor = hrt::postprocess::create_keypoint_postprocessor("GeneralKeypoint", config, engine);
   hrt::postprocess::KeypointResultMap result;
   ASSERT_TRUE(postprocessor->process(
-      result, {hrt::test::buffer_of<float>(x, {-1, -3, -2, -2}), hrt::test::buffer_of<float>(y, {-2, -2, -0.5F, -3})},
+      result,
+      {hrt::test::create_buffer<float>(x, {-1, -3, -2, -2}), hrt::test::create_buffer<float>(y, {-2, -2, -0.5F, -3})},
       hrt::test::identity(2, 2)));
   const auto& point = result.at(0)[0].keypoints[0];
   EXPECT_FLOAT_EQ(point.score, 1.0F / (1.0F + std::exp(1.0F)));

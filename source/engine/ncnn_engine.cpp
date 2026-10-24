@@ -20,7 +20,7 @@ namespace hrt::engine {
 
 namespace {
 
-auto data_type_of(const ncnn::Mat& mat) -> std::optional<core::DataType> {
+auto data_type(const ncnn::Mat& mat) -> std::optional<core::DataType> {
   switch (mat.elemsize) {
   case 1:
     return core::DataType::Uint8;
@@ -32,7 +32,7 @@ auto data_type_of(const ncnn::Mat& mat) -> std::optional<core::DataType> {
 }
 
 // Element shape with a leading batch of 1: [1, (c, (d,)) (h,) w].
-auto shape_of(const ncnn::Mat& mat) -> core::Shape {
+auto tensor_shape(const ncnn::Mat& mat) -> core::Shape {
   switch (mat.dims) {
   case 1:
     return {1, mat.w};
@@ -46,7 +46,7 @@ auto shape_of(const ncnn::Mat& mat) -> core::Shape {
 }
 
 // Byte strides over the byte shape; channels are cstep apart.
-auto stride_of(const ncnn::Mat& mat) -> core::Stride {
+auto tensor_stride(const ncnn::Mat& mat) -> core::Stride {
   const auto row = static_cast<std::size_t>(mat.w) * mat.elemsize;
   const auto channel = mat.cstep * mat.elemsize;
   const auto total = channel * static_cast<std::size_t>(mat.c);
@@ -125,26 +125,26 @@ auto NcnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
     const auto& blob = net_->blobs()[static_cast<std::size_t>(index)];
     ncnn::Mat mat;
     mat.create_like(blob.shape);
-    const auto type = data_type_of(mat);
+    const auto type = data_type(mat);
     // Inputs are wrapped in place, which needs densely packed channels.
     if (mat.dims == 0 || !type || mat.cstep != static_cast<std::size_t>(mat.w * mat.h * mat.d)) {
       KZ_LOG_ERROR("ncnn: input {} needs a fixed shape, packed channels and uint8/float32 data", blob.name);
       return false;
     }
     input_names_.push_back(blob.name);
-    input_protos_.push_back({memory::host_engine_input_memory(), *type, shape_of(mat), stride_of(mat)});
+    input_protos_.push_back({memory::host_engine_input_memory(), *type, tensor_shape(mat), tensor_stride(mat)});
   }
   for (auto index : output_indexes_) {
     const auto& blob = net_->blobs()[static_cast<std::size_t>(index)];
     ncnn::Mat mat;
     mat.create_like(blob.shape);
-    const auto type = data_type_of(mat);
+    const auto type = data_type(mat);
     if (mat.dims == 0 || !type) {
       KZ_LOG_ERROR("ncnn: output {} needs a fixed shape and uint8/float32 data", blob.name);
       return false;
     }
     output_names_.push_back(blob.name);
-    output_protos_.push_back({core::MemoryType::Cpu, *type, shape_of(mat), stride_of(mat)});
+    output_protos_.push_back({core::MemoryType::Cpu, *type, tensor_shape(mat), tensor_stride(mat)});
   }
   output_mats_.resize(output_indexes_.size());
   return true;
@@ -187,7 +187,7 @@ auto NcnnEngine::inference(core::Stream* stream) -> bool {
       return false;
     }
     auto& output = *outputs_[i];
-    const auto stride = stride_of(mat);
+    const auto stride = tensor_stride(mat);
     auto view =
         core::Memory::wrap(core::MemoryType::Cpu, mat.data, 0, stride.front(), output.memory()->shape(), stride);
     if (view == nullptr || !core::Memory::copy(*output.memory(), *view, core::CopyPolicy::DirectCopy, stream))

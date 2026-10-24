@@ -37,7 +37,7 @@ inline auto proto(core::DataType type, core::Shape shape) -> core::BufferProto {
 
 // Host buffer holding `values` in the proto's shape.
 template <typename T>
-auto buffer_of(const core::BufferProto& proto, const hrt::Vector<T>& values) -> hrt::SharedPtr<core::Buffer> {
+auto create_buffer(const core::BufferProto& proto, const hrt::Vector<T>& values) -> hrt::SharedPtr<core::Buffer> {
   auto buffer = std::make_shared<core::Buffer>(proto);
   auto* data = static_cast<T*>(buffer->memory()->mutable_cpu());
   std::copy(values.begin(), values.end(), data);

@@ -23,7 +23,7 @@ enum class Layout {
   Yuv,
 };
 
-auto layout_of(core::ImageFormat format) -> Layout {
+auto image_layout(core::ImageFormat format) -> Layout {
   switch (format) {
   case core::ImageFormat::InterBgr:
   case core::ImageFormat::InterRgb:
@@ -46,12 +46,12 @@ auto layout_of(core::ImageFormat format) -> Layout {
   return Layout::Unsupported;
 }
 
-auto rgb_order(core::ImageFormat format) -> bool {
+auto is_rgb(core::ImageFormat format) -> bool {
   return format == core::ImageFormat::InterRgb || format == core::ImageFormat::PlanarRgb ||
          format == core::ImageFormat::InterRgba;
 }
 
-auto depth_of(core::DataType type) -> int {
+auto opencv_depth(core::DataType type) -> int {
   switch (type) {
   case core::DataType::Uint8:
     return CV_8U;
@@ -97,16 +97,16 @@ auto mutable_host(core::Image& image, core::Stream* stream) -> std::byte* {
 
 // Whole interleaved or YUV image; byte stride[1] is the row pitch.
 auto inter(const core::Image& image, std::byte* base) -> cv::Mat {
-  const auto layout = layout_of(image.format());
+  const auto layout = image_layout(image.format());
   const auto rows = layout == Layout::Yuv ? image.size().height * 3 / 2 : image.size().height;
   const auto channels = layout == Layout::Inter3 ? 3 : (layout == Layout::Inter4 ? 4 : 1);
-  return {rows, image.size().width, CV_MAKETYPE(depth_of(image.data_type()), channels), base, image.stride()[1]};
+  return {rows, image.size().width, CV_MAKETYPE(opencv_depth(image.data_type()), channels), base, image.stride()[1]};
 }
 
 // One plane of a planar or gray image; stride[1] steps planes, stride[2] rows.
 auto plane(const core::Image& image, std::byte* base, int index) -> cv::Mat {
   const auto& stride = image.stride();
-  return {image.size().height, image.size().width, CV_MAKETYPE(depth_of(image.data_type()), 1),
+  return {image.size().height, image.size().width, CV_MAKETYPE(opencv_depth(image.data_type()), 1),
           base + static_cast<std::size_t>(index) * stride[1], stride[2]};
 }
 
@@ -150,9 +150,9 @@ auto CpuImagePreprocessor::accepts(core::MemoryType type) const -> bool {
 }
 
 auto CpuImagePreprocessor::supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool {
-  const auto dst_layout = layout_of(dst.format());
-  const auto src_layout = layout_of(src.format());
-  if (depth_of(dst.data_type()) < 0)
+  const auto dst_layout = image_layout(dst.format());
+  const auto src_layout = image_layout(src.format());
+  if (opencv_depth(dst.data_type()) < 0)
     return false;
   switch (op) {
   case ImageOperation::Fill:
@@ -196,7 +196,7 @@ auto CpuImagePreprocessor::fill(core::Image& image, const core::Rect& roi, const
   if (base == nullptr)
     return false;
   const auto rect = cv_rect(roi);
-  switch (layout_of(image.format())) {
+  switch (image_layout(image.format())) {
   case Layout::Planar3:
     for (int i = 0; i < 3; ++i)
       plane(image, base, i)(rect).setTo(scalar(color)[i]);
@@ -227,8 +227,8 @@ auto CpuImagePreprocessor::resize(core::Image& dst, const core::Rect& dst_roi, c
   const auto to = cv_rect(dst_roi);
   const auto from = cv_rect(src_roi);
   const auto method = interpolation(mode);
-  const auto swap = rgb_order(dst.format()) != rgb_order(src.format());
-  switch (layout_of(dst.format())) {
+  const auto swap = is_rgb(dst.format()) != is_rgb(src.format());
+  switch (image_layout(dst.format())) {
   case Layout::Planar3:
     for (int i = 0; i < 3; ++i) {
       cv::Mat out = plane(dst, dst_base, swap ? 2 - i : i)(to);
@@ -260,9 +260,9 @@ auto CpuImagePreprocessor::convert(core::Image& dst, const core::Image& src, cor
   auto* src_base = host(src, stream);
   if (dst_base == nullptr || src_base == nullptr)
     return false;
-  const auto depth = depth_of(dst.data_type());
-  const auto dst_layout = layout_of(dst.format());
-  const auto src_layout = layout_of(src.format());
+  const auto depth = opencv_depth(dst.data_type());
+  const auto dst_layout = image_layout(dst.format());
+  const auto src_layout = image_layout(src.format());
 
   if (src_layout == Layout::Gray) {
     plane(src, src_base, 0).convertTo(plane(dst, dst_base, 0), depth);
@@ -270,7 +270,7 @@ auto CpuImagePreprocessor::convert(core::Image& dst, const core::Image& src, cor
   }
 
   if (src_layout == Layout::Planar3) {
-    const auto swap = rgb_order(dst.format()) != rgb_order(src.format());
+    const auto swap = is_rgb(dst.format()) != is_rgb(src.format());
     if (dst_layout == Layout::Planar3) {
       for (int i = 0; i < 3; ++i)
         plane(src, src_base, i).convertTo(plane(dst, dst_base, swap ? 2 - i : i), depth);
@@ -285,7 +285,7 @@ auto CpuImagePreprocessor::convert(core::Image& dst, const core::Image& src, cor
 
   // Interleaved sources: bring YUV and RGBA to 3-channel BGR first.
   cv::Mat color = inter(src, src_base);
-  auto rgb = rgb_order(src.format());
+  auto rgb = is_rgb(src.format());
   if (src_layout == Layout::Yuv) {
     cv::cvtColor(color, bgr_, yuv_to_bgr_code(src.format()));
     color = bgr_;
@@ -301,7 +301,7 @@ auto CpuImagePreprocessor::convert(core::Image& dst, const core::Image& src, cor
     planes_[0].convertTo(plane(dst, dst_base, 0), depth);
     return true;
   }
-  const auto swap = rgb != rgb_order(dst.format());
+  const auto swap = rgb != is_rgb(dst.format());
   if (dst_layout == Layout::Inter3) {
     if (swap) {
       cv::cvtColor(color, bgr_, cv::COLOR_BGR2RGB);
@@ -319,8 +319,8 @@ auto CpuImagePreprocessor::convert(core::Image& dst, const core::Image& src, cor
 auto CpuImagePreprocessor::convert_normalize(core::Image& dst, const core::Image& src, const core::Rect& roi,
                                              const Array<float, 3>& mean, const Array<float, 3>& stddev,
                                              core::Stream* stream) -> bool {
-  if (layout_of(src.format()) != Layout::Inter3 || src.data_type() != core::DataType::Uint8 ||
-      layout_of(dst.format()) != Layout::Planar3 || dst.data_type() != core::DataType::Float32)
+  if (image_layout(src.format()) != Layout::Inter3 || src.data_type() != core::DataType::Uint8 ||
+      image_layout(dst.format()) != Layout::Planar3 || dst.data_type() != core::DataType::Float32)
     return convert(dst, src, stream) && normalize(dst, roi, mean, stddev, stream);
 
   auto* dst_base = mutable_host(dst, stream);
@@ -328,7 +328,7 @@ auto CpuImagePreprocessor::convert_normalize(core::Image& dst, const core::Image
   if (dst_base == nullptr || src_base == nullptr)
     return false;
   cv::split(inter(src, src_base), planes_.data());
-  const auto swap = rgb_order(src.format()) != rgb_order(dst.format());
+  const auto swap = is_rgb(src.format()) != is_rgb(dst.format());
   const auto rect = cv_rect(roi);
   for (int i = 0; i < 3; ++i) {
     const auto c = static_cast<std::size_t>(i);
@@ -345,8 +345,8 @@ auto CpuImagePreprocessor::convert_normalize(core::Image& dst, const core::Image
 
 auto CpuImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
                                           const ImagePreprocessorParam& /*param*/) const -> bool {
-  return layout_of(src.format()) == Layout::Inter3 && src.data_type() == core::DataType::Uint8 &&
-         layout_of(dst.format()) == Layout::Planar3 && dst.data_type() == core::DataType::Float32;
+  return image_layout(src.format()) == Layout::Inter3 && src.data_type() == core::DataType::Uint8 &&
+         image_layout(dst.format()) == Layout::Planar3 && dst.data_type() == core::DataType::Float32;
 }
 
 auto CpuImagePreprocessor::fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
@@ -367,7 +367,7 @@ auto CpuImagePreprocessor::fused(core::Image& dst, const ImageTransform& transfo
   cv::split(pixels, planes.data());
 
   const bool normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
-  const auto swap = rgb_order(src.format()) != rgb_order(dst.format());
+  const auto swap = is_rgb(src.format()) != is_rgb(dst.format());
   const auto whole = cv_rect(dst.rect());
   const auto region = cv_rect(roi);
   for (int i = 0; i < 3; ++i) {
@@ -396,7 +396,7 @@ auto CpuImagePreprocessor::normalize(core::Image& image, const core::Rect& roi, 
   if (base == nullptr)
     return false;
   const auto rect = cv_rect(roi);
-  const auto layout = layout_of(image.format());
+  const auto layout = image_layout(image.format());
   if (layout == Layout::Inter3) {
     cv::Mat region = inter(image, base)(rect);
     cv::subtract(region, scalar(mean), region);

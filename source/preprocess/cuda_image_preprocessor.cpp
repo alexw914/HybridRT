@@ -18,7 +18,7 @@ namespace hrt::preprocess {
 
 namespace {
 
-auto rgb_order(core::ImageFormat format) -> bool {
+auto is_rgb(core::ImageFormat format) -> bool {
   return format == core::ImageFormat::InterRgb || format == core::ImageFormat::PlanarRgb;
 }
 
@@ -30,7 +30,7 @@ auto is_planar(core::ImageFormat format) -> bool {
   return format == core::ImageFormat::PlanarBgr || format == core::ImageFormat::PlanarRgb;
 }
 
-auto input_format_of(core::ImageFormat format) -> std::optional<backend::InputFormat> {
+auto input_format(core::ImageFormat format) -> std::optional<backend::InputFormat> {
   switch (format) {
   case core::ImageFormat::InterBgr:
     return backend::InputFormat::Bgr;
@@ -66,12 +66,12 @@ auto at(const core::Image& image, std::initializer_list<std::int64_t> index, cor
 }
 
 // Kernel parameters for writing `dst` from `src` as `transform` places it; empty if an address is missing.
-auto make_preprocess_param(const core::Image& dst, const ImageTransform& transform, const core::Image& src,
-                           const ImagePreprocessorParam& param, core::Stream* stream)
+auto create_preprocess_param(const core::Image& dst, const ImageTransform& transform, const core::Image& src,
+                             const ImagePreprocessorParam& param, core::Stream* stream)
     -> std::optional<backend::PreprocessParam> {
   const auto& roi = transform.dst_roi;
   const auto& from = transform.src_roi;
-  const auto source = input_format_of(src.format());
+  const auto source = input_format(src.format());
   const auto* region = at(src, {from.y, from.x}, stream);
   const auto base = dst.memory()->mutable_device(stream);
   if (!source || region == nullptr || base == 0 || roi.empty() || from.empty())
@@ -108,7 +108,7 @@ auto make_preprocess_param(const core::Image& dst, const ImageTransform& transfo
   // As the CPU flow: YUV converts to BGR, and padding is the default color, in input channel order, as a uint8
   // pixel, normalized unless only the ROI is.
   const auto normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
-  const auto swap = rgb_order(src.format()) != rgb_order(dst.format());
+  const auto swap = is_rgb(src.format()) != is_rgb(dst.format());
   for (int i = 0; i < 3; ++i) {
     const auto c = static_cast<std::size_t>(i);
     const auto alpha = normalize ? 1.0 / static_cast<double>(param.std[c]) : 1.0;
@@ -154,14 +154,14 @@ auto CudaImagePreprocessor::normalize(core::Image& /*image*/, const core::Rect& 
 auto CudaImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
                                            const ImagePreprocessorParam& param) const -> bool {
   const auto normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
-  return input_format_of(src.format()).has_value() && src.data_type() == core::DataType::Uint8 &&
+  return input_format(src.format()).has_value() && src.data_type() == core::DataType::Uint8 &&
          (is_interleaved(dst.format()) || is_planar(dst.format())) &&
          (dst.data_type() == core::DataType::Float32 || (dst.data_type() == core::DataType::Uint8 && !normalize));
 }
 
 auto CudaImagePreprocessor::fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
                                   const ImagePreprocessorParam& param, core::Stream* stream) -> bool {
-  const auto preprocess_param = make_preprocess_param(dst, transform, src, param, stream);
+  const auto preprocess_param = create_preprocess_param(dst, transform, src, param, stream);
   if (!preprocess_param)
     return false;
   const auto status = backend::launch_cuda_preprocess(&*preprocess_param, 1, backend::cuda_stream(stream));
@@ -174,7 +174,7 @@ auto CudaImagePreprocessor::fused_batch(std::span<core::Image* const> dsts, std:
                                         core::Stream* stream) -> bool {
   params_.clear();
   for (std::size_t i = 0; i < dsts.size(); ++i) {
-    const auto preprocess_param = make_preprocess_param(*dsts[i], transforms[i], *srcs[i], param, stream);
+    const auto preprocess_param = create_preprocess_param(*dsts[i], transforms[i], *srcs[i], param, stream);
     if (!preprocess_param)
       return false;
     params_.push_back(*preprocess_param);

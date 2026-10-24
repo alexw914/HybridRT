@@ -53,7 +53,7 @@ struct LoadedEngine {
 
 // Device a preprocessor needs as the current context; CPU-side ones (RGA
 // included) and auto, which follows the engine, need none.
-auto device_of(preprocess::ImagePreprocessorType type) -> core::DeviceType {
+auto device_type(preprocess::ImagePreprocessorType type) -> core::DeviceType {
   switch (type) {
   case preprocess::ImagePreprocessorType::Cuda:
     return core::DeviceType::Cuda;
@@ -68,7 +68,7 @@ auto device_of(preprocess::ImagePreprocessorType type) -> core::DeviceType {
 auto preprocess_device(const hrtc::AlgoParam& algo) -> core::DeviceType {
   const auto reader = read_config(algo);
   const auto section = reader.raw().value("preprocess", kitzoo::json::Json::object());
-  return device_of(section.get<preprocess::ImagePreprocessorParam>().device);
+  return device_type(section.get<preprocess::ImagePreprocessorParam>().device);
 }
 
 // First engine of `algo`, in package order, that loads on `context`, or on a

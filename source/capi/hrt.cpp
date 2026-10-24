@@ -149,7 +149,7 @@ auto fail_logged(HrtStatus status, std::string_view fallback) -> HrtStatus {
   return fail(status, logged_error().empty() ? hrt::String{fallback} : logged_error());
 }
 
-auto device_of(hrt::preprocess::ImagePreprocessorType type) -> core::DeviceType {
+auto device_type(hrt::preprocess::ImagePreprocessorType type) -> core::DeviceType {
   switch (type) {
   case hrt::preprocess::ImagePreprocessorType::Cuda:
     return core::DeviceType::Cuda;
@@ -171,7 +171,7 @@ auto check_engines(const hrt::hrtc::AlgoParam& algo) -> HrtStatus {
                               .device;
   if (hrt::preprocess::ImagePreprocessor::create(preprocess) == nullptr)
     return fail(HRT_STATUS_UNAVAILABLE, "preprocess device of algo " + algo.name + " is not available in this build");
-  const auto preprocess_device = device_of(preprocess);
+  const auto preprocess_device = device_type(preprocess);
   bool runnable = false;
   for (const auto& param : algo.engines) {
     // Engine::initialize aborts on such a config.

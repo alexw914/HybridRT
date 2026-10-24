@@ -42,6 +42,7 @@ add_library(hybridrt STATIC
     preprocess/image_preprocessor.cpp
     preprocess/cpu_image_preprocessor.cpp
     postprocess/common.cpp
+    postprocess/ocr.cpp
     postprocess/ocr/ocr.cpp
     postprocess/detect.cpp
     postprocess/detect/yolov5_detect.cpp
@@ -56,8 +57,11 @@ add_library(hybridrt STATIC
     postprocess/rotated/yolo26_rotated.cpp
     postprocess/rotated/general_rotated.cpp
     postprocess/rotated/e2e_rotated.cpp
+    postprocess/classify.cpp
     postprocess/classify/general_classify.cpp
+    postprocess/embedding.cpp
     postprocess/embedding/embedding.cpp
+    postprocess/keypoint.cpp
     postprocess/keypoint/general_keypoint.cpp
     postprocess/keypoint/e2e_keypoint.cpp
     postprocess/keypoint/rtmo_keypoint.cpp

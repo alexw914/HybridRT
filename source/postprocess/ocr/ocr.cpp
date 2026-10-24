@@ -205,7 +205,7 @@ private:
         const core::Point2f input{point.x * static_cast<float>(transform.input_size.width) / static_cast<float>(width),
                                   point.y * static_cast<float>(transform.input_size.height) /
                                       static_cast<float>(height)};
-        const auto source = transform.to_source(input);
+        const auto source = transform.reverse(input);
         point.x = std::clamp(source.x, static_cast<float>(transform.src_roi.x),
                              static_cast<float>(transform.src_roi.x + transform.src_roi.width - 1));
         point.y = std::clamp(source.y, static_cast<float>(transform.src_roi.y),
@@ -249,13 +249,8 @@ private:
 
 } // namespace
 
-auto create_ocr(std::string_view type) -> UniquePtr<OcrPostprocessor> {
-  return type == "Ocr" ? std::make_unique<Ocr>() : nullptr;
-}
-
-auto create_ocr_postprocessor(const kitzoo::json::Json& config, const engine::Engine& engine)
-    -> UniquePtr<OcrPostprocessor> {
-  return check_init(create_ocr("Ocr"), "Ocr", config, engine);
+auto create_ocr() -> UniquePtr<OcrPostprocessor> {
+  return std::make_unique<Ocr>();
 }
 
 } // namespace hrt::postprocess

@@ -103,11 +103,11 @@ struct ImageTransform {
   core::Size input_size;
 
   // Maps network-input coordinates back to the source image.
-  KZ_NODISCARD auto to_source(const core::Rect2f& rect) const -> core::Rect2f;
-  KZ_NODISCARD auto to_source(const core::Point2f& point) const -> core::Point2f;
+  KZ_NODISCARD auto reverse(const core::Rect2f& rect) const -> core::Rect2f;
+  KZ_NODISCARD auto reverse(const core::Point2f& point) const -> core::Point2f;
 
-  // to_source() clipped to src_roi; empty when the box leaves it.
-  KZ_NODISCARD auto clip_to_source(const core::Rect2f& rect) const -> core::Rect2f;
+  // reverse() clipped to src_roi; empty when the box leaves it.
+  KZ_NODISCARD auto clip_reverse(const core::Rect2f& rect) const -> core::Rect2f;
 };
 
 auto calc_resize_position(core::Rect& dst_roi, core::Rect& src_roi, const core::Rect& dst_rect,

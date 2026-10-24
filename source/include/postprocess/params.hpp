@@ -103,12 +103,14 @@ auto create_rotated(std::string_view type) -> UniquePtr<RotatedPostprocessor>;
 auto create_classify(std::string_view type) -> UniquePtr<ClassifyPostprocessor>;
 
 auto create_embedding(std::string_view type) -> UniquePtr<EmbeddingPostprocessor>;
+auto create_embedding() -> UniquePtr<EmbeddingPostprocessor>;
 
 auto create_keypoint(std::string_view type) -> UniquePtr<KeypointPostprocessor>;
 
 auto create_segment(std::string_view type) -> UniquePtr<SegmentPostprocessor>;
 
 auto create_ocr(std::string_view type) -> UniquePtr<OcrPostprocessor>;
+auto create_ocr() -> UniquePtr<OcrPostprocessor>;
 
 auto create_yolov5_detect() -> UniquePtr<DetectPostprocessor>;
 

@@ -100,7 +100,7 @@ protected:
       }
       if (!(score > param_.confidence_threshold[cls]))
         continue;
-      const auto rect = transform.clip_to_source(core::center_box(
+      const auto rect = transform.clip_reverse(core::center_box(
           box[0] * static_cast<float>(input_size_.width), box[1] * static_cast<float>(input_size_.height),
           box[2] * static_cast<float>(input_size_.width), box[3] * static_cast<float>(input_size_.height)));
       if (!rect.empty())

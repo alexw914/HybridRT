@@ -84,7 +84,7 @@ protected:
     }
 
     for (auto k : nms_indices(rects_, scores_, param_.iou_threshold[0])) {
-      const auto box = transform.clip_to_source(rects_[k]);
+      const auto box = transform.clip_reverse(rects_[k]);
       if (box.empty())
         continue;
       auto& object = result[0].emplace_back();
@@ -94,7 +94,7 @@ protected:
       for (std::int64_t j = 0; j < static_cast<std::int64_t>(keypoint_num); ++j) {
         const auto score = points.at(row, j, 2);
         object.keypoints.push_back(
-            {transform.to_source(core::Point2f{points.at(row, j, 0), points.at(row, j, 1)}),
+            {transform.reverse(core::Point2f{points.at(row, j, 0), points.at(row, j, 1)}),
              score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
       }
     }

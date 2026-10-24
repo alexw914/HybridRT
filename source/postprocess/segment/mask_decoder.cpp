@@ -120,6 +120,21 @@ auto MaskDecoder::decode(const HeadGridView& prototypes, std::span<const float> 
   return mask;
 }
 
+auto MaskDecoder::bilinear_taps(Vector<Tap>& out, int count, double scale, double offset, int size) -> void {
+  out.resize(static_cast<std::size_t>(count));
+  for (int i = 0; i < count; ++i) {
+    const auto position = scale * i + offset;
+    const auto first = static_cast<int>(std::floor(position));
+    auto& tap = out[static_cast<std::size_t>(i)];
+    if (first < 0 || size == 1)
+      tap = {0, 0, 0.0F};
+    else if (first >= size - 1)
+      tap = {size - 1, size - 1, 0.0F};
+    else
+      tap = {first, first + 1, static_cast<float>(position - first)};
+  }
+}
+
 auto MaskBatch::add(std::span<const float> coefficients, const core::Rect2f& net_box, const core::Rect2f& source_box,
                     std::int64_t cls, std::size_t index) -> void {
   jobs_.push_back({.net_box = net_box,
@@ -153,21 +168,6 @@ auto MaskBatch::decode(const HeadGridView& prototypes, const preprocess::ImageTr
     run(cv::Range(0, 1));
   jobs_.clear();
   coefficients_.clear();
-}
-
-auto MaskDecoder::bilinear_taps(Vector<Tap>& out, int count, double scale, double offset, int size) -> void {
-  out.resize(static_cast<std::size_t>(count));
-  for (int i = 0; i < count; ++i) {
-    const auto position = scale * i + offset;
-    const auto first = static_cast<int>(std::floor(position));
-    auto& tap = out[static_cast<std::size_t>(i)];
-    if (first < 0 || size == 1)
-      tap = {0, 0, 0.0F};
-    else if (first >= size - 1)
-      tap = {size - 1, size - 1, 0.0F};
-    else
-      tap = {first, first + 1, static_cast<float>(position - first)};
-  }
 }
 
 auto find_raw_segment_outputs(const engine::Engine& engine, Vector<core::Point2f>& strides, std::size_t& box_channels,

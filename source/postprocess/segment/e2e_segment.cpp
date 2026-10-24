@@ -78,7 +78,7 @@ protected:
       if (!(br.x - tl.x > 0.0F && br.y - tl.y > 0.0F))
         continue;
       const auto net_box = core::Rect2f(tl, br);
-      const auto box = transform.clip_to_source(net_box);
+      const auto box = transform.clip_reverse(net_box);
       if (box.empty())
         continue;
       coefficients_.clear();

@@ -56,7 +56,8 @@ TEST(RtmoKeypointTest, KeepsBestCandidatesAndMapsKeypoints) {
   const hrt::preprocess::ImageTransform transform{{0, 10, 40, 20}, {100, 200, 80, 40}, {40, 40}};
   hrt::postprocess::KeypointResultMap result;
   ASSERT_TRUE(decoder->process(
-      result, {hrt::test::buffer_of(keypoints, point_values), hrt::test::buffer_of(boxes, box_values)}, transform));
+      result, {hrt::test::create_buffer(keypoints, point_values), hrt::test::create_buffer(boxes, box_values)},
+      transform));
   ASSERT_EQ(result.size(), 1U);
   ASSERT_EQ(result.at(0).size(), 1U);
   const auto& object = result.at(0)[0];
@@ -81,8 +82,8 @@ TEST(RtmoKeypointTest, AppliesConfiguredThresholds) {
   auto decoder = hrt::postprocess::create_keypoint_postprocessor("RtmoKeypoint", config, engine);
   hrt::postprocess::KeypointResultMap result;
   ASSERT_TRUE(decoder->process(result,
-                               {hrt::test::buffer_of<float>(boxes, {10, 10, 30, 20, 0.9F, 11, 10, 30, 20, 0.1F}),
-                                hrt::test::buffer_of<float>(keypoints, {20, 15, 0.2F, 21, 15, 0.05F})},
+                               {hrt::test::create_buffer<float>(boxes, {10, 10, 30, 20, 0.9F, 11, 10, 30, 20, 0.1F}),
+                                hrt::test::create_buffer<float>(keypoints, {20, 15, 0.2F, 21, 15, 0.05F})},
                                hrt::test::identity(40, 40)));
   ASSERT_EQ(result.at(0).size(), 2U);
   EXPECT_EQ(result.at(0)[0].keypoints[0].visible, hrt::postprocess::KeypointVisible::Visible);

@@ -72,8 +72,8 @@ TEST(SegmentTest, DecodesYoloInstanceMask) {
   hrt::postprocess::SegmentResultMap result;
   result[99].emplace_back();
   ASSERT_TRUE(postprocessor->process(result,
-                                     {hrt::test::buffer_of(proto(DataType::Float32, {1, 7, 1}), detections),
-                                      hrt::test::buffer_of(proto(DataType::Float32, {1, 2, 4, 4}), prototypes())},
+                                     {hrt::test::create_buffer(proto(DataType::Float32, {1, 7, 1}), detections),
+                                      hrt::test::create_buffer(proto(DataType::Float32, {1, 2, 4, 4}), prototypes())},
                                      hrt::test::identity(16, 16)));
   expect_left_half_mask(result);
 }
@@ -106,10 +106,11 @@ TEST(SegmentTest, DecodesManyMasksAlikeOnOneAndSeveralThreads) {
   const auto run = [&](int threads) -> hrt::postprocess::SegmentResultMap {
     cv::setNumThreads(threads);
     hrt::postprocess::SegmentResultMap result;
-    EXPECT_TRUE(postprocessor->process(result,
-                                       {hrt::test::buffer_of(proto(DataType::Float32, {1, 8, kAnchors}), detections),
-                                        hrt::test::buffer_of(proto(DataType::Float32, {1, 2, 16, 16}), protos)},
-                                       hrt::test::identity(64, 64)));
+    EXPECT_TRUE(
+        postprocessor->process(result,
+                               {hrt::test::create_buffer(proto(DataType::Float32, {1, 8, kAnchors}), detections),
+                                hrt::test::create_buffer(proto(DataType::Float32, {1, 2, 16, 16}), protos)},
+                               hrt::test::identity(64, 64)));
     return result;
   };
   const auto threads = cv::getNumThreads();
@@ -137,11 +138,11 @@ TEST(SegmentTest, DecodesInt8Detections) {
   ASSERT_NE(postprocessor, nullptr);
 
   // real = 0.1 * q: 8, 8, 8, 8, 0.9, 1, 0.
-  auto detections = hrt::test::buffer_of<std::int8_t>(proto(DataType::Int8, {1, 7, 1}), {80, 80, 80, 80, 9, 10, 0});
+  auto detections = hrt::test::create_buffer<std::int8_t>(proto(DataType::Int8, {1, 7, 1}), {80, 80, 80, 80, 9, 10, 0});
   detections->set_quantization(0.1F, 0);
   hrt::postprocess::SegmentResultMap result;
   ASSERT_TRUE(postprocessor->process(
-      result, {detections, hrt::test::buffer_of(proto(DataType::Float32, {1, 2, 4, 4}), prototypes())},
+      result, {detections, hrt::test::create_buffer(proto(DataType::Float32, {1, 2, 4, 4}), prototypes())},
       hrt::test::identity(16, 16)));
   expect_left_half_mask(result);
 }
@@ -157,12 +158,12 @@ TEST(SegmentTest, AccumulatesInt8PrototypesWithZeroPoint) {
   hrt::Vector<std::int8_t> quantized;
   for (const auto value : prototypes())
     quantized.push_back(static_cast<std::int8_t>(value * 2.0F + 40.0F));
-  auto masks = hrt::test::buffer_of(proto(DataType::Int8, {1, 2, 4, 4}), quantized);
+  auto masks = hrt::test::create_buffer(proto(DataType::Int8, {1, 2, 4, 4}), quantized);
   masks->set_quantization(0.5F, 40);
   const hrt::Vector<float> detections{8, 8, 8, 8, 0.9F, 1, 1};
   hrt::postprocess::SegmentResultMap result;
   ASSERT_TRUE(postprocessor->process(result,
-                                     {hrt::test::buffer_of(proto(DataType::Float32, {1, 7, 1}), detections), masks},
+                                     {hrt::test::create_buffer(proto(DataType::Float32, {1, 7, 1}), detections), masks},
                                      hrt::test::identity(16, 16)));
   expect_left_half_mask(result);
 }
@@ -176,8 +177,8 @@ TEST(SegmentTest, KeepsNonzeroClassId) {
   auto postprocessor = hrt::postprocess::create_segment_postprocessor("GeneralYoloSegment", config, engine);
   hrt::postprocess::SegmentResultMap result;
   ASSERT_TRUE(postprocessor->process(result,
-                                     {hrt::test::buffer_of<float>(detections, {8, 8, 8, 8, 0.1F, 0.9F, 1, 0}),
-                                      hrt::test::buffer_of(masks, prototypes())},
+                                     {hrt::test::create_buffer<float>(detections, {8, 8, 8, 8, 0.1F, 0.9F, 1, 0}),
+                                      hrt::test::create_buffer(masks, prototypes())},
                                      hrt::test::identity(16, 16)));
   ASSERT_EQ(result.size(), 1U);
   ASSERT_EQ(result.at(1).size(), 1U);
@@ -231,7 +232,7 @@ TEST(SegmentTest, DecodesRawYoloV8AndYolo26Heads) {
     ASSERT_NE(postprocessor, nullptr) << type;
     hrt::postprocess::SegmentResultMap result;
     ASSERT_TRUE(postprocessor->process(
-        result, {hrt::test::buffer_of(masks, prototypes()), hrt::test::buffer_of(head, raw_segment_head(bins))},
+        result, {hrt::test::create_buffer(masks, prototypes()), hrt::test::create_buffer(head, raw_segment_head(bins))},
         hrt::test::identity(16, 16)))
         << type;
     expect_left_half_mask(result);
@@ -262,10 +263,11 @@ TEST(SegmentTest, DecodesNhwcRawHeadsAndPrototypes) {
     auto postprocessor = hrt::postprocess::create_segment_postprocessor(type, config, engine);
     ASSERT_NE(postprocessor, nullptr) << type;
     hrt::postprocess::SegmentResultMap result;
-    ASSERT_TRUE(postprocessor->process(result,
-                                       {hrt::test::buffer_of(masks, channels_last(prototypes(), 2)),
-                                        hrt::test::buffer_of(head, channels_last(raw_segment_head(bins), channels))},
-                                       hrt::test::identity(16, 16)))
+    ASSERT_TRUE(
+        postprocessor->process(result,
+                               {hrt::test::create_buffer(masks, channels_last(prototypes(), 2)),
+                                hrt::test::create_buffer(head, channels_last(raw_segment_head(bins), channels))},
+                               hrt::test::identity(16, 16)))
         << type;
     expect_left_half_mask(result);
   }
@@ -325,7 +327,7 @@ TEST(SegmentTest, DecodesSemanticLabels) {
   };
   hrt::postprocess::SegmentResultMap result;
   result[0].emplace_back();
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, scores)}, hrt::test::identity(4, 4)));
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, scores)}, hrt::test::identity(4, 4)));
   const hrt::Vector<std::uint16_t> expected{0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1};
   ASSERT_EQ(result.size(), 3U);
   for (std::int64_t cls = 0; cls < 3; ++cls) {
@@ -373,7 +375,7 @@ TEST(SegmentTest, MatchesScalarArgmaxAcrossVectorStepsAndTail) {
 
   hrt::postprocess::SegmentResultMap result;
   ASSERT_TRUE(
-      postprocessor->process(result, {hrt::test::buffer_of(output, scores)}, hrt::test::identity(kWidth, kHeight)));
+      postprocessor->process(result, {hrt::test::create_buffer(output, scores)}, hrt::test::identity(kWidth, kHeight)));
   for (std::size_t i = 0; i < kPlane; ++i) {
     for (const auto& [cls, objects] : result)
       EXPECT_EQ(objects[0].mask.data[i], expected[i] == cls ? 1 : 0) << "pixel " << i << ", class " << cls;
@@ -386,20 +388,20 @@ TEST(SegmentTest, DecodesInt8SemanticScoresWithoutDequantizing) {
   FakeEngine engine({proto(DataType::Float32, {1, 3, 4, 4})}, {output});
   auto postprocessor = hrt::postprocess::create_segment_postprocessor("SemanticSegment", Json::object(), engine);
   // Quantized scores keep their order; ties go to the lower class: 0, 1 / 2, 0.
-  auto buffer = hrt::test::buffer_of<std::int8_t>(output, {
-                                                              90,
-                                                              -5,
-                                                              0,
-                                                              7, // class 0
-                                                              -10,
-                                                              9,
-                                                              0,
-                                                              7, // class 1
-                                                              -10,
-                                                              -5,
-                                                              90,
-                                                              7, // class 2
-                                                          });
+  auto buffer = hrt::test::create_buffer<std::int8_t>(output, {
+                                                                  90,
+                                                                  -5,
+                                                                  0,
+                                                                  7, // class 0
+                                                                  -10,
+                                                                  9,
+                                                                  0,
+                                                                  7, // class 1
+                                                                  -10,
+                                                                  -5,
+                                                                  90,
+                                                                  7, // class 2
+                                                              });
   buffer->set_quantization(0.1F, -100);
   hrt::postprocess::SegmentResultMap result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(2, 2)));
@@ -416,7 +418,7 @@ TEST(SegmentTest, PreservesInputRegionAndIntegerClassIds) {
   hrt::postprocess::SegmentResultMap result;
   const hrt::preprocess::ImageTransform transform{{0, 0, 2, 2}, {10, 20, 2, 2}, {2, 2}};
   ASSERT_TRUE(
-      postprocessor->process(result, {hrt::test::buffer_of<std::int32_t>(output, {0, 1, 256, 65535})}, transform));
+      postprocessor->process(result, {hrt::test::create_buffer<std::int32_t>(output, {0, 1, 256, 65535})}, transform));
   ASSERT_EQ(result.size(), 4U);
   const hrt::Vector<std::int64_t> classes{0, 1, 256, 65535};
   for (std::size_t i = 0; i < classes.size(); ++i) {
@@ -449,7 +451,7 @@ TEST(SegmentTest, DecodesEndToEndRowsWithoutNms) {
   hrt::postprocess::SegmentResultMap result;
   result[99].emplace_back();
   ASSERT_TRUE(postprocessor->process(
-      result, {hrt::test::buffer_of(masks, prototypes()), hrt::test::buffer_of(detections, rows)},
+      result, {hrt::test::create_buffer(masks, prototypes()), hrt::test::create_buffer(detections, rows)},
       hrt::test::identity(16, 16)));
   ASSERT_EQ(result.size(), 1U);
   expect_left_half_mask(result);

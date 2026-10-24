@@ -75,7 +75,7 @@ TEST(RotatedTest, GeneralDecodesObb) {
   // cx, cy, w, h, class 0 and 1 scores, angle pi / 12.
   const hrt::Vector<float> values{20, 15, 20, 10, 0.1F, 0.9F, std::numbers::pi_v<float> / 12.0F};
   hrt::postprocess::RotatedResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(64, 64)));
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, values)}, hrt::test::identity(64, 64)));
   EXPECT_FALSE(result.contains(0));
   ASSERT_EQ(result.at(1).size(), 1U);
   const auto& rect = result.at(1)[0].rect;
@@ -103,7 +103,7 @@ TEST(RotatedTest, Yolo26ReadsDistancesAndRadians) {
   for (std::size_t c = 0; c < cell.size(); ++c)
     values[c * 4 + 3] = cell[c];
   hrt::postprocess::RotatedResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(16, 16)));
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, values)}, hrt::test::identity(16, 16)));
   ASSERT_EQ(result.at(0).size(), 1U);
   const auto& rect = result.at(0)[0].rect;
   EXPECT_NEAR(rect.center.x, 12.0F, 1e-4F);
@@ -118,7 +118,7 @@ TEST(RotatedTest, RejectsNonuniformSourceMapping) {
   const auto config =
       kitzoo::json::Json::parse(R"({"class_num":1,"confidence_threshold":[0.5],"iou_threshold":[0.45]})");
   auto postprocessor = hrt::postprocess::create_rotated_postprocessor("GeneralRotated", config, engine);
-  const auto buffer = hrt::test::buffer_of<float>(output, {20, 15, 20, 10, 0.9F, std::numbers::pi_v<float> / 4.0F});
+  const auto buffer = hrt::test::create_buffer<float>(output, {20, 15, 20, 10, 0.9F, std::numbers::pi_v<float> / 4.0F});
   hrt::postprocess::RotatedResultMap result;
   const hrt::preprocess::ImageTransform stretched{{0, 0, 64, 64}, {0, 0, 128, 64}, {64, 64}};
   EXPECT_FALSE(postprocessor->process(result, {buffer}, stretched));
@@ -155,7 +155,7 @@ TEST(RotatedTest, E2EDecodesRowsWithoutNms) {
   // The 64 x 64 input holds a 128 x 128 source at (10, 20).
   const hrt::preprocess::ImageTransform transform{{0, 0, 64, 64}, {10, 20, 128, 128}, {64, 64}};
   hrt::postprocess::RotatedResultMap result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of(output, values)}, transform));
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, values)}, transform));
   ASSERT_EQ(result.size(), 1U);
   ASSERT_EQ(result.at(1).size(), 2U);
   const auto& box = result.at(1)[0];

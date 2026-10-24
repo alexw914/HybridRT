@@ -64,7 +64,7 @@ protected:
       const core::Point2f br{output.at(i, 2), output.at(i, 3)};
       if (!(br.x - tl.x > 0.0F && br.y - tl.y > 0.0F))
         continue;
-      const auto rect = transform.clip_to_source(core::Rect2f(tl, br));
+      const auto rect = transform.clip_reverse(core::Rect2f(tl, br));
       if (!rect.empty())
         result[cls].push_back({rect, score, static_cast<std::int64_t>(cls)});
     }

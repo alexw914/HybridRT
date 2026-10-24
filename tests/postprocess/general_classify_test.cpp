@@ -24,7 +24,7 @@ TEST(GeneralClassifyTest, AppliesSoftmax) {
   ASSERT_NE(postprocessor, nullptr);
 
   hrt::postprocess::ClassifyResult result;
-  ASSERT_TRUE(postprocessor->process(result, {hrt::test::buffer_of<float>(output, {0.0F, std::log(3.0F), 0.0F})},
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer<float>(output, {0.0F, std::log(3.0F), 0.0F})},
                                      hrt::test::identity(8, 8)));
   ASSERT_EQ(result.size(), 1U);
   EXPECT_NEAR(result[0][0], 0.2F, 1e-6F);
@@ -38,7 +38,7 @@ TEST(GeneralClassifyTest, DequantizesInt8Scores) {
       hrt::postprocess::create_classify_postprocessor("GeneralClassify", kitzoo::json::Json::object(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
-  auto buffer = hrt::test::buffer_of<std::int8_t>(output, {0, 10, 20});
+  auto buffer = hrt::test::create_buffer<std::int8_t>(output, {0, 10, 20});
   buffer->set_quantization(0.1F, 10);
   hrt::postprocess::ClassifyResult result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(8, 8)));
@@ -55,7 +55,7 @@ TEST(GeneralClassifyTest, DecodesEachSampleOfABatch) {
       "GeneralClassify", kitzoo::json::Json::parse(R"({"classify_postprocess_type": "softmax"})"), engine);
   ASSERT_NE(postprocessor, nullptr);
 
-  const auto buffer = hrt::test::buffer_of<float>(output, {0.0F, std::log(3.0F), 0.0F, std::log(2.0F), 0.0F, 0.0F});
+  const auto buffer = hrt::test::create_buffer<float>(output, {0.0F, std::log(3.0F), 0.0F, std::log(2.0F), 0.0F, 0.0F});
   hrt::Vector<hrt::postprocess::ClassifyResult> results;
   ASSERT_TRUE(postprocessor->process(results, {buffer}, {hrt::test::identity(8, 8), hrt::test::identity(8, 8)}));
   ASSERT_EQ(results.size(), 2U);

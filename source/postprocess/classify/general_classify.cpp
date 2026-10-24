@@ -1,8 +1,7 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/postprocess/classify/general_classify.cpp
-// Description: Implements classification score extraction and the classify
-//              postprocessor factory.
+// Description: Implements general classification score extraction.
 // -----------------------------------------------------------------------------
 
 #include <kitzoo/core/macro.hpp>
@@ -87,15 +86,6 @@ private:
 
 auto create_general_classify() -> UniquePtr<ClassifyPostprocessor> {
   return std::make_unique<GeneralClassify>();
-}
-
-auto create_classify(std::string_view type) -> UniquePtr<ClassifyPostprocessor> {
-  return type == "GeneralClassify" ? create_general_classify() : nullptr;
-}
-
-auto create_classify_postprocessor(std::string_view type, const kitzoo::json::Json& config,
-                                   const engine::Engine& engine) -> UniquePtr<ClassifyPostprocessor> {
-  return check_init(create_classify(type), type, config, engine);
 }
 
 } // namespace hrt::postprocess

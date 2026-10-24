@@ -74,7 +74,7 @@ if(TARGET hybridrt_example_ocr_model AND HRT_USE_ORT)
 endif()
 
 if(TARGET hybridrt_c)
-    hybridrt_add_unit_test(hrt SOURCES c/hrt_test.cpp DEPENDS hrt::hybridrt_c hrt::hrtc kitzoo::os)
+    hybridrt_add_unit_test(hrt SOURCES capi/hrt_test.cpp DEPENDS hrt::hybridrt_c hrt::hrtc kitzoo::os)
     hybridrt_enable_model_test(hrt)
     if(HRT_USE_ORT)
         target_compile_definitions(hybridrt_test_hrt PRIVATE HRT_TEST_ORT)

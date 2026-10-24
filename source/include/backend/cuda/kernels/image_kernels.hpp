@@ -14,6 +14,8 @@
 
 namespace hrt::backend {
 
+inline constexpr std::size_t kPreprocessParamsPerLaunch = 16;
+
 enum class InputFormat {
   Bgr,  // Interleaved uint8 BGR pixels.
   Rgb,  // Interleaved uint8 RGB pixels.
@@ -65,8 +67,6 @@ struct PreprocessParam {
 // kernel, with OpenCV's uint8 color conversion and sampling (its fixed-point
 // weights) before alpha and beta apply.
 auto launch_cuda_preprocess(const PreprocessParam* params, std::size_t count, cudaStream_t stream) -> cudaError_t;
-
-inline constexpr std::size_t kPreprocessParamsPerLaunch = 16;
 
 } // namespace hrt::backend
 

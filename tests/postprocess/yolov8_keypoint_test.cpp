@@ -98,7 +98,7 @@ TEST(YoloV8KeypointTest, DecodesBinsAndKeypointOffsets) {
   auto decoder = hrt::postprocess::create_keypoint_postprocessor("YoloV8Keypoint", config(), engine);
   ASSERT_NE(decoder, nullptr);
   hrt::postprocess::KeypointResultMap result;
-  ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of(output, head_values())}, hrt::test::identity(32, 32)));
+  ASSERT_TRUE(decoder->process(result, {hrt::test::create_buffer(output, head_values())}, hrt::test::identity(32, 32)));
   ASSERT_EQ(result.size(), 1U);
   ASSERT_EQ(result.at(0).size(), 1U);
   const auto& object = result.at(0)[0];

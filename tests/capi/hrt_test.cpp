@@ -1,6 +1,6 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
-// File: tests/c/hrt_test.cpp
+// File: tests/capi/hrt_test.cpp
 // Description: Tests the C API: packages, model creation errors, processing
 //              and flattened results.
 // -----------------------------------------------------------------------------

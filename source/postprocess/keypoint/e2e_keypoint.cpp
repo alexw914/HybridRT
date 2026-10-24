@@ -73,7 +73,7 @@ protected:
       const core::Point2f br{output.at(i, 2), output.at(i, 3)};
       if (!(br.x - tl.x > 0.0F && br.y - tl.y > 0.0F))
         continue;
-      const auto box = transform.clip_to_source(core::Rect2f(tl, br));
+      const auto box = transform.clip_reverse(core::Rect2f(tl, br));
       if (box.empty())
         continue;
       auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
@@ -82,7 +82,7 @@ protected:
       for (std::int64_t c = 6; c < columns; c += static_cast<std::int64_t>(kKeypointValues)) {
         const auto visibility = output.at(i, c + 2);
         object.keypoints.push_back(
-            {transform.to_source(core::Point2f{output.at(i, c), output.at(i, c + 1)}),
+            {transform.reverse(core::Point2f{output.at(i, c), output.at(i, c + 1)}),
              visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
              visibility});
       }

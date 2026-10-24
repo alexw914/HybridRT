@@ -81,7 +81,7 @@ protected:
     const auto masks = outputs_.masks;
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
       for (auto k : nms_indices(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
-        const auto box = transform.clip_to_source(rects_[cls][k]);
+        const auto box = transform.clip_reverse(rects_[cls][k]);
         if (box.empty())
           continue;
         auto& objects = result[static_cast<std::int64_t>(cls)];

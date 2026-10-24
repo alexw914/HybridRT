@@ -37,7 +37,7 @@ TEST(DetrDetectTest, SelectsOneClassAndKeepsOverlappingQueries) {
   };
   const hrt::preprocess::ImageTransform transform{{0, 10, 40, 20}, {100, 200, 80, 40}, {40, 40}};
   hrt::postprocess::DetectResultMap result;
-  ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of(output, values)}, transform));
+  ASSERT_TRUE(decoder->process(result, {hrt::test::create_buffer(output, values)}, transform));
   ASSERT_EQ(result.size(), 1U);
   ASSERT_EQ(result.at(0).size(), 2U);
   const auto& box = result.at(0)[0];
@@ -54,7 +54,7 @@ TEST(DetrDetectTest, DequantizesAndClipsToSourceRegion) {
   const auto output = proto(DataType::Int8, {1, 1, 6});
   FakeEngine engine({proto(DataType::Float32, {1, 3, 100, 100})}, {output});
   auto decoder = hrt::postprocess::create_detect_postprocessor("DetrDetect", Json::parse(R"({"class_num":2})"), engine);
-  auto buffer = hrt::test::buffer_of<std::int8_t>(output, {50, 50, 100, 100, 10, 90});
+  auto buffer = hrt::test::create_buffer<std::int8_t>(output, {50, 50, 100, 100, 10, 90});
   buffer->set_quantization(0.01F, 0);
   hrt::postprocess::DetectResultMap result;
   const hrt::preprocess::ImageTransform transform{{0, 25, 100, 50}, {10, 20, 200, 100}, {100, 100}};
@@ -78,7 +78,7 @@ TEST(DetrDetectTest, RejectsNonfiniteAndEmptyBoxesAndClearsResults) {
   const hrt::Vector<float> values{nan,  0.5F, 0.2F, 0.2F, 0.9F, 0.5F, 0.5F, -0.2F, 0.2F, 0.9F,
                                   0.5F, 0.5F, 0.2F, 0.2F, inf,  2.0F, 2.0F, 0.2F,  0.2F, 0.9F};
   hrt::postprocess::DetectResultMap result{{0, {{{0, 0, 1, 1}, 1.0F}}}};
-  ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of(output, values)}, hrt::test::identity(40, 40)));
+  ASSERT_TRUE(decoder->process(result, {hrt::test::create_buffer(output, values)}, hrt::test::identity(40, 40)));
   EXPECT_TRUE(result.empty());
 }
 
@@ -109,8 +109,8 @@ TEST(DetrDetectTest, AppliesStableSoftmaxIncludingBackgroundOnSeparateOutputs) {
                                        "background_class":2,
                                        "confidence_threshold":[0.1]})");
   auto decoder = hrt::postprocess::create_detect_postprocessor("DetrDetect", config, engine);
-  const auto box_buffer = hrt::test::buffer_of<float>(boxes, {0.5F, 0.5F, 0.2F, 0.4F, 0.5F, 0.5F, 0.2F, 0.4F});
-  const auto score_buffer = hrt::test::buffer_of<float>(scores, {1000, 1002, 1004, 1001, 1000, 1010});
+  const auto box_buffer = hrt::test::create_buffer<float>(boxes, {0.5F, 0.5F, 0.2F, 0.4F, 0.5F, 0.5F, 0.2F, 0.4F});
+  const auto score_buffer = hrt::test::create_buffer<float>(scores, {1000, 1002, 1004, 1001, 1000, 1010});
   hrt::postprocess::DetectResultMap result;
   ASSERT_TRUE(decoder->process(result, {box_buffer, score_buffer}, hrt::test::identity(100, 100)));
   ASSERT_EQ(result.size(), 1U);
@@ -126,7 +126,7 @@ TEST(DetrDetectTest, AppliesSigmoidAndRemapsClassesAroundBackground) {
   const auto config = Json::parse(R"({"class_num":2,"score_activation":"sigmoid","background_class":0})");
   auto decoder = hrt::postprocess::create_detect_postprocessor("DetrDetect", config, engine);
   hrt::postprocess::DetectResultMap result;
-  ASSERT_TRUE(decoder->process(result, {hrt::test::buffer_of<float>(output, {0.5F, 0.5F, 0.2F, 0.4F, 10, -2, 2})},
+  ASSERT_TRUE(decoder->process(result, {hrt::test::create_buffer<float>(output, {0.5F, 0.5F, 0.2F, 0.4F, 10, -2, 2})},
                                hrt::test::identity(100, 100)));
   ASSERT_EQ(result.size(), 1U);
   ASSERT_EQ(result.at(1).size(), 1U);

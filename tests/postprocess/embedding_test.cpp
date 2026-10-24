@@ -23,7 +23,7 @@ TEST(EmbeddingTest, ReturnsTheOutputAsFloat) {
       hrt::postprocess::create_embedding_postprocessor("Embedding", kitzoo::json::Json::object(), engine);
   ASSERT_NE(postprocessor, nullptr);
 
-  auto buffer = hrt::test::buffer_of<std::int8_t>(output, {0, 10, 20});
+  auto buffer = hrt::test::create_buffer<std::int8_t>(output, {0, 10, 20});
   buffer->set_quantization(0.1F, 10);
   hrt::postprocess::EmbeddingResult result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(8, 8)));
@@ -65,7 +65,7 @@ TEST(EmbeddingTest, DequantizesEveryInt8ValueLikeTheScalarFormula) {
   hrt::Vector<std::int8_t> values(kCount);
   for (std::size_t i = 0; i < values.size(); ++i)
     values[i] = static_cast<std::int8_t>(static_cast<int>(i % 256) - 128);
-  auto buffer = hrt::test::buffer_of<std::int8_t>(output, values);
+  auto buffer = hrt::test::create_buffer<std::int8_t>(output, values);
   buffer->set_quantization(0.037F, -5);
   hrt::postprocess::EmbeddingResult result;
   ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(8, 8)));

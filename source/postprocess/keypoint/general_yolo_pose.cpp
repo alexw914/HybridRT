@@ -92,7 +92,7 @@ private:
     const auto first_row = 4 + classes;
     for (std::size_t cls = 0; cls < classes; ++cls) {
       for (auto k : nms_indices(rects_[cls], scores_[cls], param_.iou_threshold[cls])) {
-        const auto box = transform.clip_to_source(rects_[cls][k]);
+        const auto box = transform.clip_reverse(rects_[cls][k]);
         if (box.empty())
           continue;
         auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
@@ -104,7 +104,7 @@ private:
           const core::Point2f point{at(row, anchor), at(row + 1, anchor)};
           const auto score = at(row + 2, anchor);
           object.keypoints.push_back(
-              {transform.to_source(point),
+              {transform.reverse(point),
                score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
         }
       }
