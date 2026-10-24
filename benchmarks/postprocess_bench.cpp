@@ -34,11 +34,11 @@ auto check_init(const kitzoo::json::Json& config, const hrt::engine::Engine& eng
 struct Prepared {
   hrt::UniquePtr<hrt::engine::Engine> engine;
   hrt::core::Buffers outputs;
-  hrt::preprocess::ImageTransform transform;
+  hrt::Vector<hrt::preprocess::ImageTransform> transforms; // One per sample of the static batch.
   kitzoo::json::Json config;
 };
 
-// Runs the model of `entry` once on `source`, for timing its postprocessing alone.
+// Runs the model of `entry` once with `source` in every sample, for timing its postprocessing alone.
 auto prepare(benchmark::State& state, const kitzoo::json::Json& entry, const std::optional<hrt::core::Image>& source)
     -> std::optional<Prepared> {
   const auto algo = entry.is_object() ? hrt::hrtc::load_algo(entry) : std::nullopt;
@@ -59,16 +59,25 @@ auto prepare(benchmark::State& state, const kitzoo::json::Json& entry, const std
   for (const auto& proto : engine->output_protos())
     prepared.outputs.push_back(std::make_shared<hrt::core::Buffer>(proto));
   const auto param = prepared.config["preprocess"].get<hrt::preprocess::ImagePreprocessorParam>();
-  const auto& shape = inputs.front()->shape();
-  hrt::core::Image input(inputs.front()->memory()->ref(), param.dst_image_format, inputs.front()->data_type(),
-                         {static_cast<int>(shape[3]), static_cast<int>(shape[2])});
+  const auto& input = *inputs.front();
+  const auto& shape = input.shape();
+  auto* base = static_cast<std::byte*>(input.memory()->mutable_cpu());
   auto preprocessor = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Cpu);
-  const auto transform = preprocessor->process(input, *source, {}, param);
-  if (!transform || !engine->set_inputs(inputs) || !engine->set_outputs(prepared.outputs) || !engine->inference()) {
-    state.SkipWithError("Preprocessing or inference failed");
+  for (std::int64_t i = 0; i < shape[0]; ++i) {
+    auto sample = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu,
+                                         base + static_cast<std::size_t>(i) * input.stride()[1], param.dst_image_format,
+                                         {static_cast<int>(shape[3]), static_cast<int>(shape[2])}, input.data_type());
+    const auto transform = sample ? preprocessor->process(*sample, *source, {}, param) : std::nullopt;
+    if (!transform) {
+      state.SkipWithError("Preprocessing failed");
+      return std::nullopt;
+    }
+    prepared.transforms.push_back(*transform);
+  }
+  if (!engine->set_inputs(inputs) || !engine->set_outputs(prepared.outputs) || !engine->inference()) {
+    state.SkipWithError("Inference failed");
     return std::nullopt;
   }
-  prepared.transform = *transform;
   return prepared;
 }
 
@@ -79,14 +88,21 @@ auto measure_postprocessor(benchmark::State& state, Prepared& prepared) -> void 
     state.SkipWithError("Postprocessor initialization failed");
     return;
   }
+  // A static batch decodes every sample, as ImageModel does; items are samples.
+  const auto batched = prepared.transforms.size() > 1;
   Result result;
+  hrt::Vector<Result> results;
   for (auto _ : state) {
-    if (!postprocessor->process(result, prepared.outputs, prepared.transform)) {
+    const auto ok = batched ? postprocessor->process(results, prepared.outputs, prepared.transforms)
+                            : postprocessor->process(result, prepared.outputs, prepared.transforms.front());
+    if (!ok) {
       state.SkipWithError("Postprocessing failed");
       break;
     }
     benchmark::DoNotOptimize(result);
+    benchmark::DoNotOptimize(results);
   }
+  state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(prepared.transforms.size()));
 }
 
 auto BM_Type(benchmark::State& state) -> void {
@@ -115,8 +131,8 @@ auto BM_Type(benchmark::State& state) -> void {
   if (!prepared)
     return;
   state.SetLabel(type + ":" + name);
-  state.counters["input_width"] = prepared->transform.input_size.width;
-  state.counters["input_height"] = prepared->transform.input_size.height;
+  state.counters["input_width"] = prepared->transforms.front().input_size.width;
+  state.counters["input_height"] = prepared->transforms.front().input_size.height;
   // Instance masks decode on OpenCV's threads; the second argument sets their number.
   cv::setNumThreads(static_cast<int>(state.range(1)));
   if (type.ends_with("Detect"))

@@ -143,6 +143,35 @@ RK3588 CPU/RGA does not yet have matching 640 x 640 / 1280 x 1280
 measurements in this record. Existing 640 x 480 or 224 x 224 measurements are not
 substituted for the requested square sizes.
 
+## Pipeline batches
+
+### WSL2 RTX 3060: ImageModel batches
+
+2026-10-24, AMD Ryzen 5 5600X, RTX 3060 12 GiB, WSL2 Ubuntu 24.04, Release GCC 13, OpenCV 4.6.0,
+ONNX Runtime 1.31.0, TensorRT 10.14.1, CUDA 13.0. `hybridrt_bench_pipeline`
+`BM_Batch/task/engine/images/batch` passes copies of the task image to one
+`ImageModel::process_sync` call; batch 1 uses the batch-1 template algo, which runs the images one
+by one, and batch 4 the `_batch4` algo, which splits them into batches of four. TensorRT uses
+local FP32 `--noTF32` engines built from the same ONNX files. One OpenCV thread, pinned to four
+cores (`taskset -c 2-5`), median of three repetitions of at least 0.5 s, in ms per call.
+
+| Task / engine | 4 images, batch 1 | 4 images, batch 4 | 8 images, batch 1 | 8 images, batch 4 |
+| --- | ---: | ---: | ---: | ---: |
+| detect / TensorRT, CUDA preprocess | 12.3 | 7.84 | 22.9 | 15.5 |
+| detect / TensorRT, CPU preprocess | 13.6 | 10.6 | 27.0 | 21.3 |
+| segment / TensorRT, CUDA preprocess | 17.3 | 11.9 | 33.3 | 24.6 |
+| segment / TensorRT, CPU preprocess | 19.0 | 15.1 | 39.5 | 30.9 |
+| classify / TensorRT, CUDA preprocess | 6.27 | 3.79 | 11.8 | 7.67 |
+| classify / TensorRT, CPU preprocess | 8.68 | 6.88 | 17.1 | 13.9 |
+| detect / ORT CPU | 158 | 173 | 480 | 344 |
+| segment / ORT CPU | 223 | 219 | 450 | 415 |
+| classify / ORT CPU | 60.4 | 65.0 | 120 | 131 |
+
+A static batch saves 30-40% on TensorRT with CUDA preprocessing; ORT CPU gains nothing, and its
+times vary more between runs. Eight images run as two batches of four. Batch 4 postprocessing
+(`BM_Type` on the `_batch4` algos) now decodes all four samples: 0.139 ms for detection and
+1.11 ms for segmentation per batch with one OpenCV thread.
+
 ## PostProcess
 
 ### Apple M4: current measurements of all 25 types
@@ -298,6 +327,10 @@ build/benchmarks/hybridrt_bench_postprocess \
   --benchmark_out_format=json
 ```
 
+The pipeline batch table uses
+`taskset -c 2-5 build/benchmarks/hybridrt_bench_pipeline --benchmark_filter=BM_Batch` and needs
+TensorRT `.engine` files beside the ONNX fixtures (`trtexec --onnx=<model>.onnx
+--saveEngine=<model>.engine --noTF32`). CoreML cases are registered only on Apple platforms.
 The batched preprocessing table uses
 `taskset -c 2-5 build/benchmarks/hybridrt_bench_preprocess --benchmark_filter=BM_Batch` with the same
 timing flags.

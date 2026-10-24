@@ -432,7 +432,9 @@ These are native batched networks. Their template algos end in `_batch4`.
 against individual CPU calls. `MatchesBatchOneOnTensorRtStaticBatchModels` compares batched
 and individual calls on the same TensorRT model with CPU and CUDA preprocessing separately;
 the CUDA kernel may differ from OpenCV by one uint8 step in rare pixels. TensorRT fixtures are local
-`.engine` files beside the ONNX files, built with TensorRT 10.14.1, FP32, `--noTF32`.
+`.engine` files beside the ONNX files of both the batch-4 and the batch-1 models, built with
+TensorRT 10.14.1, FP32, `--noTF32`; plans load only where they were built, so tests and
+benchmarks skip them elsewhere.
 
 | Algo | ONNX file in `assets/test/onnx/` | Input NCHW | Outputs | Batch-1 SHA256 | Batch-4 SHA256 |
 | --- | --- | --- | --- | --- | --- |
