@@ -47,9 +47,26 @@ __device__ auto fetch(const CudaResizeTask& s, int x, int y, int (&out)[3]) -> v
   }
   const int gx = s.origin_x + x;
   const int gy = s.origin_y + y;
-  const auto* uv = s.chroma + static_cast<std::int64_t>(gy / 2) * s.src_pitch + static_cast<std::int64_t>(gx / 2) * 2;
-  const int u = (s.source == CudaResizeSource::Nv12 ? uv[0] : uv[1]) - 128;
-  const int v = (s.source == CudaResizeSource::Nv12 ? uv[1] : uv[0]) - 128;
+  int u = 0;
+  int v = 0;
+  if (s.source == CudaResizeSource::Nv12 || s.source == CudaResizeSource::Nv21) {
+    const auto* uv = s.chroma + static_cast<std::int64_t>(gy / 2) * s.src_pitch + static_cast<std::int64_t>(gx / 2) * 2;
+    u = s.source == CudaResizeSource::Nv12 ? uv[0] : uv[1];
+    v = s.source == CudaResizeSource::Nv12 ? uv[1] : uv[0];
+  } else {
+    // Chroma rows are half as wide as the image rows holding them, so OpenCV packs two per row: half row k
+    // after the Y plane starts at (k / 2) * pitch + (k % 2) * width / 2, and the second plane follows the first.
+    const auto half = [&](int k) -> const std::uint8_t* {
+      return s.chroma + static_cast<std::int64_t>(k >> 1) * s.src_pitch +
+             static_cast<std::int64_t>(k & 1) * (s.image_width / 2);
+    };
+    const auto first = half(gy / 2)[gx / 2];
+    const auto second = half(s.image_height / 2 + gy / 2)[gx / 2];
+    u = s.source == CudaResizeSource::I420 ? first : second;
+    v = s.source == CudaResizeSource::I420 ? second : first;
+  }
+  u -= 128;
+  v -= 128;
   const int luma = max(0, static_cast<int>(row[x]) - 16) * kYuvY;
   const int half = 1 << (kYuvShift - 1);
   out[0] = saturate((luma + half + kYuvUB * u) >> kYuvShift);
@@ -78,6 +95,24 @@ __device__ auto linear_tap(int d, double scale, int size, int& first, int& secon
   second = min(s + 1, size - 1);
   w0 = __float2int_rn((1.0F - f) * kCoefficientScale);
   w1 = __float2int_rn(f * kCoefficientScale);
+}
+
+// Taps and weights along one axis as OpenCV's INTER_CUBIC (A = -0.75): half-pixel
+// centers in double, four taps that repeat the region's border.
+__device__ auto cubic_taps(int d, double scale, int size, int (&index)[4], int (&weight)[4]) -> void {
+  float f = static_cast<float>((static_cast<double>(d) + 0.5) * scale - 0.5);
+  const int s = static_cast<int>(floorf(f));
+  f -= static_cast<float>(s);
+  constexpr float kA = -0.75F;
+  float c[4];
+  c[0] = ((kA * (f + 1.0F) - 5.0F * kA) * (f + 1.0F) + 8.0F * kA) * (f + 1.0F) - 4.0F * kA;
+  c[1] = ((kA + 2.0F) * f - (kA + 3.0F)) * f * f + 1.0F;
+  c[2] = ((kA + 2.0F) * (1.0F - f) - (kA + 3.0F)) * (1.0F - f) * (1.0F - f) + 1.0F;
+  c[3] = 1.0F - c[0] - c[1] - c[2];
+  for (int k = 0; k < 4; ++k) {
+    index[k] = min(max(s - 1 + k, 0), size - 1);
+    weight[k] = __float2int_rn(c[k] * kCoefficientScale);
+  }
 }
 
 // OpenCV's vectorized vertical pass: rows of horizontal sums are shifted by 4,
@@ -114,7 +149,30 @@ __global__ auto resize_kernel(ResizeLaunch launch) -> void {
     return;
   }
   float value[3];
-  if (s.nearest) {
+  if (s.filter == CudaResizeFilter::Cubic) {
+    int xs[4];
+    int ys[4];
+    int wx[4];
+    int wy[4];
+    cubic_taps(rx, s.scale_x, s.src_width, xs, wx);
+    cubic_taps(ry, s.scale_y, s.src_height, ys, wy);
+    // OpenCV's vectorized vertical pass sums the rows in float, scaled back by 2048 squared.
+    constexpr float kScale = 1.0F / (kCoefficientScale * kCoefficientScale);
+    float sum[3] = {0.0F, 0.0F, 0.0F};
+    for (int r = 0; r < 4; ++r) {
+      int row[3] = {0, 0, 0};
+      for (int k = 0; k < 4; ++k) {
+        int p[3];
+        fetch(s, xs[k], ys[r], p);
+        for (int c = 0; c < 3; ++c)
+          row[c] += p[c] * wx[k];
+      }
+      for (int c = 0; c < 3; ++c)
+        sum[c] = fmaf(static_cast<float>(row[c]), static_cast<float>(wy[r]) * kScale, sum[c]);
+    }
+    for (int c = 0; c < 3; ++c)
+      value[c] = static_cast<float>(saturate(__float2int_rn(sum[c])));
+  } else if (s.filter == CudaResizeFilter::Nearest) {
     // In double as OpenCV: exact products such as 78 * 50 / 156 must floor the same way.
     const int sx = min(static_cast<int>(floor(static_cast<double>(rx) * s.scale_x)), s.src_width - 1);
     const int sy = min(static_cast<int>(floor(static_cast<double>(ry) * s.scale_y)), s.src_height - 1);

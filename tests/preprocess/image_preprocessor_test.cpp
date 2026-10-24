@@ -373,7 +373,11 @@ TEST(ImagePreprocessorTest, CudaLeavesUnfusedConversionsToTheCpu) {
     yuv[i] = static_cast<std::uint8_t>((i * 53) % 241);
   const auto nv12 = Image::wrap(MemoryType::Cpu, yuv.data(), ImageFormat::Nv12, {24, 16});
   Image gray(MemoryType::Cpu, ImageFormat::Gray, DataType::Uint8, {24, 16});
-  ASSERT_TRUE(nv12 && gray.valid() && cpu->process(gray, bgr.image, {}, {}));
+  hrt::Vector<std::uint8_t> rgba_pixels(24 * 16 * 4);
+  for (std::size_t i = 0; i < rgba_pixels.size(); ++i)
+    rgba_pixels[i] = static_cast<std::uint8_t>((i * 29) % 239);
+  const auto rgba = Image::wrap(MemoryType::Cpu, rgba_pixels.data(), ImageFormat::InterRgba, {24, 16});
+  ASSERT_TRUE(nv12 && rgba && gray.valid() && cpu->process(gray, bgr.image, {}, {}));
 
   struct Case {
     const Image* source;
@@ -381,9 +385,9 @@ TEST(ImagePreprocessorTest, CudaLeavesUnfusedConversionsToTheCpu) {
     InterpolationMode mode;
   };
 
-  for (const auto& item : {Case{&bgr.image, ImageFormat::PlanarRgb, InterpolationMode::Cubic},
+  for (const auto& item : {Case{&*rgba, ImageFormat::PlanarRgb, InterpolationMode::Cubic},
                            Case{&bgr.image, ImageFormat::Gray, InterpolationMode::Linear},
-                           Case{&*nv12, ImageFormat::PlanarBgr, InterpolationMode::Cubic},
+                           Case{&*nv12, ImageFormat::Gray, InterpolationMode::Linear},
                            Case{&gray, ImageFormat::Gray, InterpolationMode::Nearest}}) {
     for (const bool device_source : {false, true}) {
       SCOPED_TRACE(testing::Message() << "format " << static_cast<int>(item.format) << " mode "
@@ -547,14 +551,16 @@ TEST(ImagePreprocessorTest, CudaFusedKernelMatchesCpu) {
     yuv[i] = static_cast<std::uint8_t>((i * 4111 + i / 7) % 256);
   const auto nv12 = Image::wrap(MemoryType::Cpu, yuv.data(), ImageFormat::Nv12, {96, 60}, DataType::Uint8, 104);
   const auto nv21 = Image::wrap(MemoryType::Cpu, yuv.data(), ImageFormat::Nv21, {96, 60}, DataType::Uint8, 104);
-  ASSERT_TRUE(rgb && nv12 && nv21);
+  const auto i420 = Image::wrap(MemoryType::Cpu, yuv.data(), ImageFormat::Yu12, {96, 60}, DataType::Uint8, 104);
+  const auto yv12 = Image::wrap(MemoryType::Cpu, yuv.data(), ImageFormat::Yv12, {96, 60}, DataType::Uint8, 104);
+  ASSERT_TRUE(rgb && nv12 && nv21 && i420 && yv12);
   std::size_t checked = 0;
   std::size_t exact = 0;
-  for (const auto* source : hrt::Array<const Image*, 4>{&src.image, &*rgb, &*nv12, &*nv21}) {
+  for (const auto* source : hrt::Array<const Image*, 6>{&src.image, &*rgb, &*nv12, &*nv21, &*i420, &*yv12}) {
     for (const auto format : {ImageFormat::PlanarRgb, ImageFormat::PlanarBgr, ImageFormat::InterRgb}) {
       for (const auto type : {DataType::Float32, DataType::Uint8}) {
         for (const auto resize : {ResizeType::LetterBox, ResizeType::Normal, ResizeType::KeepRatio}) {
-          for (const auto mode : {InterpolationMode::Linear, InterpolationMode::Nearest}) {
+          for (const auto mode : {InterpolationMode::Linear, InterpolationMode::Nearest, InterpolationMode::Cubic}) {
             for (const auto normalize : {NormalizeType::Full, NormalizeType::Roi, NormalizeType::None}) {
               // Downscaling and upscaling, from the whole source and from a crop.
               for (const auto size : {Size{40, 32}, Size{160, 128}}) {

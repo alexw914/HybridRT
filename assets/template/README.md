@@ -43,10 +43,10 @@ most 64) to `ImageModel::create`.
 
 Fused preprocessing is optional. A device without a fused implementation uses its
 independent operators when it supports every required stage. CUDA has only a fused kernel:
-it converts uint8 BGR, RGB, NV12 or NV21 sources with `linear` or `nearest` interpolation into
-3-channel planar or interleaved uint8 or float32 inputs, following OpenCV's uint8 color
+it converts uint8 BGR, RGB, NV12, NV21, YU12 (I420) or YV12 sources with any interpolation
+into 3-channel planar or interleaved uint8 or float32 inputs, following OpenCV's uint8 color
 conversion and sampling, so it matches the CPU result up to OpenCV's own rounding
-differences. Other conversions (`cubic`, gray inputs, other source formats) run on the CPU.
+differences. Other conversions (gray inputs or sources, RGBA or float sources) run on the CPU.
 NV12 halves the bytes a host frame uploads compared with BGR. A static batch whose samples all
 fuse runs as one kernel launch (up to 16 samples per kernel); on the CPU the samples of a batch
 run on OpenCV's threads.

@@ -16,8 +16,8 @@
 namespace hrt::preprocess {
 
 // Runs every supported conversion in one fused kernel on CUDA memory; it has
-// no step operators, so the shared flow leaves other conversions (cubic
-// interpolation, gray or planar inputs and sources) to the CPU.
+// no step operators, so the shared flow leaves other conversions (gray or
+// planar inputs and sources, other source formats) to the CPU.
 class CudaImagePreprocessor final : public ImagePreprocessor {
 public:
   auto fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color, core::Stream* stream)
@@ -31,9 +31,9 @@ public:
   auto normalize(core::Image& image, const core::Rect& roi, const Array<float, 3>& mean, const Array<float, 3>& stddev,
                  core::Stream* stream) -> bool override;
 
-  // Interleaved BGR/RGB or NV12/NV21 uint8 to a 3-channel uint8 or float32
-  // input in one kernel: color conversion, resize (linear or nearest),
-  // padding, channel order and normalization.
+  // Interleaved BGR/RGB or NV12/NV21/I420/YV12 uint8 to a 3-channel uint8 or
+  // float32 input in one kernel: color conversion, resize (linear, nearest or
+  // cubic), padding, channel order and normalization.
   auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
              const ImagePreprocessorParam& param, core::Stream* stream) -> bool override;
 

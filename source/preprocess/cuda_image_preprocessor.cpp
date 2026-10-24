@@ -39,6 +39,10 @@ auto source_of(core::ImageFormat format) -> std::optional<backend::CudaResizeSou
     return backend::CudaResizeSource::Nv12;
   case core::ImageFormat::Nv21:
     return backend::CudaResizeSource::Nv21;
+  case core::ImageFormat::Yu12:
+    return backend::CudaResizeSource::I420;
+  case core::ImageFormat::Yv12:
+    return backend::CudaResizeSource::Yv12;
   default:
     return std::nullopt;
   }
@@ -78,6 +82,8 @@ auto make_task(const core::Image& dst, const ImageTransform& transform, const co
     task.chroma = at(src, {src.size().height}, stream);
     task.origin_x = from.x;
     task.origin_y = from.y;
+    task.image_width = src.size().width;
+    task.image_height = src.size().height;
   }
   task.src_width = from.width;
   task.src_height = from.height;
@@ -93,7 +99,9 @@ auto make_task(const core::Image& dst, const ImageTransform& transform, const co
   task.roi_width = roi.width;
   task.roi_height = roi.height;
   task.float_output = dst.data_type() == core::DataType::Float32;
-  task.nearest = param.interpolation_mode == InterpolationMode::Nearest;
+  task.filter = param.interpolation_mode == InterpolationMode::Nearest ? backend::CudaResizeFilter::Nearest
+                : param.interpolation_mode == InterpolationMode::Cubic ? backend::CudaResizeFilter::Cubic
+                                                                       : backend::CudaResizeFilter::Linear;
   // As the CPU flow: YUV converts to BGR, and padding is the default color, in input channel order, as a uint8
   // pixel, normalized unless only the ROI is.
   const auto normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
@@ -145,8 +153,7 @@ auto CudaImagePreprocessor::supports_fused(const core::Image& dst, const core::I
   const auto normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
   return source_of(src.format()).has_value() && src.data_type() == core::DataType::Uint8 &&
          (is_interleaved(dst.format()) || is_planar(dst.format())) &&
-         (dst.data_type() == core::DataType::Float32 || (dst.data_type() == core::DataType::Uint8 && !normalize)) &&
-         param.interpolation_mode != InterpolationMode::Cubic;
+         (dst.data_type() == core::DataType::Float32 || (dst.data_type() == core::DataType::Uint8 && !normalize));
 }
 
 auto CudaImagePreprocessor::fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
