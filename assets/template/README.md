@@ -112,8 +112,15 @@ is preprocessed straight into its own sample of the engine input, the engine run
 each sample is postprocessed into one result, in order. Samples past the images of a partial batch
 are left as they are and not decoded. With a batch of 1 (every `ncnn` model, RKNN models converted
 without a batch) the images simply run one by one. Every output must lead with the same batch.
-With a batch above 1, samples of dma-buf inputs are written on the host (RGA is not used for them)
-and the `dvpp` preprocessor is refused. Dynamic batches are not supported: the batch is fixed at load.
+With a batch above 1, samples of dma-buf inputs are host views, so the RGA writes each into its own
+dma-buf whose result is copied in, and the `dvpp` preprocessor is refused. Dynamic batches are not
+supported: the batch is fixed at load.
+
+On the RK3588 the three NPU cores serve concurrent calls: give `ImageModelOptions::engine` three or
+more engines and keep `core_mask` at `RKNN_NPU_CORE_AUTO`, and the driver runs each context on an
+idle core. Through `hrt-validate` with 160 images (YOLOv8n detection, fp16 RKNN),
+1, 3 and 6 engines took 42.4, 17.3 and 15.1 ms per image; pinning each engine to one core was
+not faster. Each engine loads its own copy of the model.
 
 Operator libraries are optional: one that does not load is skipped with a warning.
 
