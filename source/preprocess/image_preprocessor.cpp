@@ -105,19 +105,19 @@ auto calc_resize_position(core::Rect& dst_roi, core::Rect& src_roi, const core::
   case ResizeType::Normal:
     dst_roi = dst_rect;
     src_roi = src_rect;
-    return true;
+    break;
   case ResizeType::KeepRatio: {
     const auto size = scaled(src_rect.size(), ratio);
     dst_roi = core::intersect({dst_rect.x, dst_rect.y, size.width, size.height}, dst_rect);
     src_roi = src_rect;
-    return true;
+    break;
   }
   case ResizeType::TextLine: {
     const auto width = std::clamp(std::ceil(static_cast<double>(dst_rect.height) * src_rect.width / src_rect.height),
                                   1.0, static_cast<double>(dst_rect.width));
     dst_roi = {dst_rect.x, dst_rect.y, static_cast<int>(width), dst_rect.height};
     src_roi = src_rect;
-    return true;
+    break;
   }
   case ResizeType::LetterBox: {
     // As Ultralytics' LetterBox: the scaled size rounds half to even, as Python's round(), to at least 1, and the
@@ -128,7 +128,7 @@ auto calc_resize_position(core::Rect& dst_roi, core::Rect& src_roi, const core::
                                dst_rect.y + (dst_rect.height - size.height) / 2, size.width, size.height},
                               dst_rect);
     src_roi = src_rect;
-    return true;
+    break;
   }
   case ResizeType::CenterCrop: {
     if (dst_rect.width != dst_rect.height || param.resize_short_size <= 0) {
@@ -139,7 +139,7 @@ auto calc_resize_position(core::Rect& dst_roi, core::Rect& src_roi, const core::
     const auto side = std::min(src_rect.width, src_rect.height) * dst_rect.width / param.resize_short_size;
     src_roi = {src_rect.x + std::max(0, (src_rect.width - side) / 2),
                src_rect.y + std::max(0, (src_rect.height - side) / 2), side, side};
-    return true;
+    break;
   }
   case ResizeType::PadOutside: {
     // Map the padded source rect onto the full input, then cut both sides
@@ -148,17 +148,16 @@ auto calc_resize_position(core::Rect& dst_roi, core::Rect& src_roi, const core::
     const auto scale_x = static_cast<double>(dst_rect.width) / padded.width;
     const auto scale_y = static_cast<double>(dst_rect.height) / padded.height;
     src_roi = core::intersect(padded, {0, 0, src_size.width, src_size.height});
-    if (src_roi.empty())
-      return false;
     const auto x1 = dst_rect.x + static_cast<int>((src_roi.x - padded.x) * scale_x);
     const auto y1 = dst_rect.y + static_cast<int>((src_roi.y - padded.y) * scale_y);
     const auto x2 = dst_rect.x + static_cast<int>((src_roi.x + src_roi.width - padded.x) * scale_x);
     const auto y2 = dst_rect.y + static_cast<int>((src_roi.y + src_roi.height - padded.y) * scale_y);
     dst_roi = core::intersect({x1, y1, x2 - x1, y2 - y1}, dst_rect);
-    return true;
+    break;
   }
   }
-  return false;
+  // Truncation can shrink either region to nothing for extreme aspect ratios or tiny crops.
+  return !dst_roi.empty() && !src_roi.empty();
 }
 
 auto ImageTransform::reverse(const core::Rect2f& rect) const -> core::Rect2f {
@@ -172,6 +171,11 @@ auto ImageTransform::reverse(const core::Rect2f& rect) const -> core::Rect2f {
 auto ImageTransform::reverse(const core::Point2f& point) const -> core::Point2f {
   const auto mapped = reverse(core::Rect2f{point.x, point.y, 0.0F, 0.0F});
   return {mapped.x, mapped.y};
+}
+
+auto ImageTransform::reverse(const core::RotatedRect& rect) const -> core::RotatedRect {
+  const auto mapped = reverse(core::Rect2f{rect.center.x, rect.center.y, rect.size.width, rect.size.height});
+  return core::RotatedRect{{mapped.x, mapped.y}, {mapped.width, mapped.height}, rect.angle};
 }
 
 auto ImageTransform::clip_reverse(const core::Rect2f& rect) const -> core::Rect2f {

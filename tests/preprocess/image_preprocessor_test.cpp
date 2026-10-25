@@ -54,6 +54,17 @@ TEST(ImagePreprocessorTest, ParsesParams) {
   EXPECT_EQ(param.device, hrt::preprocess::ImagePreprocessorType::Auto);
 }
 
+TEST(ImagePreprocessorTest, ReversesRotatedBoxesWithUniformScaling) {
+  const hrt::core::RotatedRect rect{{20.0F, 15.0F}, {20.0F, 10.0F}, 45.0F};
+  const hrt::preprocess::ImageTransform uniform{{0, 0, 64, 64}, {10, 20, 128, 128}, {64, 64}};
+  const auto mapped = uniform.reverse(rect);
+  EXPECT_FLOAT_EQ(mapped.center.x, 50.0F);
+  EXPECT_FLOAT_EQ(mapped.center.y, 50.0F);
+  EXPECT_FLOAT_EQ(mapped.size.width, 40.0F);
+  EXPECT_FLOAT_EQ(mapped.size.height, 20.0F);
+  EXPECT_FLOAT_EQ(mapped.angle, rect.angle);
+}
+
 TEST(ImagePreprocessorTest, LetterBoxCentersTheImage) {
   hrt::core::Rect dst_roi;
   hrt::core::Rect src_roi;
@@ -79,6 +90,12 @@ TEST(ImagePreprocessorTest, LetterBoxRoundsTheScaledSizeAsUltralytics) {
   ASSERT_TRUE(
       hrt::preprocess::calc_resize_position(dst_roi, src_roi, {0, 0, 640, 640}, {0, 0, 2000, 1}, {2000, 1}, param));
   EXPECT_EQ(dst_roi, (hrt::core::Rect{0, 319, 640, 1}));
+  // keep_ratio and center_crop truncate instead, so a degenerate region is rejected.
+  EXPECT_FALSE(hrt::preprocess::calc_resize_position(dst_roi, src_roi, {0, 0, 640, 640}, {0, 0, 2000, 1}, {2000, 1},
+                                                     param_with(hrt::preprocess::ResizeType::KeepRatio)));
+  auto crop = param_with(hrt::preprocess::ResizeType::CenterCrop);
+  crop.resize_short_size = 256;
+  EXPECT_FALSE(hrt::preprocess::calc_resize_position(dst_roi, src_roi, {0, 0, 224, 224}, {0, 0, 1, 1}, {1, 1}, crop));
 }
 
 TEST(ImagePreprocessorTest, KeepRatioAnchorsTopLeft) {

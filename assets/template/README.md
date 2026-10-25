@@ -41,6 +41,12 @@ most 64) to `ImageModel::create`.
 | `resize_short_size` | `-1` | Short side before `center_crop` |
 | `pad_scale` | `1.0` | Scale of `pad_outside` |
 
+`ImageTransform::reverse` maps rectangles, points and rotated rectangles back to source
+coordinates. Preprocessing fails instead of producing an empty source or input region, so
+the mapping never divides by zero. The rotated-rectangle overload preserves the angle and
+assumes uniform scaling; rotated postprocessing checks that once per sample, allowing
+two-pixel resize rounding.
+
 Fused preprocessing is optional. A device without a fused implementation uses its
 independent operators when it supports every required stage. CUDA has only a fused kernel:
 it converts uint8 BGR, RGB, NV12, NV21, YU12 (I420) or YV12 sources with any interpolation

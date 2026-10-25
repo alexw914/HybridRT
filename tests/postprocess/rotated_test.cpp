@@ -130,6 +130,12 @@ TEST(RotatedTest, RejectsNonuniformSourceMapping) {
   const hrt::preprocess::ImageTransform stretched{{0, 0, 64, 64}, {0, 0, 128, 64}, {64, 64}};
   EXPECT_FALSE(postprocessor->process(result, {buffer}, stretched));
   EXPECT_TRUE(result.empty());
+  const hrt::preprocess::ImageTransform empty{};
+  EXPECT_FALSE(postprocessor->process(result, {buffer}, empty));
+  EXPECT_TRUE(result.empty());
+  const auto no_objects = hrt::test::create_buffer<float>(output, {20, 15, 20, 10, 0.0F, 0.0F});
+  EXPECT_FALSE(postprocessor->process(result, {no_objects}, stretched));
+  EXPECT_TRUE(result.empty());
   const hrt::preprocess::ImageTransform rounded{{0, 50, 640, 379}, {0, 0, 1280, 759}, {640, 480}};
   EXPECT_TRUE(postprocessor->process(result, {buffer}, rounded));
   EXPECT_FALSE(result.empty());

@@ -113,10 +113,7 @@ auto rotated_reverse(RotatedResultMap& result, const preprocess::ImageTransform&
   KZ_CHECK_RETURN(uniform, false, "rotated: source mapping requires uniform scaling and nonempty regions");
   for (auto& [cls, boxes] : result) {
     for (auto& box : boxes) {
-      const auto mapped = transform.reverse(
-          core::Rect2f{box.rect.center.x, box.rect.center.y, box.rect.size.width, box.rect.size.height});
-      box.rect.center = {mapped.x, mapped.y};
-      box.rect.size = {mapped.width, mapped.height};
+      box.rect = transform.reverse(box.rect);
     }
     std::erase_if(boxes, [](const RotatedBox& box) -> bool { return box.rect.size.empty(); });
   }

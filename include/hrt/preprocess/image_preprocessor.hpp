@@ -105,11 +105,14 @@ struct ImageTransform {
   // Maps network-input coordinates back to the source image.
   KZ_NODISCARD auto reverse(const core::Rect2f& rect) const -> core::Rect2f;
   KZ_NODISCARD auto reverse(const core::Point2f& point) const -> core::Point2f;
+  // Requires uniformly scaled regions; preserves angle.
+  KZ_NODISCARD auto reverse(const core::RotatedRect& rect) const -> core::RotatedRect;
 
   // reverse() clipped to src_roi; empty when the box leaves it.
   KZ_NODISCARD auto clip_reverse(const core::Rect2f& rect) const -> core::Rect2f;
 };
 
+// False when either region would be empty, so reverse() never divides by zero.
 auto calc_resize_position(core::Rect& dst_roi, core::Rect& src_roi, const core::Rect& dst_rect,
                           const core::Rect& src_rect, core::Size src_size, const ImagePreprocessorParam& param) -> bool;
 
