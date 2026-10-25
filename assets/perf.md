@@ -4,6 +4,67 @@ Before/after optimization records, newest first. Current benchmark results and r
 
 Each entry states the cause/change, measurement conditions, data, and validation or limits. Values are historical for that source revision; later entries may supersede them. Missing historical settings are marked rather than inferred.
 
+## 2026-10-25: decode INT8 outputs as integers and replace the semantic model
+
+On RK3588 several INT8 postprocessors were slower than the FP16 run of the same model. Running
+each INT8 output a second time after dequantizing it to float32 (same values, float path)
+located the cost in the code path, not the data or memory. Candidate decoding called
+`HeadGridView::at()` per element: DFL softmax, YOLOv5 class/box sigmoids and keypoint
+visibility dequantized and called `exp` for every value. OCR DB, CTC and SimCC dequantized
+whole outputs first; `std::max_element` on int8 runs one value at a time. The LR-ASPP semantic
+model upsampled 21 class maps to 512 x 512 in the graph, and its masks were built by a
+warpAffine plus one compare per class at source resolution.
+
+- `QuantTables` holds, per INT8 head, the sigmoid of all 256 values, exp(-scale * d) for the
+  DFL softmax, and per-class integer score bounds; it is rebuilt only when scale or zero
+  point change. YOLOv8/YOLO26 filter class scores as integers and rank NMS by logit; only kept
+  boxes take the sigmoid. Single-output heads compare INT8 scores against an exact strict
+  integer bound.
+- OCR DB binarizes and checks the map as integers and scores boxes by the INT8 mean; CTC and
+  SimCC take a vectorized INT8 maximum, then its first position. The DB binarization loop
+  itself did not vectorize for float or int8 maps (`&&` in its range check, int32 bounds):
+  0.434 of 0.64 ms on the 5600X. Bitwise checks and int8-typed bounds vectorize it.
+- `yolo26n_semantic` (YOLO26n-sem, 19 x 80 x 80 logits) replaces `lraspp_voc_segment`. Masks
+  are written from per-axis nearest tables in one pass of row runs instead of
+  warpAffine + per-class compares; 283 of 874,800 bus.jpg pixels differ from warpAffine
+  nearest, all at exact half-pixel rounding.
+
+**Measurement:** RK3588 A76 cores 4-7, cross-built GCC 12.2.1 Release, OpenCV 4.6.0 one thread,
+librknnrt 2.3.2, template algos and test images of `assets/benchmark.md`, inputs resized on the
+build host. `hybridrt_bench_postprocess` via `run_rknn_postprocess.py`, Google Benchmark wall
+time, three repetitions >=0.5 s after >=0.2 s warm-up, median ms. Before is the previous INT8 B1
+table measured the same way; the board service stayed running this time.
+
+| Postprocessor | INT8 B1 before | INT8 B1 after | FP16 B1 after |
+| --- | ---: | ---: | ---: |
+| YoloV8Detect | 0.146 | 0.1239 | 0.3652 |
+| Yolo26Detect | 0.114 | 0.1156 | 0.3152 |
+| YoloV5Detect | 0.08607 | 0.04357 | 0.07864 |
+| YoloV8Rotated | 0.4901 | 0.4283 | 0.6044 |
+| Yolo26Rotated | 0.3463 | 0.3487 | 0.4315 |
+| YoloV8Keypoint | 0.02534 | 0.01344 | 0.02257 |
+| Yolo26Keypoint | 0.02057 | 0.01396 | 0.01788 |
+| GeneralKeypoint (simcc) | 0.01993 | 0.00542 | 0.01914 |
+| YoloV8Segment | 0.6855 | 0.6709 | 0.9454 |
+| Yolo26Segment | 0.8849 | 0.8964 | 1.268 |
+| Ocr detection | 1.697 | 0.7688 | 0.7009 |
+| Ocr recognition | 0.2935 (in-place path, scalar argmax) | 0.01659 | 0.2434 |
+| SemanticSegment | 13.75 (LR-ASPP) | 0.8881 | 1.058 |
+
+Attribution on the board with a one-off harness (5 x 0.5 s, median, core 4): before the change,
+INT8 vs the same INT8 data as float32 was 0.0880 vs 0.0764 ms for YoloV5Detect, 0.0259 vs 0.0230
+for YoloV8Keypoint, 0.0202 vs 0.0148 for SimCC and 1.578 vs 1.450 for OCR DB. YOLO26n-sem took
+9.54 ms FP16 / 8.83 ms INT8 with the previous mask code, against 29.8 / 10.9 for LR-ASPP.
+
+OCR DB on FP32 maps, 5600X (same method, no affinity): 0.6162 -> 0.2974 ms. The INT8 OCR DB map
+decodes 38 boxes against 37 for FP16 and costs more downstream; on the same INT8 data the INT8
+path takes 0.777 ms and its float32 copy 0.872 ms.
+
+**Validation / limits:** Unit tests cover INT8 DFL/threshold heads, OCR DB/CTC and SimCC. Other
+rows of the 5600X FP32 table stayed within 8% of the previous run, about its run-to-run noise. Fused-output INT8 models (`General*`, `E2E*`) still decode no objects; their
+times measure filtering only. Raw results are local in `rknn_postprocess_matrix.json` and
+`int8_lut_postprocess_5600x.json`.
+
 ## 2026-10-25: tighten INT8 score filtering bounds
 
 A floor-rounded quantized threshold admitted the zero-point bin for small positive score

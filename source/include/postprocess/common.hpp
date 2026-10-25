@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: source/include/postprocess/common.hpp
-// Description: Declares helpers shared by postprocessors: head grid views, output
-//              validation and float32 copies of outputs.
+// Description: Declares helpers shared by postprocessors: head grid views, int8
+//              lookup tables, output validation and float32 copies of outputs.
 // -----------------------------------------------------------------------------
 
 #ifndef HRT_POSTPROCESS_COMMON_HPP
@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <optional>
 
 #include "include/core/config.hpp"
@@ -70,6 +71,11 @@ public:
   }
 
   KZ_NODISCARD auto col_step() const -> std::size_t { return col_step_; }
+
+  // The int8 integer of an int8 grid.
+  KZ_NODISCARD auto quantized(std::int64_t y, std::int64_t x, std::size_t channel) const -> std::int8_t {
+    return static_cast<const std::int8_t*>(data_)[offset(y, x, channel)];
+  }
 
   // The stored value: the float, or the int8 integer before dequantization.
   KZ_NODISCARD auto raw(std::int64_t y, std::int64_t x, std::size_t channel) const -> float {
@@ -130,21 +136,89 @@ private:
   Vector<std::uint32_t> cells_;
 };
 
+// Per-value results for the 256 integers of one int8 output, so decoding reads
+// a table instead of dequantizing and calling exp: the sigmoid of each value,
+// and exp(scale * -d) for a value d steps below a maximum (softmax weights).
+// Also per-class HeadGridView::raw_bound()s of score thresholds, so int8
+// scores are filtered as integers. bind() rebuilds them only when the grid's
+// type or quantization changes; float grids use only the bounds.
+class QuantTables {
+public:
+  auto bind(const HeadGridView& grid, const Vector<float>& thresholds = {}) -> void;
+
+  // raw_bound() of thresholds[cls]: raw() >= bound(cls) exactly when at() >= thresholds[cls].
+  KZ_NODISCARD auto bound(std::size_t cls) const -> float { return bounds_[cls]; }
+
+  KZ_NODISCARD auto sigmoid(std::int8_t value) const -> float {
+    return sigmoid_[static_cast<std::size_t>(value + 128)];
+  }
+
+  // exp(scale * -steps), steps in [0, 255].
+  KZ_NODISCARD auto exp_below(std::int32_t steps) const -> float { return exp_below_[static_cast<std::size_t>(steps)]; }
+
+private:
+  bool ready_ = false;
+  bool int8_ = false;
+  float scale_ = 0.0F;
+  std::int32_t zero_point_ = 0;
+  Vector<float> bounds_;
+  Array<float, 256> sigmoid_{};
+  Array<float, 256> exp_below_{};
+};
+
+// core::sigmoid(grid.at(y, x, channel)), from `tables` (bound to `grid`) for int8 grids.
+inline auto sigmoid_at(const HeadGridView& grid, const QuantTables& tables, std::int64_t y, std::int64_t x,
+                       std::size_t channel) -> float {
+  return grid.int8() ? tables.sigmoid(grid.quantized(y, x, channel)) : core::sigmoid(grid.at(y, x, channel));
+}
+
+// Turns the logit scores of decoded boxes into probabilities. NMS ranks the
+// logits (the sigmoid keeps their order), so only kept boxes pay for it.
+template <typename ResultMap>
+auto sigmoid_scores(ResultMap& result) -> void {
+  for (auto& [cls, boxes] : result) {
+    for (auto& box : boxes)
+      box.score = core::sigmoid(box.score);
+  }
+}
+
 // Expected value of the softmax over `bins` consecutive channels starting at
-// `first` (YOLOv8 distribution focal loss decoding).
-inline auto dfl(const HeadGridView& grid, std::int64_t y, std::int64_t x, std::size_t first, std::size_t bins)
-    -> float {
+// `first` (YOLOv8 distribution focal loss decoding). int8 grids take their
+// weights from `tables`, bound to `grid`.
+inline auto dfl(const HeadGridView& grid, const QuantTables& tables, std::int64_t y, std::int64_t x, std::size_t first,
+                std::size_t bins) -> float {
+  float sum = 0.0F;
+  float weighted = 0.0F;
+  if (grid.int8()) {
+    auto max = grid.quantized(y, x, first);
+    for (std::size_t i = 1; i < bins; ++i)
+      max = std::max(max, grid.quantized(y, x, first + i));
+    for (std::size_t i = 0; i < bins; ++i) {
+      const auto e = tables.exp_below(max - grid.quantized(y, x, first + i));
+      sum += e;
+      weighted += e * static_cast<float>(i);
+    }
+    return weighted / sum;
+  }
   auto max = grid.at(y, x, first);
   for (std::size_t i = 1; i < bins; ++i)
     max = std::max(max, grid.at(y, x, first + i));
-  float sum = 0.0F;
-  float weighted = 0.0F;
   for (std::size_t i = 0; i < bins; ++i) {
     const auto e = std::exp(grid.at(y, x, first + i) - max);
     sum += e;
     weighted += e * static_cast<float>(i);
   }
   return weighted / sum;
+}
+
+// Index of the first maximum, as std::max_element. The maximum is found by a
+// reduction the compiler vectorizes, then its first position, since
+// std::max_element on int8 runs one value at a time.
+inline auto first_max(const std::int8_t* values, std::size_t count) -> std::size_t {
+  std::int8_t max = std::numeric_limits<std::int8_t>::lowest();
+  for (std::size_t i = 0; i < count; ++i)
+    max = std::max(max, values[i]);
+  return static_cast<std::size_t>(std::find(values, values + count, max) - values);
 }
 
 // Dequantizes an int8 output into `scratch`, a float32 host buffer of the

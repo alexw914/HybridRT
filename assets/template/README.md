@@ -455,7 +455,7 @@ Single-thread timing results and reproduction commands are in [benchmark.md](../
 | `yolov8n_segment_raw` | `YoloV8Segment.onnx` | `1 x 3 x 480 x 640` | `fdbd46dc0a5ae4bb1cb1b32010fa131a43f370043077555f921890bcd2880494` |
 | `yolo26n_segment_raw` | `Yolo26Segment.onnx` | `1 x 3 x 640 x 640` | `85e5ec69cb0a06f82e6a27b4cdb6be36d91e041b3829d75887183f6506b18221` |
 | `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `101060498337592b2c671f479001ca725d92049f99118e5b666f4c2273d9f096` |
-| `lraspp_voc_segment` | `SemanticSegment.onnx` | `1 x 3 x 512 x 512` | `e610481d6dfedf62285bf7de02c1a67a786dc3abb342a5e5db108b67c89daf6b` |
+| `yolo26n_semantic` | `SemanticSegment.onnx` | `1 x 3 x 640 x 640` | `0297ea52c1e6da5047657153853e61136de4bfec675795c6bfb7ea9e1b071f28` |
 
 Static batch-4 and batch-8 fixtures are exported directly from official [Ultralytics weights](https://github.com/ultralytics/assets/releases/tag/v8.3.0),
 using local `assets/test/scripts/export_static_batch.py` (arguments: the batches to export):
@@ -556,8 +556,16 @@ Sources and export steps for the current collection:
   RTMO replaces selection after NMS with the 300 highest-scoring candidates before
   NMS, keeping the original box/keypoint decoding. HybridRT performs NMS on the host.
   RTMPose fixes batch 1 and its 256 x 192 input; both outputs have 17 keypoints.
-- `SemanticSegment` uses torchvision 0.29.1 LR-ASPP MobileNetV3 official pretrained
-  COCO-with-VOC-labels weights, exported FP32 at 512 x 512, opset 17.
+- `SemanticSegment` uses the official Ultralytics `yolo26n-sem.pt` export at 640 x 640,
+  opset 17. Local `assets/test/scripts/export_yolo26_semantic.py` cuts the in-graph Resize
+  and ArgMax and exposes 19-channel stride-8 logits (`B x 19 x 80 x 80`) for host decoding.
+  Batch 1/4/8 are static exports; RKNN mean/std are 0/255 with RGB letterbox preprocessing.
+  Weights `yolo26n-sem.pt` (Cityscapes, 19 classes) SHA256
+  `f3f293cca764de1f93044030d8d5612de9c5ffbf37c9c8ea1b69418b73038999`, exported with
+  Ultralytics 8.4.187 and PyTorch 2.14.1 CPU. The cut logits match the full graph's argmax at
+  99.88% of cell centers. On bus.jpg, HybridRT ORT masks agree with Ultralytics `semantic_mask`
+  (which resizes the logits bilinearly before its argmax) on 96.9% of pixels; IoU is 0.968 road,
+  0.964 building, 0.898 person and 0.957 bus, and lower for small classes at stride-8 resolution.
 - Local `yolo_export_raw.py` and `prepare_other_cases.py` under `assets/test/scripts/`
   reproduce the raw exports and the YOLOv5, RTMO and RTMPose graph preparation.
 
@@ -608,8 +616,9 @@ Conversion scripts are local, untracked files in assets/test/scripts/ and are no
 - `RtmoKeypoint` uses `end2end.onnx` from the
   [RTMO-s body7 SDK](https://download.openmmlab.com/mmpose/v1/projects/rtmo/onnx_sdk/rtmo-s_8xb32-600e_body7-640x640-dac2bf74_20231211.zip),
   then `prepare_other_cases.py rtmo` with 300 candidates.
-- `SemanticSegment` exports torchvision 0.29
-  `lraspp_mobilenet_v3_large(weights=COCO_WITH_VOC_LABELS_V1)` at 512 x 512, opset 17.
+- `SemanticSegment` exports official
+  [yolo26n-sem.pt](https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n-sem.pt)
+  through `export_yolo26_semantic.py`, as described above.
 - `prepare_other_cases.py` fixes the RTMO and RTMPose batch to 1 and records the output
   shapes of a zero-input ONNX Runtime run as static output shapes. For RTMO it replaces the
   in-graph NMS with the first 300 candidates of its score TopK and raises its keep-top-k to
@@ -662,6 +671,15 @@ Results checked against independent references on bus.jpg (ONNX Runtime 1.31.0, 
   scaling on constructed 48 x 64 maps, edge peaks included.
 - `rtmpose_m_pose` after `yolov8n_detect`: visible keypoints within 5 px of mmpose's affine crop
   and SimCC decoding, visibility 17/17 for all 4 people.
+
+YOLO26 semantic static variants use `export_yolo26_semantic.py`, with the in-graph Resize and
+ArgMax removed so the postprocessor receives class logits. Input/output shapes are fixed:
+
+| ONNX file | Input | Output | SHA256 |
+| --- | --- | --- | --- |
+| `SemanticSegment.onnx` | `1x3x640x640` | `1x19x80x80` | `0297ea52c1e6da5047657153853e61136de4bfec675795c6bfb7ea9e1b071f28` |
+| `SemanticSegmentBatch4.onnx` | `4x3x640x640` | `4x19x80x80` | `5b56d1508dcbf4da9e0b0da8e94080b5e45623ec75ebcbea29f52e876aeb5c26` |
+| `SemanticSegmentBatch8.onnx` | `8x3x640x640` | `8x19x80x80` | `d285e4d8150f9cdc8be2736c4ae70c79d9c310ccd4db8df5fa2985c31bbdf481` |
 
 ### INT4 ONNX fixtures
 
@@ -844,10 +862,10 @@ conversion and IO validation do not establish task accuracy or correct NPU infer
 | `yolo26n_e2e_segment` | `E2ESegmentInt8.rknn` | INT8 | `b2ee26161981929c632ef052c1c2c14c8ded45a315b9b88d420987ea4344dda3` |
 | `yolo26n_e2e_segment` | `E2ESegmentBatch4Int8.rknn` | INT8 | `1e022a159ab9e38fb8e3fc8ba9d9683ec2128e39b2979fe70753f9b3f2e8185a` |
 | `yolo26n_e2e_segment` | `E2ESegmentBatch8Int8.rknn` | INT8 | `e1bb70851990e593d9deafbd006343446c6b1875fba78f575d97446166f64bfa` |
-| `lraspp_voc_segment` | `SemanticSegment.rknn` | FP16 | `a22c334461ae0827e3692efc88efc69be37549216280add40aa0fb26218628de` |
-| `lraspp_voc_segment` | `SemanticSegmentInt8.rknn` | INT8 | `c9dd08b3eb75c8b2d3c28b8f67d0576bab76f4ce2c713375737707334797f851` |
-| `lraspp_voc_segment` | `SemanticSegmentBatch4Int8.rknn` | INT8 | `90f076660f82c1eea3bd7d3d0b76acbe61eab8fac25a4710143ea40c36cc324c` |
-| `lraspp_voc_segment` | `SemanticSegmentBatch8Int8.rknn` | INT8 | `d6a727f0f1e1e59c142d698e104ba9fc8fb5b8ddb070809dfaeecd835a44210a` |
+| `yolo26n_semantic` | `SemanticSegment.rknn` | FP16 | `8ae6b9009a109addc1165648492a31c05c67c0d84547c825706979309347569d` |
+| `yolo26n_semantic` | `SemanticSegmentInt8.rknn` | INT8 | `030fe2efdc14c292f3afd00e7e7480c44e57e4926376ea9750dc05e3065241de` |
+| `yolo26n_semantic` | `SemanticSegmentBatch4Int8.rknn` | INT8 | `a52ee91a3b1afba290aa181c83c3969d29d9214cea56be4b1ef2607ab3f0b015` |
+| `yolo26n_semantic` | `SemanticSegmentBatch8Int8.rknn` | INT8 | `1792e363da52510d5b6a59156b1a0e4cd7a7b7571be0a3d43b72a23143383253` |
 | `ppocrv6_tiny_det` | `OcrDetection.rknn` | FP16 | `59c2845ffb7ac3eb52d987e1a81eebe50f73db1f02114a43500d98ae90ed6b85` |
 | `ppocrv6_tiny_det` | `OcrDetectionInt8.rknn` | INT8 | `faad92a5b8c89b09e8b20fdd4e6e3e1a76185951625e2152fa78c577b5c5e62e` |
 | `ppocrv6_tiny_det` | `OcrDetectionBatch4Int8.rknn` | INT8 | `4e7d4a75b24b06696ce8c2bc0d62b297de974b0f3e41a53aa0e562c3bbb575e3` |
@@ -868,7 +886,7 @@ Against the ORT results of the same models on bus.jpg, airport.jpg and zidane.jp
 | `GeneralYoloPose`, `YoloV8Keypoint` (raw, face) | same people and faces (one borderline person fewer for the raw pose heads); keypoints within 7.3 px |
 | `GeneralRotated`, `YoloV8Rotated` (raw) | same 11 planes; angles within 2.2 degrees |
 | `GeneralClassify` | same top 1 on airport.jpg; bus.jpg's near-flat scores (0.02) differ |
-| `SemanticSegment` | same classes; mask IoU 0.956 or more |
+| `SemanticSegment` (YOLO26n-sem) | bus.jpg: FP16 decodes 12 classes and INT8 11 (ORT: 12); only class counts were compared, not class sets or mask IoU |
 | `GeneralKeypoint` (`simcc`) after `yolov8n_detect` | same 4 people, visibility 17/17; keypoints within 7.3 px |
 | `Yolo26Detect`, `Yolo26Keypoint`, `Yolo26Rotated` | same objects; boxes within 9.5 px, angles within 0.3 degrees; keypoints within 2 px at the median, one uncertain wrist off by 19.5 px |
 | `E2EDetect`, `E2EKeypoint`, `E2ESegment`, `E2ERotated` | YOLO26 exports convert but return no or wrong rows: the runtime reports GatherElements indexes out of range in the in-graph top-k; YOLOv8 `nms=True` exports do not convert (dynamic NonMaxSuppression) |
@@ -887,7 +905,7 @@ preprocessing from a host image, 100 runs):
 | `yolov8n_obb` (640 x 480) | 1.6 | 38.2 | 0.5 | 39.0 |
 | `yolov8n_obb_raw` (1024) | 2.3 | 108.7 | 1.6 | 111.6 |
 | `yolov8n_classify` (640 x 480) | 1.6 | 21.3 | 0.0 | 22.3 |
-| `lraspp_voc_segment` (512) | 1.5 | 66.5 | 8.7 | 70.5 |
+| `lraspp_voc_segment` (512, previous LR-ASPP export) | 1.5 | 66.5 | 8.7 | 70.5 |
 | `yolov8n_face` (640) | 1.7 | 45.4 | 0.06 | 47.3 |
 | `rtmpose_m_pose` (192 x 256 crop) | 0.8 | 18.6 | 0.06 | 20.4 |
 

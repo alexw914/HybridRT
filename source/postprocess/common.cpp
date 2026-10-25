@@ -150,6 +150,25 @@ auto HeadGridView::raw_bound(float threshold) const -> float {
   return static_cast<float>(bound);
 }
 
+auto QuantTables::bind(const HeadGridView& grid, const Vector<float>& thresholds) -> void {
+  if (ready_ && int8_ == grid.int8() && (!int8_ || (scale_ == grid.scale() && zero_point_ == grid.zero_point())))
+    return;
+  ready_ = true;
+  int8_ = grid.int8();
+  scale_ = grid.scale();
+  zero_point_ = grid.zero_point();
+  bounds_.resize(thresholds.size());
+  std::transform(thresholds.begin(), thresholds.end(), bounds_.begin(),
+                 [&](float threshold) -> float { return grid.raw_bound(threshold); });
+  if (!int8_)
+    return;
+  for (std::int32_t i = 0; i < 256; ++i) {
+    const auto index = static_cast<std::size_t>(i);
+    sigmoid_[index] = core::sigmoid(core::dequantize(static_cast<std::int8_t>(i - 128), scale_, zero_point_));
+    exp_below_[index] = std::exp(-scale_ * static_cast<float>(i));
+  }
+}
+
 namespace {
 
 // raw_bound() in the element type: every int8 reaches -129 and none reaches 128.
@@ -249,13 +268,24 @@ auto scan_channel_cells(const HeadGridView& grid, std::size_t channel, float thr
     -> void {
   const auto* values = grid.row<T>(0, channel);
   const auto step = grid.col_step();
-  const auto bound = typed_bound<T>(grid.raw_bound(threshold));
+  const auto raw = grid.raw_bound(threshold);
+  const auto bound = typed_bound<T>(raw);
+  // The largest stored value not above the threshold, so values are compared
+  // as stored: int8 values above it dequantize above the threshold.
+  auto above = bound;
+  if constexpr (!std::is_same_v<T, float>) {
+    if (raw >= -128.0F && raw <= 127.0F &&
+        !(core::dequantize(static_cast<std::int8_t>(bound), grid.scale(), grid.zero_point()) <= threshold))
+      --above;
+  }
+  const auto exact = std::is_same_v<T, float> || grid.scale() > 0.0F;
   const auto cols = static_cast<std::size_t>(grid.cols());
   cells.clear();
   std::size_t x = 0;
   const auto check = [&](std::size_t end) -> void {
     for (; x < end; ++x) {
-      if (values[x * step] >= bound && grid.at(0, static_cast<std::int64_t>(x), channel) > threshold)
+      const auto value = values[x * step];
+      if (exact ? value > above : grid.at(0, static_cast<std::int64_t>(x), channel) > threshold)
         cells.push_back(static_cast<std::uint32_t>(x));
     }
   };

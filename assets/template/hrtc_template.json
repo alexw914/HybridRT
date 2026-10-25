@@ -274,9 +274,9 @@
       }
     },
     {
-      "name": "lraspp_voc_segment",
+      "name": "yolo26n_semantic",
       "config": {
-        "preprocess": {"mean": [123.675, 116.28, 103.53], "std": [58.395, 57.12, 57.375]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/SemanticSegment.onnx"}]},
         "postprocess": {"type": "SemanticSegment"}
       }

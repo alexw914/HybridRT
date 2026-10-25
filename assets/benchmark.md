@@ -78,32 +78,32 @@ DVPP → CANN (Ascend) is planned and has no platform yet.
 
 | Type | Template algo | Model outputs | CPU B1 | CPU B4 | CPU B8 |
 | --- | --- | --- | ---: | ---: | ---: |
-| `YoloV8Detect` | `yolov8_detect` | `Bx144x{80x80, 40x40, 20x20}` | 0.08404 | — | — |
-| `Yolo26Detect` | `yolo26n_detect_raw` | `Bx84x{80x80, 40x40, 20x20}` | 0.07486 | — | — |
-| `YoloV5Detect` | `yolov5_detect` | `Bx255x{80x80, 40x40, 20x20}` | 0.03194 | — | — |
-| `DetrDetect` | `rtdetr_l_detect` | `Bx300x84` | 0.02268 | — | — |
-| `E2EDetect` | `yolo26n_e2e_detect` | `Bx300x6` | 0.0006331 | — | — |
-| `GeneralDetect` | `yolov8n_detect` | `Bx84x8400` | 0.0387 | 0.1792 | 0.3891 |
-| `E2ERotated` | `yolo26n_e2e_obb` | `Bx300x7` | 0.0007012 | — | — |
-| `YoloV8Rotated` | `yolov8n_obb_raw` | `Bx80x{128x128, 64x64, 32x32}` | 0.2561 | — | — |
-| `Yolo26Rotated` | `yolo26n_obb_raw` | `Bx20x{128x128, 64x64, 32x32}` | 0.1873 | — | — |
-| `YoloV5Rotated` | `yolov5_rotated` | `Bx24x{160x160, 80x80, 40x40}` | 0.03348 | — | — |
-| `GeneralRotated` | `yolov8n_obb` | `Bx20x6300` | 0.1745 | — | — |
-| `GeneralClassify` | `yolov8n_classify` | `Bx1000` | 5.497e-05 | 0.0008464 | 0.001665 |
-| `Embedding` | `yolov8n_classify_embedding` | `Bx1000` | 4.466e-05 | — | — |
-| `GeneralYoloPose` | `yolov8n_pose` | `Bx56x8400` | 0.001526 | 0.007363 | 0.01439 |
-| `YoloV8Keypoint` | `yolov8n_face` | `Bx80x{80x80, 40x40, 20x20}` | 0.009672 | — | — |
-| `Yolo26Keypoint` | `yolo26n_pose_raw` | `Bx56x{80x80, 40x40, 20x20}` | 0.007871 | — | — |
-| `E2EKeypoint` | `yolo26n_e2e_pose` | `Bx300x57` | 0.001121 | — | — |
-| `RtmoKeypoint` | `rtmo_s_pose` | `Bx300x5`, `Bx300x17x3` | 0.001591 | — | — |
-| `GeneralKeypoint` | `rtmpose_m_pose` | `Bx17x384`, `Bx17x512` | 0.006682 | — | — |
-| `GeneralYoloSegment` | `yolov8n_segment` | `Bx116x8400`, `Bx32x160x160` | 0.3411 | 1.714 | 4.807 |
-| `YoloV8Segment` | `yolov8n_segment_raw` | `Bx176x{60x80, 30x40, 15x20}`, `Bx32x120x160` | 0.3004 | — | — |
-| `Yolo26Segment` | `yolo26n_segment_raw` | `Bx116x{80x80, 40x40, 20x20}`, `Bx32x160x160` | 0.3686 | — | — |
-| `E2ESegment` | `yolo26n_e2e_segment` | `Bx300x38`, `Bx32x160x160` | 0.2673 | — | — |
-| `SemanticSegment` | `lraspp_voc_segment` | `Bx21x512x512` | 2.941 | — | — |
-| `Ocr` | `ppocrv6_tiny_det` | `Bx1x640x640` | 0.6162 | — | — |
-| `Ocr` | `ppocrv6_tiny_rec` | `Bx40x6906` | 0.1211 | — | 0.9974 |
+| `YoloV8Detect` | `yolov8_detect` | `Bx144x{80x80, 40x40, 20x20}` | 0.08788 | — | — |
+| `Yolo26Detect` | `yolo26n_detect_raw` | `Bx84x{80x80, 40x40, 20x20}` | 0.07557 | — | — |
+| `YoloV5Detect` | `yolov5_detect` | `Bx255x{80x80, 40x40, 20x20}` | 0.03462 | — | — |
+| `DetrDetect` | `rtdetr_l_detect` | `Bx300x84` | 0.02263 | — | — |
+| `E2EDetect` | `yolo26n_e2e_detect` | `Bx300x6` | 0.0006817 | — | — |
+| `GeneralDetect` | `yolov8n_detect` | `Bx84x8400` | 0.04063 | 0.1518 | 0.3261 |
+| `E2ERotated` | `yolo26n_e2e_obb` | `Bx300x7` | 0.0006963 | — | — |
+| `YoloV8Rotated` | `yolov8n_obb_raw` | `Bx80x{128x128, 64x64, 32x32}` | 0.2583 | — | — |
+| `Yolo26Rotated` | `yolo26n_obb_raw` | `Bx20x{128x128, 64x64, 32x32}` | 0.2009 | — | — |
+| `YoloV5Rotated` | `yolov5_rotated` | `Bx24x{160x160, 80x80, 40x40}` | 0.0502 | — | — |
+| `GeneralRotated` | `yolov8n_obb` | `Bx20x6300` | 0.1782 | — | — |
+| `GeneralClassify` | `yolov8n_classify` | `Bx1000` | 5.933e-05 | 0.0009275 | 0.001775 |
+| `Embedding` | `yolov8n_classify_embedding` | `Bx1000` | 4.468e-05 | — | — |
+| `GeneralYoloPose` | `yolov8n_pose` | `Bx56x8400` | 0.001496 | 0.007433 | 0.0139 |
+| `YoloV8Keypoint` | `yolov8n_face` | `Bx80x{80x80, 40x40, 20x20}` | 0.00967 | — | — |
+| `Yolo26Keypoint` | `yolo26n_pose_raw` | `Bx56x{80x80, 40x40, 20x20}` | 0.00793 | — | — |
+| `E2EKeypoint` | `yolo26n_e2e_pose` | `Bx300x57` | 0.001152 | — | — |
+| `RtmoKeypoint` | `rtmo_s_pose` | `Bx300x5`, `Bx300x17x3` | 0.001724 | — | — |
+| `GeneralKeypoint` | `rtmpose_m_pose` | `Bx17x384`, `Bx17x512` | 0.006013 | — | — |
+| `GeneralYoloSegment` | `yolov8n_segment` | `Bx116x8400`, `Bx32x160x160` | 0.3406 | 1.733 | 4.252 |
+| `YoloV8Segment` | `yolov8n_segment_raw` | `Bx176x{60x80, 30x40, 15x20}`, `Bx32x120x160` | 0.3087 | — | — |
+| `Yolo26Segment` | `yolo26n_segment_raw` | `Bx116x{80x80, 40x40, 20x20}`, `Bx32x160x160` | 0.3763 | — | — |
+| `E2ESegment` | `yolo26n_e2e_segment` | `Bx300x38`, `Bx32x160x160` | 0.2761 | — | — |
+| `SemanticSegment` | `yolo26n_semantic` | `Bx19x80x80` | 0.389 | — | — |
+| `Ocr` | `ppocrv6_tiny_det` | `Bx1x640x640` | 0.2974 | — | — |
+| `Ocr` | `ppocrv6_tiny_rec` | `Bx40x6906` | 0.1255 | — | 1.022 |
 
 RK3588 CPU, RKNN FP16/INT8 output comparison (whole-batch ms):
 
@@ -113,49 +113,52 @@ RK3588 CPU, RKNN FP16/INT8 output comparison (whole-batch ms):
 - Same warm-up, three repetitions and median method as above; one caller, one OpenCV thread,
   A76 cores 4-7. Model shapes and thresholds come from the template; input images are resized on
   the build host. One RKNN inference, output conversion and host copies run before timing.
-- Model preparation is complete: 72 native INT8-output variants (24 model groups x B1/B4/B8)
-  and 23 FP16-output B1 references passed SDK IO checks. RT-DETR and RTMO fail conversion; the
-  user QAT YOLOv5 OBB model has no FP16 counterpart. No additional speed tests were run.
-  `—` means not timed or unavailable. Classification, Embedding and recognition now use explicit
-  output quantization; their earlier FP16-output timings are excluded. `error` marks a prior
-  in-graph GatherElements failure; no timing is accepted. Conversion/query results are detailed
-  in [the model reference](template/README.md#rknn-on-rk3588).
+- 72 native INT8-output variants (24 model groups x B1/B4/B8) and 23 FP16-output B1 references
+  passed SDK IO checks; 64 INT8 variants of 22 groups and 21 FP16 B1 models produced valid timings.
+  `conversion fails` marks RT-DETR and RTMO, whose graphs the toolkit cannot convert. `—` means
+  not timed: the user QAT YOLOv5 OBB model has no FP16 counterpart, and `GeneralKeypoint`
+  (top-down, one keypoint set per output) rejects batch 4 and 8. `error` marks the YOLO26
+  end-to-end exports, whose in-graph TopK/GatherElements index tensors go out of range on the
+  runtime; no timing is accepted. Conversion/query results are detailed in
+  [the model reference](template/README.md#rknn-on-rk3588).
 - `‡` means zero decoded objects on the test image: only scan/filter work is measured, not NMS/masks.
   Fused coordinate/confidence outputs lose scores at coarse scales (about 2.57–3.16); these results
   cannot establish useful detection accuracy or a speedup over FP32. The user-specific YOLOv5 OBB
   model also has no objects on airport.jpg; that image is not an accuracy reference for its classes.
-- Local raw results: `rknn_all_int8_query.log`, `rknn_postprocess_all_int8.json` and per-algo logs in
-  `assets/test/benchmark_results/rknn_postprocess_all_int8/`. SDK versions match the platform matrix;
-  the board service was stopped during timing and restored afterward. Frequency scaling stayed enabled.
+- `SemanticSegment` uses YOLO26n-sem with 19 x 80 x 80 logits at 640 x 640 input; its masks
+  cover the 810 x 1080 bus.jpg.
+- Local raw results: `rknn_all_int8_query.log`, `rknn_postprocess_matrix.json` and per-variant logs in
+  `assets/test/benchmark_results/rknn_postprocess_matrix/`, from `run_rknn_postprocess.py`. SDK
+  versions match the platform matrix; the board service stayed running and frequency scaling enabled.
 
 | Type | Template algo | Native INT8 output | FP16 B1 | INT8 B1 | INT8 B4 | INT8 B8 |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| `YoloV8Detect` | `yolov8_detect` | INT8 | — | 0.146 | — | — |
-| `Yolo26Detect` | `yolo26n_detect_raw` | INT8 | — | 0.114 | — | — |
-| `YoloV5Detect` | `yolov5_detect` | INT8 | — | 0.08607 | — | — |
-| `DetrDetect` | `rtdetr_l_detect` | unavailable | — | — | — | — |
-| `E2EDetect` | `yolo26n_e2e_detect` | INT8 | — | error | — | — |
-| `GeneralDetect` | `yolov8n_detect` | INT8 | — | 0.06842 ‡ | 0.2764 ‡ | 0.5587 ‡ |
-| `E2ERotated` | `yolo26n_e2e_obb` | INT8 | — | 0.001763 ‡ | — | — |
-| `YoloV8Rotated` | `yolov8n_obb_raw` | INT8 | — | 0.4901 | — | — |
-| `Yolo26Rotated` | `yolo26n_obb_raw` | INT8 | — | 0.3463 | — | — |
-| `YoloV5Rotated` | `yolov5_rotated` | INT8 | — | 0.09145 ‡ | — | — |
-| `GeneralRotated` | `yolov8n_obb` | INT8 | — | 0.01065 ‡ | — | — |
-| `GeneralClassify` | `yolov8n_classify` | INT8 | — | — | — | — |
-| `Embedding` | `yolov8n_classify_embedding` | INT8 | — | — | — | — |
-| `GeneralYoloPose` | `yolov8n_pose` | INT8 | — | 0.0008675 ‡ | 0.004563 ‡ | 0.009211 ‡ |
-| `YoloV8Keypoint` | `yolov8n_face` | INT8 | — | 0.02534 | — | — |
-| `Yolo26Keypoint` | `yolo26n_pose_raw` | INT8 | — | 0.02057 | — | — |
-| `E2EKeypoint` | `yolo26n_e2e_pose` | INT8 | — | 0.001741 ‡ | — | — |
-| `RtmoKeypoint` | `rtmo_s_pose` | unavailable | — | — | — | — |
-| `GeneralKeypoint` | `rtmpose_m_pose` | INT8 | — | 0.01993 | — | — |
-| `GeneralYoloSegment` | `yolov8n_segment` | INT8 | — | 0.06919 ‡ | 0.2826 ‡ | 0.5724 ‡ |
-| `YoloV8Segment` | `yolov8n_segment_raw` | INT8 | — | 0.6855 | — | — |
-| `Yolo26Segment` | `yolo26n_segment_raw` | INT8 | — | 0.8849 | — | — |
-| `E2ESegment` | `yolo26n_e2e_segment` | INT8 | — | error | — | — |
-| `SemanticSegment` | `lraspp_voc_segment` | INT8 | — | 13.75 | — | — |
-| `Ocr` | `ppocrv6_tiny_det` | INT8 | — | 1.697 | — | — |
-| `Ocr` | `ppocrv6_tiny_rec` | INT8 | — | — | — | — |
+| `YoloV8Detect` | `yolov8_detect` | INT8 | 0.3652 | 0.1239 | 0.5141 | 1.081 |
+| `Yolo26Detect` | `yolo26n_detect_raw` | INT8 | 0.3152 | 0.1156 | 0.4839 | 0.995 |
+| `YoloV5Detect` | `yolov5_detect` | INT8 | 0.07864 | 0.04357 | 0.1843 | 0.3765 |
+| `DetrDetect` | `rtdetr_l_detect` | conversion fails | — | — | — | — |
+| `E2EDetect` | `yolo26n_e2e_detect` | INT8 | error | error | error | error |
+| `GeneralDetect` | `yolov8n_detect` | INT8 | 0.1495 | 0.06851 ‡ | 0.2813 ‡ | 0.5844 ‡ |
+| `E2ERotated` | `yolo26n_e2e_obb` | INT8 | 0.001539 | 0.001767 ‡ | 0.008112 ‡ | 0.01628 ‡ |
+| `YoloV8Rotated` | `yolov8n_obb_raw` | INT8 | 0.6044 | 0.4283 | 1.763 | 4.537 |
+| `Yolo26Rotated` | `yolo26n_obb_raw` | INT8 | 0.4315 | 0.3487 | 1.416 | 2.843 |
+| `YoloV5Rotated` | `yolov5_rotated` | INT8 | — | 0.09146 ‡ | 0.3705 ‡ | 0.7413 ‡ |
+| `GeneralRotated` | `yolov8n_obb` | INT8 | 0.3472 | 0.01065 ‡ | 0.0441 ‡ | 0.08837 ‡ |
+| `GeneralClassify` | `yolov8n_classify` | INT8 | 0.0001666 | 0.0005384 | 0.004765 | 0.0134 |
+| `Embedding` | `yolov8n_classify_embedding` | INT8 | 0.0001348 | 0.0004969 | 0.004489 | 0.01292 |
+| `GeneralYoloPose` | `yolov8n_pose` | INT8 | 0.003619 | 0.000868 ‡ | 0.004582 ‡ | 0.009266 ‡ |
+| `YoloV8Keypoint` | `yolov8n_face` | INT8 | 0.02257 | 0.01344 | 0.05769 | 0.1178 |
+| `Yolo26Keypoint` | `yolo26n_pose_raw` | INT8 | 0.01788 | 0.01396 | 0.05963 | 0.1216 |
+| `E2EKeypoint` | `yolo26n_e2e_pose` | INT8 | 0.001255 ‡ | 0.001731 ‡ | 0.008213 ‡ | 0.01648 ‡ |
+| `RtmoKeypoint` | `rtmo_s_pose` | conversion fails | — | — | — | — |
+| `GeneralKeypoint` | `rtmpose_m_pose` | INT8 | 0.01914 | 0.005418 | — | — |
+| `GeneralYoloSegment` | `yolov8n_segment` | INT8 | 1.163 | 0.0692 ‡ | 0.287 ‡ | 0.5925 ‡ |
+| `YoloV8Segment` | `yolov8n_segment_raw` | INT8 | 0.9454 | 0.6709 | 3.088 | 6.639 |
+| `Yolo26Segment` | `yolo26n_segment_raw` | INT8 | 1.268 | 0.8964 | 4.078 | 8.119 |
+| `E2ESegment` | `yolo26n_e2e_segment` | INT8 | error | error | error | error |
+| `SemanticSegment` | `yolo26n_semantic` | INT8 | 1.058 | 0.8881 | 4.552 | 9.425 |
+| `Ocr` | `ppocrv6_tiny_det` | INT8 | 0.7009 | 0.7688 | 3.135 | 6.252 |
+| `Ocr` | `ppocrv6_tiny_rec` | INT8 | 0.2434 | 0.01659 | 0.06792 | 0.1427 |
 
 ## Pipeline
 

@@ -59,6 +59,7 @@ public:
                    core::logit);
     mask_logit_ = core::logit(param_.mask_threshold);
     layout_ = engine.proto().output_layout;
+    tables_.resize(engine.output_protos().size());
     return true;
   }
 
@@ -82,7 +83,8 @@ protected:
     }
     for (std::size_t k = 0; k < outputs_.heads.size(); ++k) {
       const HeadGridView grid(*outputs[outputs_.heads[k]], layout_);
-      decode_head(grid, param_.strides[k]);
+      tables_[k].bind(grid, logit_threshold_);
+      decode_head(grid, tables_[k], param_.strides[k]);
     }
     const auto masks = outputs_.masks;
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
@@ -91,7 +93,7 @@ protected:
         if (box.empty())
           continue;
         auto& objects = result[static_cast<std::int64_t>(cls)];
-        objects.emplace_back().box = {box, scores_[cls][k], static_cast<std::int64_t>(cls), -1};
+        objects.emplace_back().box = {box, core::sigmoid(scores_[cls][k]), static_cast<std::int64_t>(cls), -1};
         masks_.add(std::span(coefficients_[cls]).subspan(k * masks, masks), rects_[cls][k], box,
                    static_cast<std::int64_t>(cls), objects.size() - 1);
       }
@@ -101,7 +103,7 @@ protected:
   }
 
 private:
-  auto decode_head(const HeadGridView& grid, core::Point2f stride) -> void {
+  auto decode_head(const HeadGridView& grid, const QuantTables& tables, core::Point2f stride) -> void {
     const auto bins = param_.reg_max;
     const auto first_mask = bins * 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
@@ -109,17 +111,17 @@ private:
       const std::int64_t y = cell / grid.cols();
       const std::int64_t x = cell % grid.cols();
       for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
-        if (grid.raw(y, x, bins * 4 + cls) < min_score)
+        if (grid.raw(y, x, bins * 4 + cls) < tables.bound(cls))
           continue;
+        // The logit ranks candidates in NMS; only kept ones take the sigmoid.
         const auto score = grid.at(y, x, bins * 4 + cls);
-        if (score < logit_threshold_[cls])
-          continue;
         const auto cx = static_cast<float>(x) + 0.5F;
         const auto cy = static_cast<float>(y) + 0.5F;
         rects_[cls].push_back(core::Rect2f(
-            {(cx - dfl(grid, y, x, 0, bins)) * stride.x, (cy - dfl(grid, y, x, bins, bins)) * stride.y},
-            {(cx + dfl(grid, y, x, bins * 2, bins)) * stride.x, (cy + dfl(grid, y, x, bins * 3, bins)) * stride.y}));
-        scores_[cls].push_back(core::sigmoid(score));
+            {(cx - dfl(grid, tables, y, x, 0, bins)) * stride.x, (cy - dfl(grid, tables, y, x, bins, bins)) * stride.y},
+            {(cx + dfl(grid, tables, y, x, bins * 2, bins)) * stride.x,
+             (cy + dfl(grid, tables, y, x, bins * 3, bins)) * stride.y}));
+        scores_[cls].push_back(score);
         for (std::size_t j = 0; j < outputs_.masks; ++j)
           coefficients_[cls].push_back(grid.at(y, x, first_mask + j));
       }
@@ -129,6 +131,7 @@ private:
   YoloV8SegmentParam param_;
   RawSegmentOutputs outputs_;
   CellScanner scan_;
+  Vector<QuantTables> tables_;
   Vector<float> logit_threshold_;
   float mask_logit_ = 0.0F;
   engine::DataLayout layout_ = engine::DataLayout::Nchw;

@@ -54,6 +54,7 @@ public:
     std::transform(param_.confidence_threshold.begin(), param_.confidence_threshold.end(), logit_threshold_.begin(),
                    core::logit);
     layout_ = engine.proto().output_layout;
+    tables_.resize(engine.output_protos().size());
     return true;
   }
 
@@ -71,7 +72,8 @@ protected:
     candidates_.resize(param_.class_num);
     for (std::size_t head = 0; head < outputs.size(); ++head) {
       const HeadGridView grid(*outputs[head], layout_);
-      decode_head(grid, param_.strides[head]);
+      tables_[head].bind(grid, logit_threshold_);
+      decode_head(grid, tables_[head], param_.strides[head]);
     }
     for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
       auto& objects = candidates_[cls];
@@ -86,6 +88,7 @@ protected:
         object.box.rect = transform.clip_reverse(object.box.rect);
         if (object.box.rect.empty())
           continue;
+        object.box.score = core::sigmoid(object.box.score);
         for (auto& keypoint : object.keypoints)
           keypoint.point = transform.reverse(keypoint.point);
         result[static_cast<std::int64_t>(cls)].push_back(std::move(object));
@@ -95,30 +98,29 @@ protected:
   }
 
 private:
-  auto decode_head(const HeadGridView& grid, core::Point2f stride) -> void {
+  auto decode_head(const HeadGridView& grid, const QuantTables& tables, core::Point2f stride) -> void {
     const auto first_keypoint = 4 + param_.class_num;
     const auto min_score = grid.raw_bound(*std::min_element(logit_threshold_.begin(), logit_threshold_.end()));
     for (const auto cell : scan_.scan_max_score(grid, 4, param_.class_num, min_score)) {
       const std::int64_t y = cell / grid.cols();
       const std::int64_t x = cell % grid.cols();
       for (std::size_t cls = 0; cls < param_.class_num; ++cls) {
-        if (grid.raw(y, x, 4 + cls) < min_score)
+        if (grid.raw(y, x, 4 + cls) < tables.bound(cls))
           continue;
+        // The logit ranks candidates in NMS; only kept ones take the sigmoid.
         const auto score = grid.at(y, x, 4 + cls);
-        if (score < logit_threshold_[cls])
-          continue;
         const auto cx = static_cast<float>(x) + 0.5F;
         const auto cy = static_cast<float>(y) + 0.5F;
         auto& object = candidates_[cls].emplace_back();
         object.box = {core::Rect2f({(cx - grid.at(y, x, 0)) * stride.x, (cy - grid.at(y, x, 1)) * stride.y},
                                    {(cx + grid.at(y, x, 2)) * stride.x, (cy + grid.at(y, x, 3)) * stride.y}),
-                      core::sigmoid(score), static_cast<std::int64_t>(cls), -1};
+                      score, static_cast<std::int64_t>(cls), -1};
         object.keypoints.reserve(param_.keypoint_num);
         for (std::size_t j = 0; j < param_.keypoint_num; ++j) {
           const auto channel = first_keypoint + j * kKeypointValues;
           const core::Point2f point{(grid.at(y, x, channel) + cx) * stride.x,
                                     (grid.at(y, x, channel + 1) + cy) * stride.y};
-          const auto visibility = core::sigmoid(grid.at(y, x, channel + 2));
+          const auto visibility = sigmoid_at(grid, tables, y, x, channel + 2);
           object.keypoints.push_back(
               {point, visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
                visibility});
@@ -129,6 +131,7 @@ private:
 
   Yolo26KeypointParam param_;
   CellScanner scan_;
+  Vector<QuantTables> tables_;
   Vector<float> logit_threshold_;
   engine::DataLayout layout_ = engine::DataLayout::Nchw;
   Vector<KeypointResult> candidates_;

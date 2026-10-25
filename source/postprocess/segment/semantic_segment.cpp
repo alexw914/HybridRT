@@ -9,7 +9,9 @@
 
 #include <algorithm>
 #include <bitset>
-#include <opencv2/imgproc.hpp>
+#include <cmath>
+#include <cstring>
+#include <opencv2/core.hpp>
 #include <type_traits>
 
 #if defined(__ARM_NEON) && defined(__aarch64__)
@@ -153,36 +155,71 @@ protected:
     if (!output_labels(output, channels, height, width))
       return false;
 
-    // Source pixel center -> network coordinate -> output pixel.
+    // Source pixel center -> network coordinate -> nearest output pixel, the
+    // edge repeated. The map only scales and shifts, so each axis has a table.
     const auto& dst = transform.dst_roi;
     const auto& src = transform.src_roi;
     const auto sx = static_cast<double>(width) / transform.input_size.width;
     const auto sy = static_cast<double>(height) / transform.input_size.height;
     const auto rw = static_cast<double>(dst.width) / src.width;
     const auto rh = static_cast<double>(dst.height) / src.height;
-    const cv::Matx23d inverse(rw * sx, 0.0, (0.5 * rw + dst.x) * sx - 0.5, 0.0, rh * sy, (0.5 * rh + dst.y) * sy - 0.5);
-    cv::warpAffine(labels_, source_labels_, inverse, {src.width, src.height}, cv::INTER_NEAREST | cv::WARP_INVERSE_MAP,
-                   cv::BORDER_REPLICATE);
+    nearest_cells(columns_, src.width, rw * sx, (0.5 * rw + dst.x) * sx - 0.5, width);
+    nearest_cells(rows_, src.height, rh * sy, (0.5 * rh + dst.y) * sy - 0.5, height);
+    // Consecutive source columns reading the same output column form a run.
+    runs_.clear();
+    for (int x = 0; x < src.width; ++x) {
+      if (x == 0 || columns_[static_cast<std::size_t>(x)] != columns_[static_cast<std::size_t>(x - 1)])
+        runs_.push_back({columns_[static_cast<std::size_t>(x)], x, 0});
+      ++runs_.back().length;
+    }
+
+    // One cleared mask per class read, then every run of every source row
+    // set in the mask of its label.
     std::bitset<65536> present;
-    const auto* labels = source_labels_.ptr<std::uint16_t>();
-    const auto pixels = source_labels_.total();
-    for (std::size_t i = 0; i < pixels; ++i)
-      present.set(labels[i]);
-    for (std::size_t cls = 0; cls < present.size(); ++cls) {
+    std::size_t last = 0;
+    for (const auto row : rows_) {
+      const auto* labels = labels_.ptr<std::uint16_t>(row);
+      for (const auto& run : runs_) {
+        present.set(labels[run.column]);
+        last = std::max<std::size_t>(last, labels[run.column]);
+      }
+    }
+    const auto pixels = static_cast<std::size_t>(src.width) * static_cast<std::size_t>(src.height);
+    masks_.assign(last + 1, nullptr);
+    for (std::size_t cls = 0; cls <= last; ++cls) {
       if (!present.test(cls))
         continue;
       auto& object = result[static_cast<std::int64_t>(cls)].emplace_back();
       object.box = {core::Rect2f(src), 1.0F, static_cast<std::int64_t>(cls), -1};
       object.mask.rect = src;
-      object.mask.data.resize(pixels);
-      cv::Mat mask(src.height, src.width, CV_8U, object.mask.data.data());
-      cv::compare(source_labels_, static_cast<double>(cls), mask, cv::CMP_EQ);
-      cv::bitwise_and(mask, cv::Scalar(1), mask);
+      object.mask.data.assign(pixels, 0);
+      masks_[cls] = object.mask.data.data();
+    }
+    for (int y = 0; y < src.height; ++y) {
+      const auto* labels = labels_.ptr<std::uint16_t>(rows_[static_cast<std::size_t>(y)]);
+      const auto offset = static_cast<std::size_t>(y) * static_cast<std::size_t>(src.width);
+      for (const auto& run : runs_)
+        std::memset(masks_[labels[run.column]] + offset + static_cast<std::size_t>(run.start), 1,
+                    static_cast<std::size_t>(run.length));
     }
     return true;
   }
 
 private:
+  struct Run {
+    int column; // Output column.
+    int start;  // First source column.
+    int length; // Source columns.
+  };
+
+  // round(scale * i + offset) for i in [0, count), clamped to [0, size).
+  static auto nearest_cells(Vector<int>& out, int count, double scale, double offset, int size) -> void {
+    out.resize(static_cast<std::size_t>(count));
+    for (int i = 0; i < count; ++i)
+      out[static_cast<std::size_t>(i)] =
+          std::clamp(static_cast<int>(std::floor(scale * i + offset + 0.5)), 0, size - 1);
+  }
+
   auto output_labels(const core::Buffer& output, int channels, int height, int width) -> bool {
     labels_.create(height, width, CV_16U);
     const auto plane = static_cast<std::size_t>(height) * static_cast<std::size_t>(width);
@@ -221,7 +258,10 @@ private:
 
   Vector<core::Buffer> scratch_;
   cv::Mat labels_;
-  cv::Mat source_labels_;
+  Vector<int> columns_;
+  Vector<int> rows_;
+  Vector<Run> runs_;
+  Vector<std::uint8_t*> masks_;
 };
 
 } // namespace

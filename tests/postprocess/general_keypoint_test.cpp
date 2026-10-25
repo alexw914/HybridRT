@@ -286,6 +286,39 @@ TEST(GeneralKeypointTest, DecodesSimccDistributions) {
   EXPECT_EQ(points[1].visible, hrt::postprocess::KeypointVisible::Invisible);
 }
 
+TEST(GeneralKeypointTest, DecodesInt8SimccDistributions) {
+  // The float distributions of DecodesSimccDistributions, quantized at 0.01 with zero point -100.
+  const auto x = proto(DataType::Int8, {1, 2, 16});
+  const auto y = proto(DataType::Int8, {1, 2, 8});
+  hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 4, 8})}, {x, y});
+  hrt::Vector<std::int8_t> xs(32, -100);
+  hrt::Vector<std::int8_t> ys(16, -100);
+  xs[5] = -20;
+  ys[3] = -40;
+  xs[16 + 12] = -80;
+  ys[8 + 1] = -10;
+  const kitzoo::json::Json config{{"general_keypoint_type", "simcc"}, {"keypoint_threshold", 0.3F}};
+  auto postprocessor =
+      hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("GeneralKeypoint", config, engine);
+  auto x_buffer = hrt::test::create_buffer(x, xs);
+  auto y_buffer = hrt::test::create_buffer(y, ys);
+  x_buffer->set_quantization(0.01F, -100);
+  y_buffer->set_quantization(0.01F, -100);
+  hrt::postprocess::KeypointResultMap result;
+  ASSERT_TRUE(postprocessor->process(result, {x_buffer, y_buffer}, hrt::test::identity(8, 4)));
+  ASSERT_EQ(result.at(0).size(), 1U);
+  const auto& points = result.at(0)[0].keypoints;
+  ASSERT_EQ(points.size(), 2U);
+  EXPECT_FLOAT_EQ(points[0].point.x, 2.5F);
+  EXPECT_FLOAT_EQ(points[0].point.y, 1.5F);
+  EXPECT_NEAR(points[0].score, 0.6F, 1e-6F);
+  EXPECT_EQ(points[0].visible, hrt::postprocess::KeypointVisible::Visible);
+  EXPECT_FLOAT_EQ(points[1].point.x, 6.0F);
+  EXPECT_FLOAT_EQ(points[1].point.y, 0.5F);
+  EXPECT_NEAR(points[1].score, 0.2F, 1e-6F);
+  EXPECT_EQ(points[1].visible, hrt::postprocess::KeypointVisible::Invisible);
+}
+
 TEST(GeneralKeypointTest, AppliesSigmoidToScores) {
   const auto x = proto(DataType::Float32, {1, 1, 4});
   const auto y = proto(DataType::Float32, {1, 1, 4});

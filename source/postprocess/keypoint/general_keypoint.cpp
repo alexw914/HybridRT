@@ -74,6 +74,36 @@ auto argmax(const float* begin, std::int64_t count) -> std::int64_t {
   return std::distance(begin, std::max_element(begin, begin + count));
 }
 
+// One contiguous output: float32, or int8 ranked as integers (positive scale)
+// and dequantized only where a value is used.
+class OutputValues {
+public:
+  OutputValues() = default;
+  OutputValues(const core::Buffer& buffer, bool int8)
+      : data_(buffer.memory()->cpu()), int8_(int8), scale_(buffer.scale()), zero_point_(buffer.zero_point()) {}
+
+  // float32 data; only for float outputs.
+  KZ_NODISCARD auto floats() const -> const float* { return static_cast<const float*>(data_); }
+
+  KZ_NODISCARD auto argmax(std::int64_t first, std::int64_t count) const -> std::int64_t {
+    if (!int8_)
+      return postprocess::argmax(floats() + first, count);
+    return static_cast<std::int64_t>(
+        first_max(static_cast<const std::int8_t*>(data_) + first, static_cast<std::size_t>(count)));
+  }
+
+  KZ_NODISCARD auto operator[](std::int64_t index) const -> float {
+    return int8_ ? core::dequantize(static_cast<const std::int8_t*>(data_)[index], scale_, zero_point_)
+                 : floats()[index];
+  }
+
+private:
+  const void* data_ = nullptr;
+  bool int8_ = false;
+  float scale_ = 1.0F;
+  std::int32_t zero_point_ = 0;
+};
+
 class GeneralKeypoint final : public KeypointPostprocessor {
 public:
   auto init(const kitzoo::json::Json& config, const engine::Engine& engine) -> bool override {
@@ -139,21 +169,28 @@ public:
 protected:
   auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
+    const auto type = param_.general_keypoint_type;
+    const auto heatmap = type == KeypointOutput::Heatmap || type == KeypointOutput::HeatmapUdp;
     for (std::size_t i = 0; i < outputs.size(); ++i) {
-      const core::Buffer* floats = outputs[i].get();
+      const auto& output = *outputs[i];
+      // Contiguous int8 outputs are read in place, except heatmaps, which DARK refines as float maps.
+      if (!heatmap && output.data_type() == core::DataType::Int8 && output.is_contiguous() && output.scale() > 0.0F) {
+        data_[i] = OutputValues(output, true);
+        continue;
+      }
+      const core::Buffer* floats = &output;
       if (floats->data_type() != core::DataType::Float32) {
         dequantize_buffer(*floats, scratch_[i]);
         floats = &scratch_[i];
       }
-      data_[i] = static_cast<const float*>(floats->memory()->cpu());
+      data_[i] = OutputValues(*floats, false);
     }
     auto& objects = result[0];
-    const auto type = param_.general_keypoint_type;
     switch (type) {
     case KeypointOutput::Heatmap:
     case KeypointOutput::HeatmapUdp:
       for (std::size_t i = 0; i < outputs.size(); ++i)
-        decode_heatmaps(objects.emplace_back().keypoints, data_[i], outputs[i]->shape());
+        decode_heatmaps(objects.emplace_back().keypoints, data_[i].floats(), outputs[i]->shape());
       break;
     case KeypointOutput::Simcc:
       decode_simcc(objects.emplace_back().keypoints, data_, outputs);
@@ -197,33 +234,31 @@ protected:
   }
 
 private:
-  static auto decode_simcc(Vector<Keypoint>& points, const Vector<const float*>& data, const core::Buffers& outputs)
+  static auto decode_simcc(Vector<Keypoint>& points, const Vector<OutputValues>& data, const core::Buffers& outputs)
       -> void {
     const auto count = outputs[0]->shape()[1];
     const auto x_bins = outputs[0]->shape()[2];
     const auto y_bins = outputs[1]->shape()[2];
     for (std::int64_t k = 0; k < count; ++k) {
-      const auto* xs = data[0] + k * x_bins;
-      const auto* ys = data[1] + k * y_bins;
-      const auto x = argmax(xs, x_bins);
-      const auto y = argmax(ys, y_bins);
+      const auto x = data[0].argmax(k * x_bins, x_bins);
+      const auto y = data[1].argmax(k * y_bins, y_bins);
       points.push_back(
           {{static_cast<float>(x) / static_cast<float>(x_bins), static_cast<float>(y) / static_cast<float>(y_bins)},
            KeypointVisible::Visible,
-           std::min(xs[x], ys[y])});
+           std::min(data[0][k * x_bins + x], data[1][k * y_bins + y])});
     }
   }
 
-  static auto decode_point_with_visible(Vector<Keypoint>& points, const Vector<const float*>& data,
+  static auto decode_point_with_visible(Vector<Keypoint>& points, const Vector<OutputValues>& data,
                                         const core::Buffers& outputs) -> void {
     const auto count = outputs[0]->shape()[1];
     const auto x_bins = outputs[0]->shape()[2];
     const auto y_bins = outputs[1]->shape()[2];
     const auto v_bins = outputs[2]->shape()[2];
     for (std::int64_t k = 0; k < count; ++k) {
-      const auto x = argmax(data[0] + k * x_bins, x_bins);
-      const auto y = argmax(data[1] + k * y_bins, y_bins);
-      const auto v = argmax(data[2] + k * v_bins, v_bins);
+      const auto x = data[0].argmax(k * x_bins, x_bins);
+      const auto y = data[1].argmax(k * y_bins, y_bins);
+      const auto v = data[2].argmax(k * v_bins, v_bins);
       points.push_back(
           {{static_cast<float>(x) / static_cast<float>(x_bins), static_cast<float>(y) / static_cast<float>(y_bins)},
            static_cast<KeypointVisible>(v),
@@ -329,7 +364,7 @@ private:
 
   GeneralKeypointParam param_;
   Vector<core::Buffer> scratch_;
-  Vector<const float*> data_;
+  Vector<OutputValues> data_;
   cv::Mat blurred_;
 };
 

@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <opencv2/imgproc.hpp>
+#include <type_traits>
 #if __has_include(<opencv2/geometry.hpp>)
 #include <opencv2/geometry.hpp>
 #endif
@@ -54,6 +55,55 @@ auto ordered_points(const cv::RotatedRect& rect) -> Array<cv::Point2f, 4> {
   if (points[2].y > points[3].y)
     std::swap(points[2], points[3]);
   return {points[0], points[2], points[3], points[1]};
+}
+
+// How a map is read: float32 as is, or int8 as integers ranked like their
+// dequantized values (positive scale), dequantized only where a value is kept.
+struct MapValues {
+  float scale = 1.0F;
+  std::int32_t zero_point = 0;
+
+  KZ_NODISCARD auto value(float stored) const -> float { return stored; }
+
+  KZ_NODISCARD auto value(std::int8_t stored) const -> float { return core::dequantize(stored, scale, zero_point); }
+};
+
+// Stored-value bounds of an int8 map: [low, high] holds the values in [0, 1]
+// and values above `above` exceed `threshold`.
+struct Int8Bounds {
+  std::int32_t low = 128;
+  std::int32_t high = -129;
+  std::int32_t above = 127;
+};
+
+auto int8_bounds(const MapValues& map, float threshold) -> Int8Bounds {
+  Int8Bounds bounds;
+  for (std::int32_t q = -128; q < 128; ++q) {
+    const auto value = map.value(static_cast<std::int8_t>(q));
+    if (value >= 0.0F && value <= 1.0F) {
+      bounds.low = std::min(bounds.low, q);
+      bounds.high = q;
+    }
+    if (value <= threshold)
+      bounds.above = q;
+  }
+  if (map.value(std::int8_t{-128}) > threshold)
+    bounds.above = -129;
+  return bounds;
+}
+
+// 255 where data > above or `all` is set, else 0; false when a value is
+// outside [low, high] (or NaN). Branch-free, with & rather than &&, and int8
+// bounds for int8 maps keep the loop vectorized at full lane width.
+template <typename T>
+auto binarize(const T* data, std::size_t count, T low, T high, T above, std::uint8_t all, std::uint8_t* out) -> bool {
+  unsigned invalid = 0;
+  for (std::size_t i = 0; i < count; ++i) {
+    const auto value = data[i];
+    invalid |= static_cast<unsigned>(!((value >= low) & (value <= high)));
+    out[i] = static_cast<std::uint8_t>((value > above ? 255 : 0) | all);
+  }
+  return invalid == 0;
 }
 
 class Ocr final : public OcrPostprocessor {
@@ -128,27 +178,43 @@ public:
 protected:
   auto decode(OcrResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
       -> bool override {
-    const core::Buffer* floats = outputs[0].get();
+    const auto& output = *outputs[0];
+    // Contiguous int8 maps are read in place; others are dequantized first.
+    if (output.data_type() == core::DataType::Int8 && output.is_contiguous() && output.scale() > 0.0F) {
+      const auto* data = static_cast<const std::int8_t*>(output.memory()->cpu());
+      const MapValues map{output.scale(), output.zero_point()};
+      return detection_ ? detect(result, data, map, transform) : recognize(result, data, map);
+    }
+    const core::Buffer* floats = &output;
     if (floats->data_type() != core::DataType::Float32) {
       dequantize_buffer(*floats, scratch_[0]);
       floats = &scratch_[0];
     }
     const auto* data = static_cast<const float*>(floats->memory()->cpu());
-    if (detection_)
-      return detect(result, data, transform);
+    return detection_ ? detect(result, data, MapValues{}, transform) : recognize(result, data, MapValues{});
+  }
+
+private:
+  template <typename T>
+  auto recognize(OcrResult& result, const T* data, const MapValues& map) -> bool {
     auto& text = result.emplace_back();
     std::size_t previous = 0;
     std::size_t count = 0;
     double score = 0;
     for (std::int64_t t = 0; t < shape_[1]; ++t) {
       const auto* row = data + t * shape_[2];
-      const auto index = static_cast<std::size_t>(std::max_element(row, row + shape_[2]) - row);
+      std::size_t index = 0;
+      if constexpr (std::is_same_v<T, float>)
+        index = static_cast<std::size_t>(std::max_element(row, row + shape_[2]) - row);
+      else
+        index = first_max(row, static_cast<std::size_t>(shape_[2]));
+      const auto probability = map.value(row[index]);
       // Only the maximum is checked: logits usually exceed 1 there, and a full scan costs more than decoding.
-      KZ_CHECK_RETURN(std::isfinite(row[index]) && row[index] >= 0 && row[index] <= 1, false,
+      KZ_CHECK_RETURN(std::isfinite(probability) && probability >= 0 && probability <= 1, false,
                       "Ocr CTC: expected probabilities in [0, 1]");
       if (index != 0 && index != previous) {
         text.text += characters_[index];
-        score += static_cast<double>(row[index]);
+        score += static_cast<double>(probability);
         ++count;
       }
       previous = index;
@@ -157,23 +223,28 @@ protected:
     return true;
   }
 
-private:
-  auto detect(OcrResult& result, const float* data, const preprocess::ImageTransform& transform) -> bool {
+  template <typename T>
+  auto detect(OcrResult& result, const T* data, const MapValues& map, const preprocess::ImageTransform& transform)
+      -> bool {
     const auto height = static_cast<int>(shape_[2]);
     const auto width = static_cast<int>(shape_[3]);
+    const auto pixels = static_cast<std::size_t>(height) * static_cast<std::size_t>(width);
     bitmap_.create(height, width, CV_8U);
-    for (int y = 0; y < height; ++y) {
-      auto* row = bitmap_.ptr<std::uint8_t>(y);
-      for (int x = 0; x < width; ++x) {
-        const auto value = data[y * width + x];
-        KZ_CHECK_RETURN(std::isfinite(value) && value >= 0 && value <= 1, false,
-                        "Ocr DB: expected finite probabilities in [0, 1]");
-        row[x] = value > det_.threshold ? 255 : 0;
-      }
+    bool valid = false;
+    if constexpr (std::is_same_v<T, float>) {
+      valid = binarize(data, pixels, 0.0F, 1.0F, det_.threshold, std::uint8_t{0}, bitmap_.ptr<std::uint8_t>());
+    } else {
+      const auto bounds = int8_bounds(map, det_.threshold);
+      // An empty [low, high] rejects any map; an `above` below -128 sets every pixel.
+      valid = bounds.low <= bounds.high &&
+              binarize(data, pixels, static_cast<std::int8_t>(bounds.low), static_cast<std::int8_t>(bounds.high),
+                       static_cast<std::int8_t>(std::max(bounds.above, -128)),
+                       static_cast<std::uint8_t>(bounds.above < -128 ? 255 : 0), bitmap_.ptr<std::uint8_t>());
     }
+    KZ_CHECK_RETURN(valid, false, "Ocr DB: expected finite probabilities in [0, 1]");
     contours_.clear();
     cv::findContours(bitmap_, contours_, cv::RETR_LIST, cv::CHAIN_APPROX_SIMPLE);
-    const cv::Mat probability(height, width, CV_32F, const_cast<float*>(data));
+    const cv::Mat probability(height, width, std::is_same_v<T, float> ? CV_32F : CV_8S, const_cast<T*>(data));
     for (std::size_t i = 0; i < std::min(contours_.size(), static_cast<std::size_t>(det_.max_candidates)); ++i) {
       if (contours_[i].size() < 3)
         continue;
@@ -190,7 +261,11 @@ private:
       for (std::size_t j = 0; j < 4; ++j)
         polygon[j] = {static_cast<int>(points[j].x) - bounds.x, static_cast<int>(points[j].y) - bounds.y};
       cv::fillConvexPoly(mask_, polygon, 1);
-      const auto score = static_cast<float>(cv::mean(probability(bounds), mask_)[0]);
+      // The mean of int8 values dequantizes like one value.
+      const auto mean = cv::mean(probability(bounds), mask_)[0];
+      const auto score = std::is_same_v<T, float>
+                             ? static_cast<float>(mean)
+                             : static_cast<float>(static_cast<double>(map.scale) * (mean - map.zero_point));
       if (score < det_.box_threshold)
         continue;
       // DB quad mode offsets a rectangle by area * ratio / perimeter. Its enclosing

@@ -522,21 +522,28 @@ TEST(SegmentTest, RunsUltralyticsEndToEndExportWhenAvailable) {
 }
 
 TEST(SegmentTest, RunsSemanticModelWhenAvailable) {
-  const auto algo = hrt::test::template_algo("lraspp_voc_segment");
+  const auto algo = hrt::test::template_algo("yolo26n_semantic");
   auto bgr = cv::imread((hrt::test::source_root() / "assets/test/images/bus.jpg").string());
   if (!std::filesystem::is_regular_file(hrt::test::template_model(algo)) || bgr.empty())
-    GTEST_SKIP() << "LRASPP-MobileNetV3 ONNX fixture or bus.jpg is unavailable";
+    GTEST_SKIP() << "YOLO26n-sem ONNX fixture or bus.jpg is unavailable";
   const auto model = hrt::model::ImageModel<hrt::postprocess::SegmentResultMap>::create(algo);
   const auto image = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, bgr.data, hrt::core::ImageFormat::InterBgr,
                                             {bgr.cols, bgr.rows}, hrt::core::DataType::Uint8, bgr.step);
   ASSERT_TRUE(image);
   const auto result = model->process_sync(*image);
   ASSERT_TRUE(result);
-  // bus.jpg: VOC background, bus and person.
-  hrt::Vector<std::int64_t> classes;
-  for (const auto& [cls, objects] : *result)
-    classes.push_back(cls);
-  EXPECT_EQ(classes, (hrt::Vector<std::int64_t>{0, 6, 15}));
+  // bus.jpg, Cityscapes classes: road, building, person and bus cover most of the image.
+  // Ultralytics, which resizes the logits before its argmax, labels 240854, 168627,
+  // 141789 and 248383 pixels; nearest sampling of the stride-8 map stays within 3%.
+  const auto pixels = [&](std::int64_t cls) -> double {
+    if (!result->contains(cls) || result->at(cls).size() != 1)
+      return 0.0;
+    const auto& data = result->at(cls).front().mask.data;
+    return static_cast<double>(std::count(data.begin(), data.end(), 1));
+  };
+  for (const auto& [cls, expected] :
+       hrt::Array<hrt::Pair<std::int64_t, double>, 4>{{{0, 240854}, {2, 168627}, {11, 141789}, {15, 248383}}})
+    EXPECT_NEAR(pixels(cls), expected, expected * 0.03) << "class " << cls;
 }
 
 TEST(SegmentTest, RunsRawSegmentHeadsWhenAvailable) {
