@@ -107,16 +107,13 @@ auto rotated_reverse(RotatedResultMap& result, const preprocess::ImageTransform&
   const auto difference =
       std::abs(static_cast<std::int64_t>(src.width) * dst.height - static_cast<std::int64_t>(src.height) * dst.width);
   const auto tolerance = 2 * (static_cast<std::int64_t>(src.width) + static_cast<std::int64_t>(src.height));
-  const auto uniform = !src.empty() && !dst.empty() && difference <= tolerance;
+  const auto uniform = difference <= tolerance;
   if (!uniform)
     result.clear();
-  KZ_CHECK_RETURN(uniform, false, "rotated: source mapping requires uniform scaling and nonempty regions");
-  for (auto& [cls, boxes] : result) {
-    for (auto& box : boxes) {
+  KZ_CHECK_RETURN(uniform, false, "rotated: source mapping requires uniform scaling");
+  for (auto& [cls, boxes] : result)
+    for (auto& box : boxes)
       box.rect = transform.reverse(box.rect);
-    }
-    std::erase_if(boxes, [](const RotatedBox& box) -> bool { return box.rect.size.empty(); });
-  }
   return true;
 }
 

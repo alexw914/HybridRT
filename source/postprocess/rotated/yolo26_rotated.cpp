@@ -86,6 +86,9 @@ private:
           rect.angle = rad * 180.0F / std::numbers::pi_v<float>;
           decoded = true;
         }
+        // The box is shared by every class of this cell; also skips NaN sizes.
+        if (!(rect.size.width > 0.0F && rect.size.height > 0.0F))
+          break;
         result[cls].push_back({rect, score, static_cast<std::int64_t>(cls)});
       }
     }

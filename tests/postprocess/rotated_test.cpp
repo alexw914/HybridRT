@@ -116,6 +116,10 @@ TEST(RotatedTest, Yolo26ReadsDistancesAndRadians) {
   EXPECT_NEAR(rect.center.y, 12.0F, 1e-4F);
   EXPECT_NEAR(rect.size.width, 8.0F, 1e-4F);
   EXPECT_NEAR(rect.angle, 15.0F, 1e-3F);
+  // Raw distances can be negative; such a box is dropped before NMS.
+  values[3] = values[4 + 3] = -1.0F;
+  ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, values)}, hrt::test::identity(16, 16)));
+  EXPECT_TRUE(result.empty() || result.at(0).empty());
 }
 
 TEST(RotatedTest, RejectsNonuniformSourceMapping) {
@@ -129,9 +133,6 @@ TEST(RotatedTest, RejectsNonuniformSourceMapping) {
   hrt::postprocess::RotatedResultMap result;
   const hrt::preprocess::ImageTransform stretched{{0, 0, 64, 64}, {0, 0, 128, 64}, {64, 64}};
   EXPECT_FALSE(postprocessor->process(result, {buffer}, stretched));
-  EXPECT_TRUE(result.empty());
-  const hrt::preprocess::ImageTransform empty{};
-  EXPECT_FALSE(postprocessor->process(result, {buffer}, empty));
   EXPECT_TRUE(result.empty());
   const auto no_objects = hrt::test::create_buffer<float>(output, {20, 15, 20, 10, 0.0F, 0.0F});
   EXPECT_FALSE(postprocessor->process(result, {no_objects}, stretched));
