@@ -439,21 +439,21 @@ Single-thread timing results and reproduction commands are in [benchmark.md](../
 | `yolov5_detect` | `YoloV5Detect.onnx` | `1 x 3 x 640 x 640` | `797416533eed5eb4c82098ec221bbe55368ad3c062f9d0217db87f129a78f172` |
 | `rtdetr_l_detect` | `DetrDetect.onnx` | `1 x 3 x 640 x 640` | `599b9b7484cb831312f585d4ec4885a95ae10d1e84dada14833f5c570828c9b9` |
 | `yolo26n_e2e_detect` | `E2EDetect.onnx` | `1 x 3 x 640 x 640` | `08727943f090f5e8472cae3c08bcbb7b93c927820d3104ef7792f1d31277ec77` |
-| `yolov8n_detect` | `GeneralDetect.onnx` | `1 x 3 x 640 x 640` | `782006124ca30bc45ac1da40466b2541b06b203754fac8b5018fbbfbb602d36f` |
+| `yolov8n_detect` | `GeneralDetect.onnx` | `1 x 3 x 640 x 640` | `82f81f511d3920861b94eec19c630372f32655269c2457e17fad3a7be731e031` |
 | `yolo26n_e2e_obb` | `E2ERotated.onnx` | `1 x 3 x 1024 x 1024` | `0dc04234b1d82d87b8aebe5c364b4c298de0e2380ce61b74f9b117478e690e41` |
 | `yolov8n_obb_raw` | `YoloV8Rotated.onnx` | `1 x 3 x 1024 x 1024` | `2a5de440d72ecb80cc4fbce50c59f6293e4bc89cb1fe8aaee8ca7d9ed3b89566` |
 | `yolo26n_obb_raw` | `Yolo26Rotated.onnx` | `1 x 3 x 1024 x 1024` | `003dc108ae1be9b94f7bbf3f154d871385224da96ca15fa0bc07bccb0bc2148f` |
 | `yolov5_rotated` | `YoloV5Rotated.onnx` | `1 x 3 x 1280 x 1280` | `afffc7a2813e15e9137648bc7655155827b1cdace2a0999b1919d1196be57dfb` |
 | `yolov8n_obb` | `GeneralRotated.onnx` | `1 x 3 x 480 x 640` | `d87f86b2e475deccfd57410fdcb6d2de3886fcab4f6395888ddca4c35a2c12ee` |
-| `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 640 x 640` | `46f101117e36acb79ebbd362250971b13d8dd906c7c877a2b7cc6af1fc1b8054` |
+| `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 640 x 640` | `836294aacdb80a1f0753dd4b4c40979e301588668461ecb70f5ace0e0f5bf3c6` |
 | `yolov8n_classify_embedding` | `Embedding.onnx` | `1 x 3 x 640 x 640` | `46f101117e36acb79ebbd362250971b13d8dd906c7c877a2b7cc6af1fc1b8054` |
-| `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 640 x 640` | `b1684b889751d66d6e3f1a5f9e5a799c41e325fabef0cb552cbac82b385dbcba` |
+| `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 640 x 640` | `f2fe9908b95268c1529dfe722479aec0b49f36b319634c7b93b60320b8d5c674` |
 | `yolov8n_face` | `YoloV8Keypoint.onnx` | `1 x 3 x 640 x 640` | `af09683be4937ebe23e9da0346cbf46cd937b73ed5fac986e6205e6c7cdd2c25` |
 | `yolo26n_pose_raw` | `Yolo26Keypoint.onnx` | `1 x 3 x 640 x 640` | `513e12cd94482f799e2d1ad66fcb9603d7c3eb41ad38863e7ae566374e0eddc8` |
 | `yolo26n_e2e_pose` | `E2EKeypoint.onnx` | `1 x 3 x 640 x 640` | `ecd85eb31cf6889ab62600164d27698b881fcb27bd27c548b2dd4a67fb52c814` |
 | `rtmo_s_pose` | `RtmoKeypoint.onnx` | `1 x 3 x 640 x 640` | `91d97d8251f7624d4da9cead6b2a8bd6ea36850cfe329122eebeb89b41f108d2` |
 | `rtmpose_m_pose` | `GeneralKeypoint.onnx` | `1 x 3 x 256 x 192` | `81e1025f9c938450d2ef88c0fba274fb57b0f9b49711dc7a52fef99c7ea3548d` |
-| `yolov8n_segment` | `GeneralYoloSegment.onnx` | `1 x 3 x 640 x 640` | `a9c25c390e47e6a5e7b3c1dc22bee67ef28cd1746576f2c80a141717fd30dbc6` |
+| `yolov8n_segment` | `GeneralYoloSegment.onnx` | `1 x 3 x 640 x 640` | `3de154f788a41d54b6419a4ea4e76cad7d761522ebd75b5045b2d72f465f22c3` |
 | `yolov8n_segment_raw` | `YoloV8Segment.onnx` | `1 x 3 x 480 x 640` | `fdbd46dc0a5ae4bb1cb1b32010fa131a43f370043077555f921890bcd2880494` |
 | `yolo26n_segment_raw` | `Yolo26Segment.onnx` | `1 x 3 x 640 x 640` | `85e5ec69cb0a06f82e6a27b4cdb6be36d91e041b3829d75887183f6506b18221` |
 | `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `101060498337592b2c671f479001ca725d92049f99118e5b666f4c2273d9f096` |
@@ -466,6 +466,17 @@ Ultralytics 8.4.8, PyTorch 2.9.1, ONNX 1.20.1, opset 17, `batch=4` or `batch=8`,
 exported from the same weights. These are native batched networks. Their template algos end in
 `_batch4` and `_batch8`; `hybridrt_bench_pipeline` `BM_Batch` runs batch 1, 4 and 8 with as many
 images per call.
+
+The M5 Pro pipeline fixtures were re-exported with Python 3.11.16 and the versions/options
+above, including B1 at 640x640 for all four tasks; the SHA256 values below and in the
+base-model table identify these local exports. ONNX checker and static input-shape checks
+passed for all 12 files. CPU batch comparisons passed for detect, pose and classify;
+segment B4/B8 each differed from B1 by one binary-mask pixel on two COCO128 samples
+(minimum mask IoU 0.9999793), so the strict equality test failed. CoreML throughput
+measurement does not establish batch-result equivalence. Export and correctness logs
+are local in `assets/test/benchmark_results/m5_pipeline_export.log` and
+`m5_pipeline_batch_correctness.log`.
+
 `ImageModelTest.MatchesBatchOneOnStaticBatchModels` compares four images and a partial batch
 against individual CPU calls. `MatchesBatchOneOnTensorRtStaticBatchModels` compares batched
 and individual calls on the same TensorRT model with CPU and CUDA preprocessing separately;
@@ -476,14 +487,14 @@ benchmarks skip them elsewhere.
 
 | Algo | ONNX file in `assets/test/onnx/` | Input NCHW | Outputs | SHA256 |
 | --- | --- | --- | --- | --- |
-| `yolov8n_classify_batch4` | `GeneralClassifyBatch4.onnx` | `4 x 3 x 640 x 640` | `4 x 1000` | `bb5992374ba65a0555d0bd30679a3610a5c7305f95e305542efd747e51c26b4e` |
-| `yolov8n_detect_batch4` | `GeneralDetectBatch4.onnx` | `4 x 3 x 640 x 640` | `4 x 84 x 8400` | `deb8c98ab42828ccc537eaad85838f1c5349a37fc20a256dbca23eb8cc477518` |
-| `yolov8n_pose_batch4` | `GeneralYoloPoseBatch4.onnx` | `4 x 3 x 640 x 640` | `4 x 56 x 8400` | `4197a3fbe3181fb9deeea665cb3898c608500437cc85a4f3d69660e45debb194` |
-| `yolov8n_segment_batch4` | `GeneralYoloSegmentBatch4.onnx` | `4 x 3 x 640 x 640` | `4 x 116 x 8400; 4 x 32 x 160 x 160` | `e13654d03168abf180dd73cfc3b28daf3b03dffef2a12f37ee4bf2d8cf4a9462` |
-| `yolov8n_classify_batch8` | `GeneralClassifyBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 1000` | `f6bdb116cff2dbb19f8d23d3ec04a46dde18bf07d9ac02aaac6d9f05e843e4ce` |
-| `yolov8n_detect_batch8` | `GeneralDetectBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 84 x 8400` | `dc8f6cd8c46ccb2021f30663f97e96099d8675630fba64102e2f5f09393cfaee` |
-| `yolov8n_pose_batch8` | `GeneralYoloPoseBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 56 x 8400` | `58bd37d656e7a3e3139d71a6408baf5795a09ca21843cdc2dee75f99f828235d` |
-| `yolov8n_segment_batch8` | `GeneralYoloSegmentBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 116 x 8400; 8 x 32 x 160 x 160` | `c0c2d436f510efdc26912b95311c0503b2f0bc2b7ebce23c6c151abf3a8e4ee1` |
+| `yolov8n_classify_batch4` | `GeneralClassifyBatch4.onnx` | `4 x 3 x 640 x 640` | `4 x 1000` | `72f3b874132cdff3e32efd373cb87a60ec7154b94d73b1c65f1c967b48f0d92e` |
+| `yolov8n_detect_batch4` | `GeneralDetectBatch4.onnx` | `4 x 3 x 640 x 640` | `4 x 84 x 8400` | `d8262f248a6b24e4a612eb02885e3ca40499edcb6b238ab36cc7d146c24602f2` |
+| `yolov8n_pose_batch4` | `GeneralYoloPoseBatch4.onnx` | `4 x 3 x 640 x 640` | `4 x 56 x 8400` | `a976239eebb97f9890bd9d1fd8669782c19277eb956a020066662ccdb6189099` |
+| `yolov8n_segment_batch4` | `GeneralYoloSegmentBatch4.onnx` | `4 x 3 x 640 x 640` | `4 x 116 x 8400; 4 x 32 x 160 x 160` | `c047d81acc9d994d159085bc99c4edadc7eb29c1673adedf22ee76e8a2571046` |
+| `yolov8n_classify_batch8` | `GeneralClassifyBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 1000` | `3e15cb29c05db30c35afd5b17926da226fa40028b81df79d9ef27f8b0d6d660c` |
+| `yolov8n_detect_batch8` | `GeneralDetectBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 84 x 8400` | `e4e977efa425ffef0d9b70fc62003231ada785f63b3d5d525358aa1a4e472184` |
+| `yolov8n_pose_batch8` | `GeneralYoloPoseBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 56 x 8400` | `14f5126534571abf1b35b1144c93df6c1cd4905622c9502896a0e31862517e02` |
+| `yolov8n_segment_batch8` | `GeneralYoloSegmentBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 116 x 8400; 8 x 32 x 160 x 160` | `4994d3c819c1bd38a5e9707eb34915876948dce6809861bcd786d7c2135e7329` |
 
 Additional OCR fixtures use official PaddlePaddle ONNX weights. The `ppocrv6_tiny_det`,
 `ppocrv6_tiny_rec` and `ppocrv6_tiny_rec_batch8` template algos run through
@@ -515,7 +526,7 @@ agree within `rtol=1e-4, atol=1e-4`; maximum absolute errors were 2.09e-7 (det),
 2.74e-5 (tiny rec). Recognition argmax sequences are identical.
 Fixed shapes can enable different fused runtime kernels. These checks establish runnable,
 fixed-shape models, not OCR accuracy or compatibility with other backends.
-Local `assets/test/ocr_shape_validation.json` records shapes, source hashes and comparison results.
+The local `assets/test/scripts/fix_ocr_shapes.py` script regenerates the shape-validation report.
 
 `assets/test/images/ocr_document.png` (also read as `ocr_document.jpg`; JPEG data, SHA256
 `4425af33dd163cf73bdff502bd35ee527e9bdd5725501db1da78bfdae9f538f4`) is PaddleX's boarding pass demo
@@ -553,7 +564,8 @@ Sources and export steps for the current collection:
   the angle logit before class logits, and segmentation includes mask prototypes.
 - `YoloV5Detect` exposes the three official YOLOv5n v7.0 raw convolution heads,
   promoting the FP16 graph to FP32. `YoloV8Keypoint` uses the clibdev face export below.
-  `Embedding.onnx` is a copy of `GeneralClassify.onnx`.
+  `Embedding.onnx` retains the earlier classification export; it is not replaced by the
+  M5 Pro pipeline re-export.
 - RTMO and RTMPose use the official OpenMMLab SDK downloads linked below.
   RTMO replaces selection after NMS with the 300 highest-scoring candidates before
   NMS, keeping the original box/keypoint decoding. HybridRT performs NMS on the host.
@@ -594,7 +606,8 @@ the current collection unless explicitly matched above):
   The matched outputs contained 5 detections, 4 poses (17 keypoints each), 4 instance masks
   and 11 rotated boxes. Maximum box/keypoint error was 0.000123 pixels, minimum mask IoU
   0.9982, minimum rotated-box IoU 0.999999; classification top-1 was 654 with maximum
-  score error below 0.000001. Full metrics are local in `assets/test/binding_reference_results.json`.
+  score error below 0.000001. The local `assets/test/scripts/compare_binding_models.py`
+  script regenerates the detailed comparison report.
 
 - Previous decoded YOLOv8 detection, segmentation, pose, OBB and classification models came from
   [unileon-robotics/YOLO8-ONNX](https://huggingface.co/unileon-robotics/YOLO8-ONNX).
