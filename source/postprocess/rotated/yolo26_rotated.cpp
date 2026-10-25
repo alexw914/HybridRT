@@ -13,7 +13,6 @@
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/nms.hpp"
 #include "include/postprocess/postprocessor_creators.hpp"
-#include "include/postprocess/yolo_heads.hpp"
 
 namespace hrt::postprocess {
 
@@ -28,7 +27,7 @@ public:
     if (!is_float_outputs(engine, "yolo26_rotated"))
       return false;
     param_ = config.get<Yolo26Param>();
-    if (!resolve_yolo26_heads(param_, engine, 1))
+    if (!check_yolo26_heads(param_, engine, 1))
       return false;
     logit_threshold_.resize(param_.class_num);
     std::transform(param_.confidence_threshold.begin(), param_.confidence_threshold.end(), logit_threshold_.begin(),

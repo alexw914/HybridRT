@@ -11,7 +11,6 @@
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/nms.hpp"
 #include "include/postprocess/postprocessor_creators.hpp"
-#include "include/postprocess/yolo_heads.hpp"
 
 namespace hrt::postprocess {
 
@@ -24,7 +23,7 @@ public:
       return false;
     param_ = config.get<YoloV8Param>();
     KZ_CHECK_RETURN(!config.contains("reg_max") || param_.reg_max > 0, false, "reg_max must be positive when supplied");
-    if (!resolve_yolov8_heads(param_, engine, 0))
+    if (!check_yolov8_heads(param_, engine, 0))
       return false;
     // Scores are compared as logits so most cells skip the sigmoid.
     logit_threshold_.resize(param_.class_num);

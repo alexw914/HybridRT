@@ -21,6 +21,7 @@
 
 #include "include/core/config.hpp"
 #include "include/core/math.hpp"
+#include "include/postprocess/postprocessor_params.hpp"
 
 namespace hrt::postprocess {
 
@@ -44,6 +45,13 @@ auto head_channels(const core::BufferProto& proto, engine::DataLayout layout) ->
 
 // Input-to-head scale along x and y of a 4-D head output.
 auto head_stride(const core::BufferProto& proto, engine::DataLayout layout, core::Size input) -> core::Point2f;
+
+// Validate head channels and fill inferred strides and per-class thresholds.
+auto check_yolov5_heads(YoloV5Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
+
+auto check_yolov8_heads(YoloV8Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
+
+auto check_yolo26_heads(Yolo26Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
 
 // Bytes between consecutive samples of a batched host output.
 auto sample_bytes(const core::Buffer& output) -> std::size_t;

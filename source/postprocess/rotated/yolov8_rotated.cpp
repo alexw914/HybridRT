@@ -12,7 +12,6 @@
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/nms.hpp"
 #include "include/postprocess/postprocessor_creators.hpp"
-#include "include/postprocess/yolo_heads.hpp"
 
 namespace hrt::postprocess {
 
@@ -26,7 +25,7 @@ public:
       return false;
     param_ = config.get<YoloV8Param>();
     KZ_CHECK_RETURN(!config.contains("reg_max") || param_.reg_max > 0, false, "reg_max must be positive when supplied");
-    if (!resolve_yolov8_heads(param_, engine, 1))
+    if (!check_yolov8_heads(param_, engine, 1))
       return false;
     logit_threshold_.resize(param_.class_num);
     std::transform(param_.confidence_threshold.begin(), param_.confidence_threshold.end(), logit_threshold_.begin(),

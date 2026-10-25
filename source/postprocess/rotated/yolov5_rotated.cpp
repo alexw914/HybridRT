@@ -11,7 +11,6 @@
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/nms.hpp"
 #include "include/postprocess/postprocessor_creators.hpp"
-#include "include/postprocess/yolo_heads.hpp"
 
 namespace hrt::postprocess {
 
@@ -24,7 +23,7 @@ public:
     if (!is_float_outputs(engine, "yolov5_rotated"))
       return false;
     param_ = config.get<YoloV5Param>();
-    if (!resolve_yolov5_heads(param_, engine, 1))
+    if (!check_yolov5_heads(param_, engine, 1))
       return false;
     const auto min_threshold =
         *std::min_element(param_.confidence_threshold.begin(), param_.confidence_threshold.end());

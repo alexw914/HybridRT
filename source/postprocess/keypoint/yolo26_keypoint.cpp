@@ -13,7 +13,6 @@
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/nms.hpp"
 #include "include/postprocess/postprocessor_creators.hpp"
-#include "include/postprocess/yolo_heads.hpp"
 
 namespace hrt::postprocess {
 
@@ -44,7 +43,7 @@ public:
     param_ = config.get<Yolo26KeypointParam>();
     KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "yolo26_keypoint: keypoint_num must be positive");
     Yolo26Param heads{param_.class_num, param_.strides, param_.confidence_threshold, param_.iou_threshold};
-    if (!resolve_yolo26_heads(heads, engine, param_.keypoint_num * kKeypointValues))
+    if (!check_yolo26_heads(heads, engine, param_.keypoint_num * kKeypointValues))
       return false;
     param_.strides = std::move(heads.strides);
     param_.confidence_threshold = heads.confidence_threshold;

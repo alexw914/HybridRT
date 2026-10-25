@@ -44,7 +44,6 @@ add_library(hybridrt STATIC
     postprocess/common.cpp
     postprocess/postprocessor_factory.cpp
     postprocess/nms.cpp
-    postprocess/yolo_heads.cpp
     postprocess/ocr/ocr.cpp
     postprocess/detect/yolov5_detect.cpp
     postprocess/detect/yolov8_detect.cpp

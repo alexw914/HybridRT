@@ -11,7 +11,6 @@
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/nms.hpp"
 #include "include/postprocess/postprocessor_creators.hpp"
-#include "include/postprocess/yolo_heads.hpp"
 
 namespace hrt::postprocess {
 
@@ -26,7 +25,7 @@ public:
     if (!is_float_outputs(engine, "yolo26_detect"))
       return false;
     param_ = config.get<Yolo26Param>();
-    if (!resolve_yolo26_heads(param_, engine, 0))
+    if (!check_yolo26_heads(param_, engine, 0))
       return false;
     // Scores are compared as logits so most cells skip the sigmoid.
     logit_threshold_.resize(param_.class_num);

@@ -33,7 +33,7 @@
 - 后处理结果类型统一放 `include/hrt/postprocess/result_types.hpp`；内置后处理类型只在
   `source/postprocess/postprocessor_factory.cpp` 注册，由 `postprocessor_factory.hpp` 的
   `create_postprocessor<Result>` 创建；`source/postprocess/<task>/` 只放具体解码实现，其构造入口声明在
-  `source/include/postprocess/postprocessor_creators.hpp`。跨任务共用的后处理工具（nms、yolo_heads、
+  `source/include/postprocess/postprocessor_creators.hpp`。跨任务共用的后处理工具（common、nms、
   mask_decoder 等）各自成对放 `source/include/postprocess/` 与 `source/postprocess/`，不集中放入 postprocessor_params.hpp。
 - 后端通过 SDK 根目录启用并定义 `HRT_USE_<BACKEND>`，见 `cmake/HybridrtBackends.cmake`；
   SDK 头文件和类型不得出现在公开头文件。新增后端只扩展
