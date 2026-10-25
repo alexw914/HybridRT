@@ -4,6 +4,48 @@ Before/after optimization records, newest first. Current benchmark results and r
 
 Each entry states the cause/change, measurement conditions, data, and validation or limits. Values are historical for that source revision; later entries may supersede them. Missing historical settings are marked rather than inferred.
 
+## 2026-10-25: read batch outputs without per-sample view allocations
+
+Batch decoding previously created Memory/Buffer views and copied shape/stride metadata for
+every sample and output. Decoders now receive the sample index and address the host output
+in place; float access and INT8 scratch conversion operate on that sample. The result vector
+is resized and its elements cleared instead of assigning copies of an empty result. Sample
+decoding remains serial, and nested mask buffers are still cleared and rebuilt.
+
+**Measurement:** Ryzen 5 5600X, WSL2 Ubuntu 24.04.3, GCC 13.3.0 Release -O3, OpenCV 4.6.0,
+ONNX Runtime 1.31.0 CPU. All 26 template groups, native B1/B4/B8 FP32 outputs, the same
+bus/airport/OCR inputs and thresholds as `benchmark.md`; one caller, OpenCV and ORT
+intra/inter-op threads 1, no affinity. Google Benchmark wall time, median of 3 repetitions
+>=0.5 s after >=0.2 s warm-up. Loading, input preparation and inference are untimed.
+Before is the preceding same-day view-based run; revisions were not interleaved. Three groups
+(YoloV8Detect, YoloV5Rotated, Yolo26Keypoint) were repeated after their initial regressions;
+the complete-row recheck supplies all three final batch values, without selecting minima.
+Whole-batch ms, before → after:
+
+| Postprocessor | B1 | B4 | B8 |
+| --- | ---: | ---: | ---: |
+| YoloV8Detect | 0.08627 → 0.08651 | 0.3395 → 0.5376 | 0.9383 → 0.8593 |
+| E2EDetect | 0.0006546 → 0.0006106 | 0.003436 → 0.002441 | 0.006499 → 0.004816 |
+| GeneralDetect | 0.04245 → 0.03729 | 0.169 → 0.1422 | 0.6691 → 0.4661 |
+| YoloV5Rotated † | 0.03412 → 0.04678 | 0.1312 → 0.21 | 0.2655 → 0.3774 |
+| GeneralClassify | 5.511e-05 → 6.287e-05 | 0.0007944 → 0.0002516 | 0.001587 → 0.0007444 |
+| Embedding | 4.599e-05 → 6.274e-05 | 0.0007449 → 0.0002539 | 0.0015 → 0.000683 |
+| Yolo26Keypoint | 0.006712 → 0.007591 | 0.0289 → 0.03092 | 0.05861 → 0.06243 |
+| GeneralKeypoint | 0.006109 → 0.005668 | 0.0255 → 0.02198 | 0.05336 → 0.04524 |
+| GeneralYoloSegment | 0.3358 → 0.389 | 1.645 → 1.895 | 4.659 → 4.26 |
+| SemanticSegment | 0.3928 → 0.3619 | 3.109 → 2.973 | 7.762 → 7.952 |
+
+**Validation / limits:** All 113 related postprocessing tests passed. All 78 measured cases
+have FP32 outputs and the same decoded object counts as before. `†` is the user QAT OBB
+model with zero objects on airport.jpg: filtering only. GeneralKeypoint B4/B8 decode 4/8
+objects; their whole-batch times fall by 13.8%/15.2%. Classification, embedding and E2E
+wrappers benefit, while some raw-head cases regress. Large-mask allocation/writes and the
+batch working set remain costs; this change does not make every batch faster. Small changes
+cannot be separated from run-to-run effects here; raw-head rechecks also showed between-run
+variation. RKNN and other platforms were not remeasured.
+Local before/after data: `postprocess_fp32_onnx_before_direct_batch.json` and
+`postprocess_fp32_after_direct_batch.json` under `assets/test/benchmark_results/`.
+
 ## 2026-10-25: decode INT8 outputs as integers and replace the semantic model
 
 On RK3588 several INT8 postprocessors were slower than the FP16 run of the same model. Running
