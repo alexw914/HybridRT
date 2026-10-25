@@ -58,11 +58,11 @@ public:
   }
 
 protected:
-  auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool override {
+  auto decode(DetectResultMap& result, const core::Buffers& outputs, std::size_t index,
+              const preprocess::ImageTransform& transform) -> bool override {
     const bool combined = param_.output_format == DetrOutputFormat::Combined;
-    const HeadGridView boxes(*outputs[0], std::nullopt);
-    const HeadGridView scores(*outputs[combined ? 0 : 1], std::nullopt);
+    const HeadGridView boxes(*outputs[0], index, std::nullopt);
+    const HeadGridView scores(*outputs[combined ? 0 : 1], index, std::nullopt);
     const std::int64_t score_first = combined ? 4 : 0;
     logits_.resize(score_channels_);
     for (std::size_t i = 0; i < count_; ++i) {

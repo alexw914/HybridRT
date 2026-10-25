@@ -58,10 +58,10 @@ public:
   }
 
 protected:
-  auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool override {
-    const HeadGridView det(*outputs[detections_], std::nullopt);
-    const HeadGridView prototypes(*outputs[prototypes_], engine::DataLayout::Nchw);
+  auto decode(SegmentResultMap& result, const core::Buffers& outputs, std::size_t index,
+              const preprocess::ImageTransform& transform) -> bool override {
+    const HeadGridView det(*outputs[detections_], index, std::nullopt);
+    const HeadGridView prototypes(*outputs[prototypes_], index, engine::DataLayout::Nchw);
     const auto count = static_cast<std::size_t>(outputs[detections_]->shape()[1]);
     const auto columns = outputs[detections_]->shape()[2];
     for (std::size_t i = 0; i < count; ++i) {

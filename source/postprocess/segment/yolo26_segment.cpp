@@ -65,9 +65,9 @@ public:
   }
 
 protected:
-  auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool override {
-    const HeadGridView prototypes(*outputs[outputs_.prototypes], layout_);
+  auto decode(SegmentResultMap& result, const core::Buffers& outputs, std::size_t index,
+              const preprocess::ImageTransform& transform) -> bool override {
+    const HeadGridView prototypes(*outputs[outputs_.prototypes], index, layout_);
     rects_.resize(param_.class_num);
     scores_.resize(param_.class_num);
     coefficients_.resize(param_.class_num);
@@ -77,7 +77,7 @@ protected:
       coefficients_[cls].clear();
     }
     for (std::size_t k = 0; k < outputs_.heads.size(); ++k) {
-      const HeadGridView grid(*outputs[outputs_.heads[k]], layout_);
+      const HeadGridView grid(*outputs[outputs_.heads[k]], index, layout_);
       tables_[k].bind(grid, logit_threshold_);
       decode_head(grid, tables_[k], param_.strides[k]);
     }

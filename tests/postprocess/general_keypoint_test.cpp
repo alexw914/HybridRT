@@ -1,8 +1,8 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: tests/postprocess/general_keypoint_test.cpp
-// Description: Tests heatmap, SimCC and coordinate keypoint decoding and
-//              coordinate mapping.
+// Description: Tests batched heatmap, SimCC and coordinate keypoint decoding
+//              and source coordinate mapping.
 // -----------------------------------------------------------------------------
 
 #include <hrt/postprocess/postprocessor_factory.hpp>
@@ -79,6 +79,150 @@ TEST(GeneralKeypointTest, RefinesHeatmapPeak) {
   EXPECT_NEAR(result.at(0)[0].keypoints[0].point.x, 4.0F, 0.5F);
   EXPECT_NEAR(result.at(0)[0].keypoints[0].point.y, 2.0F, 0.5F);
   EXPECT_FLOAT_EQ(result.at(0)[0].keypoints[0].score, 0.9F);
+}
+
+TEST(GeneralKeypointTest, DecodesIndependentBatchSamples) {
+  for (const auto* mode :
+       {"heatmap", "heatmap_udp", "simcc", "point_with_visible", "point_channel_first", "point_channel_last"}) {
+    for (const auto type : {DataType::Float32, DataType::Int8}) {
+      for (const std::int64_t batch : {4, 8}) {
+        SCOPED_TRACE(::testing::Message() << mode << " batch=" << batch << " type=" << static_cast<int>(type));
+        const hrt::String name(mode);
+        const auto heatmap = name == "heatmap" || name == "heatmap_udp";
+        const auto distributions = name == "simcc" || name == "point_with_visible";
+        hrt::Vector<hrt::core::BufferProto> outputs;
+        if (heatmap) {
+          outputs.push_back(proto(type, {batch, 1, 4, 4}));
+        } else if (distributions) {
+          outputs.assign(2, proto(type, {batch, 1, 4}));
+          if (name == "point_with_visible")
+            outputs.push_back(proto(type, {batch, 1, 3}));
+        } else {
+          outputs.push_back(proto(type, name == "point_channel_first" ? hrt::core::Shape{batch, 2, 1}
+                                                                      : hrt::core::Shape{batch, 1, 2}));
+        }
+        hrt::test::FakeEngine engine({proto(DataType::Float32, {batch, 3, 16, 16})}, outputs);
+        const kitzoo::json::Json config{
+            {"general_keypoint_type", mode}, {"heatmap_refine", "none"}, {"keypoint_threshold", 0.3F}};
+        auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>(
+            "GeneralKeypoint", config, engine);
+        hrt::Vector<hrt::preprocess::ImageTransform> transforms;
+        for (int i = 0; i < batch; ++i)
+          transforms.push_back({{0, 0, 16, 16}, {100 + i * 10, 50 + i * 7, 32, 48}, {16, 16}});
+        hrt::Vector<hrt::postprocess::KeypointResultMap> results;
+        for (int round = 0; round < 2; ++round) {
+          hrt::Vector<hrt::Vector<float>> values;
+          for (const auto& output : outputs) {
+            std::int64_t volume = 1;
+            for (const auto dimension : output.shape)
+              volume *= dimension;
+            values.emplace_back(static_cast<std::size_t>(volume), 0.0F);
+          }
+          for (std::int64_t i = 0; i < batch; ++i) {
+            const auto x = (i + round) % 4, y = (i * 2 + round + 1) % 4;
+            const auto score = i % 2 == 0 ? 0.75F : 0.25F;
+            if (heatmap) {
+              values[0][static_cast<std::size_t>(i * 16 + y * 4 + x)] = score;
+            } else if (distributions) {
+              values[0][static_cast<std::size_t>(i * 4 + x)] = score;
+              values[1][static_cast<std::size_t>(i * 4 + y)] = score;
+              if (name == "point_with_visible")
+                values[2][static_cast<std::size_t>(i * 3 + 2)] = score;
+            } else {
+              values[0][static_cast<std::size_t>(i * 2)] = static_cast<float>(x) / 4.0F;
+              values[0][static_cast<std::size_t>(i * 2 + 1)] = static_cast<float>(y) / 4.0F;
+            }
+          }
+          hrt::core::Buffers buffers;
+          for (std::size_t i = 0; i < outputs.size(); ++i) {
+            if (type == DataType::Float32) {
+              buffers.push_back(hrt::test::create_buffer(outputs[i], values[i]));
+            } else {
+              hrt::Vector<std::int8_t> quantized;
+              for (const auto value : values[i])
+                quantized.push_back(static_cast<std::int8_t>(value * 4.0F - 4.0F));
+              auto buffer = hrt::test::create_buffer(outputs[i], quantized);
+              buffer->set_quantization(0.25F, -4);
+              buffers.push_back(std::move(buffer));
+            }
+          }
+          // A repeated call with a partial batch must discard the previous tail result.
+          if (round == 1)
+            transforms.pop_back();
+          ASSERT_TRUE(postprocessor->process(results, buffers, transforms));
+          ASSERT_EQ(results.size(), transforms.size());
+          for (std::size_t i = 0; i < results.size(); ++i) {
+            ASSERT_EQ(results[i].size(), 1U);
+            ASSERT_EQ(results[i].at(0).size(), 1U);
+            const auto& object = results[i].at(0)[0];
+            ASSERT_EQ(object.keypoints.size(), 1U);
+            const auto& point = object.keypoints[0];
+            const auto cells = name == "heatmap_udp" ? 3.0F : 4.0F;
+            const auto x = static_cast<float>((i + static_cast<std::size_t>(round)) % 4);
+            const auto y = static_cast<float>((i * 2 + static_cast<std::size_t>(round) + 1) % 4);
+            EXPECT_NEAR(point.point.x, static_cast<float>(100 + i * 10) + x / cells * 32.0F, 1e-4F);
+            EXPECT_NEAR(point.point.y, static_cast<float>(50 + i * 7) + y / cells * 48.0F, 1e-4F);
+            EXPECT_FLOAT_EQ(object.box.rect.x, static_cast<float>(100 + i * 10));
+            EXPECT_FLOAT_EQ(object.box.rect.y, static_cast<float>(50 + i * 7));
+            const auto scored = heatmap || distributions;
+            const auto score = scored ? (i % 2 == 0 ? 0.75F : 0.25F) : 1.0F;
+            EXPECT_FLOAT_EQ(point.score, score);
+            EXPECT_EQ(point.visible, (heatmap || name == "simcc") && score <= 0.3F
+                                         ? hrt::postprocess::KeypointVisible::Invisible
+                                         : hrt::postprocess::KeypointVisible::Visible);
+          }
+        }
+      }
+    }
+  }
+}
+
+TEST(GeneralKeypointTest, KeepsUnbatchedHeatmapLayout) {
+  const auto output = proto(DataType::Float32, {2, 4, 4});
+  hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>(
+      "GeneralKeypoint", {{"heatmap_refine", "none"}}, engine);
+  hrt::Vector<float> heatmaps(32, 0.0F);
+  heatmaps[6] = 0.75F;
+  heatmaps[29] = 0.5F;
+  hrt::postprocess::KeypointResultMap result;
+  ASSERT_TRUE(
+      postprocessor->process(result, {hrt::test::create_buffer(output, heatmaps)}, hrt::test::identity(16, 16)));
+  const auto& points = result.at(0)[0].keypoints;
+  ASSERT_EQ(points.size(), 2U);
+  EXPECT_FLOAT_EQ(points[0].point.x, 8.0F);
+  EXPECT_FLOAT_EQ(points[0].point.y, 4.0F);
+  EXPECT_FLOAT_EQ(points[1].point.x, 4.0F);
+  EXPECT_FLOAT_EQ(points[1].point.y, 12.0F);
+}
+
+TEST(GeneralKeypointTest, DequantizesEveryUnbatchedHeatmap) {
+  const auto output = proto(DataType::Int8, {2, 4, 4});
+  hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {output});
+  auto postprocessor = hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>(
+      "GeneralKeypoint", {{"heatmap_refine", "none"}}, engine);
+  hrt::Vector<std::int8_t> heatmaps(32, 0);
+  heatmaps[6] = 3;
+  heatmaps[29] = 2;
+  auto buffer = hrt::test::create_buffer(output, heatmaps);
+  buffer->set_quantization(0.25F, 0);
+  hrt::postprocess::KeypointResultMap result;
+  ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(16, 16)));
+  const auto& points = result.at(0)[0].keypoints;
+  ASSERT_EQ(points.size(), 2U);
+  EXPECT_FLOAT_EQ(points[1].point.x, 4.0F);
+  EXPECT_FLOAT_EQ(points[1].point.y, 12.0F);
+  EXPECT_FLOAT_EQ(points[1].score, 0.5F);
+}
+
+TEST(GeneralKeypointTest, RejectsMultipleSetsWithinBatchSample) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  for (const auto& shape : hrt::Vector<hrt::core::Shape>{{4, 2, 1, 4, 4}, {4, 0, 4, 4}}) {
+    hrt::test::FakeEngine engine({proto(DataType::Float32, {4, 3, 16, 16})}, {proto(DataType::Float32, shape)});
+    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>(
+                     "GeneralKeypoint", kitzoo::json::Json::object(), engine),
+                 "");
+  }
 }
 
 TEST(GeneralKeypointTest, AbortsOnInvalidShapes) {

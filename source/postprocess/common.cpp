@@ -22,8 +22,6 @@
 
 #include <hrt/postprocess/postprocessor.hpp>
 
-#include "include/core/batch_scheduler.hpp"
-
 namespace hrt::postprocess {
 
 PostprocessorBase::~PostprocessorBase() = default;
@@ -51,17 +49,14 @@ auto PostprocessorBase::to_host(const core::Buffers& outputs, core::Stream* stre
   return &view_;
 }
 
-auto PostprocessorBase::sample_outputs(const core::Buffers& host, std::size_t index) -> const core::Buffers* {
-  const auto single = [](const auto& buffer) -> bool { return buffer->shape().empty() || buffer->shape()[0] == 1; };
-  if (index == 0 && std::all_of(host.begin(), host.end(), single))
-    return &host;
-  sample_.resize(host.size());
-  for (std::size_t i = 0; i < host.size(); ++i) {
-    sample_[i] = core::batch_sample(*host[i], index, false);
-    if (sample_[i] == nullptr)
-      return nullptr;
+auto PostprocessorBase::has_samples(const core::Buffers& host, std::size_t count) const -> bool {
+  for (const auto& buffer : host) {
+    const auto& shape = buffer->shape();
+    KZ_CHECK_RETURN(count == 0 || (!shape.empty() && static_cast<std::size_t>(shape[0]) >= count), false,
+                    "postprocess: {} samples need a batch of at least {}, got shape {}", count, count,
+                    shape.empty() ? 0 : shape[0]);
   }
-  return &sample_;
+  return true;
 }
 
 auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* name) -> bool {
@@ -107,7 +102,7 @@ auto head_stride(const core::BufferProto& proto, engine::DataLayout layout, core
           static_cast<float>(static_cast<double>(input.height) / static_cast<double>(rows))};
 }
 
-HeadGridView::HeadGridView(const core::Buffer& buffer, std::optional<engine::DataLayout> layout)
+HeadGridView::HeadGridView(const core::Buffer& buffer, std::size_t index, std::optional<engine::DataLayout> layout)
     : int8_(buffer.data_type() == core::DataType::Int8), scale_(buffer.scale()), zero_point_(buffer.zero_point()) {
   const auto& shape = buffer.shape();
   const auto& stride = buffer.stride();
@@ -131,7 +126,7 @@ HeadGridView::HeadGridView(const core::Buffer& buffer, std::optional<engine::Dat
     col_step_ = stride[dims - 1] / item;
     channel_step_ = 1;
   }
-  data_ = buffer.memory()->cpu();
+  data_ = sample_data(buffer, index);
 }
 
 auto HeadGridView::raw_bound(float threshold) const -> float {
@@ -326,8 +321,11 @@ auto create_scratch(const engine::Engine& engine) -> Vector<core::Buffer> {
   Vector<core::Buffer> scratch;
   for (const auto& output : engine.output_protos()) {
     auto& buffer = scratch.emplace_back(core::MemoryType::Cpu, core::DataType::Float32);
-    if (output.data_type == core::DataType::Int8)
-      buffer.reshape(output.shape);
+    if (output.data_type == core::DataType::Int8 && !output.shape.empty()) {
+      auto shape = output.shape;
+      shape[0] = 1;
+      buffer.reshape(shape);
+    }
   }
   return scratch;
 }
@@ -386,34 +384,68 @@ auto dequantize_values(const std::int8_t* in, std::size_t count, float scale, st
 
 } // namespace
 
-auto dequantize_buffer(const core::Buffer& output, core::Buffer& scratch) -> void {
-  const auto* base = static_cast<const std::uint8_t*>(output.memory()->cpu());
+auto sample_bytes(const core::Buffer& output) -> std::size_t {
+  const auto& stride = output.stride();
+  return stride.size() > 1 ? stride[1] : stride[0] / static_cast<std::size_t>(output.shape()[0]);
+}
+
+auto sample_data(const core::Buffer& output, std::size_t index) -> const void* {
+  return static_cast<const std::byte*>(output.memory()->cpu()) + index * sample_bytes(output);
+}
+
+auto sample_volume(const core::Buffer& output) -> std::size_t {
+  return static_cast<std::size_t>(output.volume() / output.shape()[0]);
+}
+
+namespace {
+
+// float32 values of the `count` elements at `base`: float32 in place, int8
+// dequantized into `scratch`, grown on first use. Dimensions from `first` on
+// index within the read span, dimension k - 1 stepping stride[k] bytes; rows
+// of the last dimension are contiguous.
+auto read_floats(const core::Buffer& output, const std::uint8_t* base, std::size_t count, std::size_t first,
+                 core::Buffer& scratch) -> const float* {
+  if (output.data_type() == core::DataType::Float32)
+    return static_cast<const float*>(static_cast<const void*>(base));
+  if (static_cast<std::size_t>(scratch.volume()) < count)
+    scratch.reshape({static_cast<std::int64_t>(count)});
   auto* out = static_cast<float*>(scratch.memory()->mutable_cpu());
-  const auto convert = [&](const std::uint8_t* in, std::size_t count) -> void {
-    dequantize_values(static_cast<const std::int8_t*>(static_cast<const void*>(in)), count, output.scale(),
+  const auto* floats = out;
+  const auto convert = [&](const std::uint8_t* in, std::size_t values) -> void {
+    dequantize_values(static_cast<const std::int8_t*>(static_cast<const void*>(in)), values, output.scale(),
                       output.zero_point(), out);
-    out += count;
+    out += values;
   };
-  const auto count = static_cast<std::size_t>(output.volume());
-  if (output.is_contiguous()) {
-    convert(base, count);
-    return;
-  }
-  // Rows of the last dimension are contiguous; the outer index of a row is
-  // decomposed against the shape, dimension k - 1 stepping stride[k] bytes.
   const auto& shape = output.shape();
+  if (output.is_contiguous() || shape.size() <= first + 1) {
+    convert(base, count);
+    return floats;
+  }
   const auto& stride = output.stride();
   const auto cols = static_cast<std::size_t>(shape.back());
   for (std::size_t row = 0; cols != 0 && row < count / cols; ++row) {
     std::size_t offset = 0;
     auto rest = row;
-    for (auto k = shape.size() - 1; k > 0; --k) {
+    for (auto k = shape.size() - 1; k > first; --k) {
       const auto dim = static_cast<std::size_t>(shape[k - 1]);
       offset += rest % dim * stride[k];
       rest /= dim;
     }
     convert(base + offset, cols);
   }
+  return floats;
+}
+
+} // namespace
+
+auto sample_floats(const core::Buffer& output, std::size_t index, core::Buffer& scratch) -> const float* {
+  return read_floats(output, static_cast<const std::uint8_t*>(sample_data(output, index)), sample_volume(output), 1,
+                     scratch);
+}
+
+auto output_floats(const core::Buffer& output, core::Buffer& scratch) -> const float* {
+  return read_floats(output, static_cast<const std::uint8_t*>(output.memory()->cpu()),
+                     static_cast<std::size_t>(output.volume()), 0, scratch);
 }
 
 } // namespace hrt::postprocess

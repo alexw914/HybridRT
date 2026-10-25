@@ -396,7 +396,7 @@ TEST(DetectGeneralTest, KeepsTightInt8BoundsAtFloatRoundingEdges) {
   for (const auto scale : {0.1F, 0.5F, 2.5745716F}) {
     for (const auto zero_point : {-128, -126, 0, 127}) {
       buffer->set_quantization(scale, zero_point);
-      const hrt::postprocess::HeadGridView grid(*buffer, std::nullopt);
+      const hrt::postprocess::HeadGridView grid(*buffer, 0, std::nullopt);
       for (int q = -128; q <= 127; ++q) {
         const auto score = scale * static_cast<float>(q - zero_point);
         for (const auto threshold : {std::nextafter(score, -std::numeric_limits<float>::infinity()), score,

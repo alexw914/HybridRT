@@ -35,75 +35,107 @@ DVPP → CANN (Ascend) is planned and has no platform yet.
 ## Preprocessing
 
 - Content: letterbox of one synthetic interleaved BGR uint8 frame (1920 x 1080, 2560 x 1440,
-  3840 x 2160) to 640 x 640 and 1280 x 1280: linear resize, pad 114, planar RGB float32, mean 0, std 255.
+  3840 x 2160) to 640 x 640 and 1280 x 1280: linear resize, pad 114. CPU/Metal/CUDA output
+  planar RGB float32 with mean 0 and std 255; RGA output is interleaved RGB uint8 in a dma-buffer.
 - Devices: CPU and Metal on Apple (host/shared memory in and out), CPU and CUDA on NVIDIA. CUDA host
   starts from a host frame and includes its upload; CUDA device starts from a resident frame; CUDA
   output stays on the device.
 - Method: one caller, one OpenCV thread, 20 extra warm-up calls; ms per call.
-  `hybridrt_bench_preprocess --benchmark_filter='BM_(Cuda)?Resolution/[0-9]+/[0-9]+/(640/640|1280/1280)/'`.
+  `hybridrt_bench_preprocess --benchmark_filter='^BM_(Resolution|CudaResolution)/[0-9]+/[0-9]+/(640/640|1280/1280)/(0|1)/'`.
+- RK3588 measures RGA only, with the same six source/target size pairs: `RGA host` includes
+  staging from host BGR memory into a reusable dma-buffer; `RGA dma` starts from a resident
+  BGR dma-buffer populated before timing. Both include letterbox, BGR-to-RGB conversion,
+  cache-coherency work and synchronous RGA completion (`IM_SYNC`), leaving output in its
+  dma-buffer. Buffer allocation, warm-up calls and the initial resident-source copy are untimed;
+  per-call mapping/import work and repeated host staging are timed. Mean 0/std 1 and no
+  normalization are used; normalization built into RKNN and all inference are excluded. This uint8 path is not the same output
+  contract as the float32 CPU/Metal/CUDA path.
+- RGA fills the padding and performs BGR-to-RGB conversion inside its resize operation for
+  these interleaved uint8 buffers; no separate CPU conversion/normalization is requested.
+  RGB888 dma-buffer row pitch must be a multiple of 16 pixels and
+  allocations must satisfy the backend's below-4-GB requirement. Unsupported formats, scales
+  or allocation failures must be reported; whole-call CPU fallbacks must not be accepted as RGA results.
+  Use `hybridrt_bench_preprocess --benchmark_filter='^BM_RgaResolution/'` with the common
+  three-repetition method and 20 extra warm-ups. RGA cells marked `—` have not been measured.
 
-| Platform | Source → target | CPU | Metal | CUDA host | CUDA device |
-| --- | --- | ---: | ---: | ---: | ---: |
-| M4 | 1920 x 1080 → 640 x 640 | 0.684 | 0.480 | | |
-| M4 | 1920 x 1080 → 1280 x 1280 | 2.093 | 0.821 | | |
-| M4 | 2560 x 1440 → 640 x 640 | 0.616 | 0.513 | | |
-| M4 | 2560 x 1440 → 1280 x 1280 | 1.787 | 1.036 | | |
-| M4 | 3840 x 2160 → 640 x 640 | 0.680 | 0.779 | | |
-| M4 | 3840 x 2160 → 1280 x 1280 | 2.519 | 1.257 | | |
-| M5 Pro | 1920 x 1080 → 640 x 640 | 0.547 | 0.223 | | |
-| M5 Pro | 1920 x 1080 → 1280 x 1280 | 1.871 | 0.455 | | |
-| M5 Pro | 2560 x 1440 → 640 x 640 | 0.554 | 0.248 | | |
-| M5 Pro | 2560 x 1440 → 1280 x 1280 | 1.424 | 0.480 | | |
-| M5 Pro | 3840 x 2160 → 640 x 640 | 0.560 | 0.464 | | |
-| M5 Pro | 3840 x 2160 → 1280 x 1280 | 2.253 | 0.722 | | |
-| RTX 3060 | 1920 x 1080 → 640 x 640 | 0.635 | | 0.601 | 0.086 |
-| RTX 3060 | 1920 x 1080 → 1280 x 1280 | 2.395 | | 0.690 | 0.149 |
-| RTX 3060 | 2560 x 1440 → 640 x 640 | 0.665 | | 0.967 | 0.086 |
-| RTX 3060 | 2560 x 1440 → 1280 x 1280 | 1.760 | | 1.029 | 0.153 |
-| RTX 3060 | 3840 x 2160 → 640 x 640 | 0.618 | | 2.122 | 0.095 |
-| RTX 3060 | 3840 x 2160 → 1280 x 1280 | 3.038 | | 2.163 | 0.168 |
+| Platform | Source → target | CPU | Metal | CUDA host | CUDA device | RGA host | RGA dma |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| M4 | 1920 x 1080 → 640 x 640 | 0.684 | 0.480 | | | | |
+| M4 | 1920 x 1080 → 1280 x 1280 | 2.093 | 0.821 | | | | |
+| M4 | 2560 x 1440 → 640 x 640 | 0.616 | 0.513 | | | | |
+| M4 | 2560 x 1440 → 1280 x 1280 | 1.787 | 1.036 | | | | |
+| M4 | 3840 x 2160 → 640 x 640 | 0.680 | 0.779 | | | | |
+| M4 | 3840 x 2160 → 1280 x 1280 | 2.519 | 1.257 | | | | |
+| M5 Pro | 1920 x 1080 → 640 x 640 | 0.547 | 0.223 | | | | |
+| M5 Pro | 1920 x 1080 → 1280 x 1280 | 1.871 | 0.455 | | | | |
+| M5 Pro | 2560 x 1440 → 640 x 640 | 0.554 | 0.248 | | | | |
+| M5 Pro | 2560 x 1440 → 1280 x 1280 | 1.424 | 0.480 | | | | |
+| M5 Pro | 3840 x 2160 → 640 x 640 | 0.560 | 0.464 | | | | |
+| M5 Pro | 3840 x 2160 → 1280 x 1280 | 2.253 | 0.722 | | | | |
+| RTX 3060 | 1920 x 1080 → 640 x 640 | 0.635 | | 0.601 | 0.086 | | |
+| RTX 3060 | 1920 x 1080 → 1280 x 1280 | 2.395 | | 0.690 | 0.149 | | |
+| RTX 3060 | 2560 x 1440 → 640 x 640 | 0.665 | | 0.967 | 0.086 | | |
+| RTX 3060 | 2560 x 1440 → 1280 x 1280 | 1.760 | | 1.029 | 0.153 | | |
+| RTX 3060 | 3840 x 2160 → 640 x 640 | 0.618 | | 2.122 | 0.095 | | |
+| RTX 3060 | 3840 x 2160 → 1280 x 1280 | 3.038 | | 2.163 | 0.168 | | |
+| RK3588 | 1920 x 1080 → 640 x 640 | | | | | — | — |
+| RK3588 | 1920 x 1080 → 1280 x 1280 | | | | | — | — |
+| RK3588 | 2560 x 1440 → 640 x 640 | | | | | — | — |
+| RK3588 | 2560 x 1440 → 1280 x 1280 | | | | | — | — |
+| RK3588 | 3840 x 2160 → 640 x 640 | | | | | — | — |
+| RK3588 | 3840 x 2160 → 1280 x 1280 | | | | | — | — |
 
 ## Postprocessing
 
-- Content: all template algos, including static batch and OCR variants, on the Ryzen 5 5600X CPU.
-  Decode real FP32 ONNX Runtime CPU outputs: filtering, NMS, masks and source coordinate mapping.
+- Content: all 26 base template algos, including both OCR stages, each at static B1/B4/B8
+  on the Ryzen 5 5600X CPU. Decode real FP32 ONNX Runtime CPU outputs: filtering, NMS, masks
+  and source coordinate mapping. Force the ORT CPU provider and intra/inter-op threads to 1;
+  require every output to be FP32. Model preparation is described in
+  [the ONNX fixture reference](template/README.md#fp32-output-onnx-postprocessing-fixtures).
   Inference, FP16/INT8 conversion and host copies are excluded; outputs are computed once and reused.
 - Inputs: bus.jpg, airport.jpg for rotated boxes, ocr_document.png for OCR detection and its
   (419, 16, 241, 50) crop for recognition, with template thresholds.
 - Method: one caller, one OpenCV thread, no affinity; whole-batch milliseconds. Divide by B for
-  mean milliseconds per image. `B` is the batch dimension; `—` means no template model for that batch.
+  mean milliseconds per image. `B` is the batch dimension; each sample receives the same source
+  image and transform. `error` records a failed decoder; `—` means an unmeasured variant.
   `hybridrt_bench_postprocess --benchmark_filter='^BM_Type/'`.
 
 5600X CPU, FP32 ONNX outputs:
 
-| Type | Template algo | Model outputs | CPU B1 | CPU B4 | CPU B8 |
-| --- | --- | --- | ---: | ---: | ---: |
-| `YoloV8Detect` | `yolov8_detect` | `Bx144x{80x80, 40x40, 20x20}` | 0.08788 | — | — |
-| `Yolo26Detect` | `yolo26n_detect_raw` | `Bx84x{80x80, 40x40, 20x20}` | 0.07557 | — | — |
-| `YoloV5Detect` | `yolov5_detect` | `Bx255x{80x80, 40x40, 20x20}` | 0.03462 | — | — |
-| `DetrDetect` | `rtdetr_l_detect` | `Bx300x84` | 0.02263 | — | — |
-| `E2EDetect` | `yolo26n_e2e_detect` | `Bx300x6` | 0.0006817 | — | — |
-| `GeneralDetect` | `yolov8n_detect` | `Bx84x8400` | 0.04063 | 0.1518 | 0.3261 |
-| `E2ERotated` | `yolo26n_e2e_obb` | `Bx300x7` | 0.0006963 | — | — |
-| `YoloV8Rotated` | `yolov8n_obb_raw` | `Bx80x{128x128, 64x64, 32x32}` | 0.2583 | — | — |
-| `Yolo26Rotated` | `yolo26n_obb_raw` | `Bx20x{128x128, 64x64, 32x32}` | 0.2009 | — | — |
-| `YoloV5Rotated` | `yolov5_rotated` | `Bx24x{160x160, 80x80, 40x40}` | 0.0502 | — | — |
-| `GeneralRotated` | `yolov8n_obb` | `Bx20x6300` | 0.1782 | — | — |
-| `GeneralClassify` | `yolov8n_classify` | `Bx1000` | 5.933e-05 | 0.0009275 | 0.001775 |
-| `Embedding` | `yolov8n_classify_embedding` | `Bx1000` | 4.468e-05 | — | — |
-| `GeneralYoloPose` | `yolov8n_pose` | `Bx56x8400` | 0.001496 | 0.007433 | 0.0139 |
-| `YoloV8Keypoint` | `yolov8n_face` | `Bx80x{80x80, 40x40, 20x20}` | 0.00967 | — | — |
-| `Yolo26Keypoint` | `yolo26n_pose_raw` | `Bx56x{80x80, 40x40, 20x20}` | 0.00793 | — | — |
-| `E2EKeypoint` | `yolo26n_e2e_pose` | `Bx300x57` | 0.001152 | — | — |
-| `RtmoKeypoint` | `rtmo_s_pose` | `Bx300x5`, `Bx300x17x3` | 0.001724 | — | — |
-| `GeneralKeypoint` | `rtmpose_m_pose` | `Bx17x384`, `Bx17x512` | 0.006013 | — | — |
-| `GeneralYoloSegment` | `yolov8n_segment` | `Bx116x8400`, `Bx32x160x160` | 0.3406 | 1.733 | 4.252 |
-| `YoloV8Segment` | `yolov8n_segment_raw` | `Bx176x{60x80, 30x40, 15x20}`, `Bx32x120x160` | 0.3087 | — | — |
-| `Yolo26Segment` | `yolo26n_segment_raw` | `Bx116x{80x80, 40x40, 20x20}`, `Bx32x160x160` | 0.3763 | — | — |
-| `E2ESegment` | `yolo26n_e2e_segment` | `Bx300x38`, `Bx32x160x160` | 0.2761 | — | — |
-| `SemanticSegment` | `yolo26n_semantic` | `Bx19x80x80` | 0.389 | — | — |
-| `Ocr` | `ppocrv6_tiny_det` | `Bx1x640x640` | 0.2974 | — | — |
-| `Ocr` | `ppocrv6_tiny_rec` | `Bx40x6906` | 0.1255 | — | 1.022 |
+| Type | Template algo | Model outputs | CPU B1 | CPU B4 | CPU B8 | Status / failure reason |
+| --- | --- | --- | ---: | ---: | ---: | --- |
+| `YoloV8Detect` | `yolov8_detect` | `Bx144x{80x80, 40x40, 20x20}` | 0.08627 | 0.3395 | 0.9383 | — |
+| `Yolo26Detect` | `yolo26n_detect_raw` | `Bx84x{80x80, 40x40, 20x20}` | 0.07242 | 0.3007 | 0.7207 | — |
+| `YoloV5Detect` | `yolov5_detect` | `Bx255x{80x80, 40x40, 20x20}` | 0.02821 | 0.1169 | 0.2409 | — |
+| `DetrDetect` | `rtdetr_l_detect` | `Bx300x84` | 0.02335 | 0.09913 | 0.193 | — |
+| `E2EDetect` | `yolo26n_e2e_detect` | `Bx300x6` | 0.0006546 | 0.003436 | 0.006499 | — |
+| `GeneralDetect` | `yolov8n_detect` | `Bx84x8400` | 0.04245 | 0.169 | 0.6691 | — |
+| `E2ERotated` | `yolo26n_e2e_obb` | `Bx300x7` | 0.0007709 | 0.0035 | 0.006715 | — |
+| `YoloV8Rotated` | `yolov8n_obb_raw` | `Bx80x{128x128, 64x64, 32x32}` | 0.2601 | 1.042 | 2.279 | — |
+| `Yolo26Rotated` | `yolo26n_obb_raw` | `Bx20x{128x128, 64x64, 32x32}` | 0.187 | 0.8 | 1.604 | — |
+| `YoloV5Rotated` | `yolov5_rotated` | `Bx24x{160x160, 80x80, 40x40}` | 0.03412 † | 0.1312 † | 0.2655 † | FP32 outputs from a Q/DQ graph; no objects on airport.jpg (†). |
+| `GeneralRotated` | `yolov8n_obb` | `Bx20x6300` | 0.1716 | 0.6869 | 1.489 | — |
+| `GeneralClassify` | `yolov8n_classify` | `Bx1000` | 5.511e-05 | 0.0007944 | 0.001587 | — |
+| `Embedding` | `yolov8n_classify_embedding` | `Bx1000` | 4.599e-05 | 0.0007449 | 0.0015 | — |
+| `GeneralYoloPose` | `yolov8n_pose` | `Bx56x8400` | 0.001493 | 0.00676 | 0.01358 | — |
+| `YoloV8Keypoint` | `yolov8n_face` | `Bx80x{80x80, 40x40, 20x20}` | 0.008318 | 0.0364 | 0.07647 | — |
+| `Yolo26Keypoint` | `yolo26n_pose_raw` | `Bx56x{80x80, 40x40, 20x20}` | 0.006712 | 0.0289 | 0.05861 | — |
+| `E2EKeypoint` | `yolo26n_e2e_pose` | `Bx300x57` | 0.001153 | 0.005358 | 0.01246 | — |
+| `RtmoKeypoint` | `rtmo_s_pose` | `Bx300x5`, `Bx300x17x3` | 0.001657 | 0.007602 | 0.01511 | — |
+| `GeneralKeypoint` | `rtmpose_m_pose` | `Bx17x384`, `Bx17x512` | 0.006109 | 0.0255 | 0.05336 | — |
+| `GeneralYoloSegment` | `yolov8n_segment` | `Bx116x8400`, `Bx32x160x160` | 0.3358 | 1.645 | 4.659 | — |
+| `YoloV8Segment` | `yolov8n_segment_raw` | `Bx176x{60x80, 30x40, 15x20}`, `Bx32x120x160` | 0.2965 | 1.289 | 3.697 | — |
+| `Yolo26Segment` | `yolo26n_segment_raw` | `Bx116x{80x80, 40x40, 20x20}`, `Bx32x160x160` | 0.3643 | 1.9 | 5.509 | — |
+| `E2ESegment` | `yolo26n_e2e_segment` | `Bx300x38`, `Bx32x160x160` | 0.3357 | 1.289 | 3.011 | — |
+| `SemanticSegment` | `yolo26n_semantic` | `Bx19x80x80` | 0.3928 | 3.109 | 7.762 | — |
+| `Ocr` | `ppocrv6_tiny_det` | `Bx1x640x640` | 0.2847 | 1.165 | 2.399 | — |
+| `Ocr` | `ppocrv6_tiny_rec` | `Bx40x6906` | 0.09937 | 0.415 | 0.8399 | — |
+
+All 78 cases have timings, including `GeneralKeypoint` B1/B4/B8 after enabling its batch
+initialization. Decoded object counts scale with B on the checked image for every
+timed detector/keypoint/segment/OCR case. `†` marks zero decoded objects: the user YOLOv5
+OBB model has no matching objects on airport.jpg, so these cells measure filtering only.
+Local accepted results: `assets/test/benchmark_results/postprocess_fp32_onnx_b148_complete.json`.
 
 RK3588 CPU, RKNN FP16/INT8 output comparison (whole-batch ms):
 
@@ -117,10 +149,12 @@ RK3588 CPU, RKNN FP16/INT8 output comparison (whole-batch ms):
   passed SDK IO checks; 64 INT8 variants of 22 groups and 21 FP16 B1 models produced valid timings.
   `conversion fails` marks RT-DETR and RTMO, whose graphs the toolkit cannot convert. `—` means
   not timed: the user QAT YOLOv5 OBB model has no FP16 counterpart, and `GeneralKeypoint`
-  (top-down, one keypoint set per output) rejects batch 4 and 8. `error` marks the YOLO26
+  B4/B8 have not been remeasured since batch support was enabled. `error` marks the YOLO26
   end-to-end exports, whose in-graph TopK/GatherElements index tensors go out of range on the
   runtime; no timing is accepted. Conversion/query results are detailed in
   [the model reference](template/README.md#rknn-on-rk3588).
+- `yolov8n_segment` timings are withdrawn: FP16 and INT8 decoded different object counts.
+  All its cells remain empty until corrected outputs are validated and the case is retested.
 - `‡` means zero decoded objects on the test image: only scan/filter work is measured, not NMS/masks.
   Fused coordinate/confidence outputs lose scores at coarse scales (about 2.57–3.16); these results
   cannot establish useful detection accuracy or a speedup over FP32. The user-specific YOLOv5 OBB
@@ -131,34 +165,34 @@ RK3588 CPU, RKNN FP16/INT8 output comparison (whole-batch ms):
   `assets/test/benchmark_results/rknn_postprocess_matrix/`, from `run_rknn_postprocess.py`. SDK
   versions match the platform matrix; the board service stayed running and frequency scaling enabled.
 
-| Type | Template algo | Native INT8 output | FP16 B1 | INT8 B1 | INT8 B4 | INT8 B8 |
-| --- | --- | --- | ---: | ---: | ---: | ---: |
-| `YoloV8Detect` | `yolov8_detect` | INT8 | 0.3652 | 0.1239 | 0.5141 | 1.081 |
-| `Yolo26Detect` | `yolo26n_detect_raw` | INT8 | 0.3152 | 0.1156 | 0.4839 | 0.995 |
-| `YoloV5Detect` | `yolov5_detect` | INT8 | 0.07864 | 0.04357 | 0.1843 | 0.3765 |
-| `DetrDetect` | `rtdetr_l_detect` | conversion fails | — | — | — | — |
-| `E2EDetect` | `yolo26n_e2e_detect` | INT8 | error | error | error | error |
-| `GeneralDetect` | `yolov8n_detect` | INT8 | 0.1495 | 0.06851 ‡ | 0.2813 ‡ | 0.5844 ‡ |
-| `E2ERotated` | `yolo26n_e2e_obb` | INT8 | 0.001539 | 0.001767 ‡ | 0.008112 ‡ | 0.01628 ‡ |
-| `YoloV8Rotated` | `yolov8n_obb_raw` | INT8 | 0.6044 | 0.4283 | 1.763 | 4.537 |
-| `Yolo26Rotated` | `yolo26n_obb_raw` | INT8 | 0.4315 | 0.3487 | 1.416 | 2.843 |
-| `YoloV5Rotated` | `yolov5_rotated` | INT8 | — | 0.09146 ‡ | 0.3705 ‡ | 0.7413 ‡ |
-| `GeneralRotated` | `yolov8n_obb` | INT8 | 0.3472 | 0.01065 ‡ | 0.0441 ‡ | 0.08837 ‡ |
-| `GeneralClassify` | `yolov8n_classify` | INT8 | 0.0001666 | 0.0005384 | 0.004765 | 0.0134 |
-| `Embedding` | `yolov8n_classify_embedding` | INT8 | 0.0001348 | 0.0004969 | 0.004489 | 0.01292 |
-| `GeneralYoloPose` | `yolov8n_pose` | INT8 | 0.003619 | 0.000868 ‡ | 0.004582 ‡ | 0.009266 ‡ |
-| `YoloV8Keypoint` | `yolov8n_face` | INT8 | 0.02257 | 0.01344 | 0.05769 | 0.1178 |
-| `Yolo26Keypoint` | `yolo26n_pose_raw` | INT8 | 0.01788 | 0.01396 | 0.05963 | 0.1216 |
-| `E2EKeypoint` | `yolo26n_e2e_pose` | INT8 | 0.001255 ‡ | 0.001731 ‡ | 0.008213 ‡ | 0.01648 ‡ |
-| `RtmoKeypoint` | `rtmo_s_pose` | conversion fails | — | — | — | — |
-| `GeneralKeypoint` | `rtmpose_m_pose` | INT8 | 0.01914 | 0.005418 | — | — |
-| `GeneralYoloSegment` | `yolov8n_segment` | INT8 | 1.163 | 0.0692 ‡ | 0.287 ‡ | 0.5925 ‡ |
-| `YoloV8Segment` | `yolov8n_segment_raw` | INT8 | 0.9454 | 0.6709 | 3.088 | 6.639 |
-| `Yolo26Segment` | `yolo26n_segment_raw` | INT8 | 1.268 | 0.8964 | 4.078 | 8.119 |
-| `E2ESegment` | `yolo26n_e2e_segment` | INT8 | error | error | error | error |
-| `SemanticSegment` | `yolo26n_semantic` | INT8 | 1.058 | 0.8881 | 4.552 | 9.425 |
-| `Ocr` | `ppocrv6_tiny_det` | INT8 | 0.7009 | 0.7688 | 3.135 | 6.252 |
-| `Ocr` | `ppocrv6_tiny_rec` | INT8 | 0.2434 | 0.01659 | 0.06792 | 0.1427 |
+| Type | Template algo | Native INT8 output | FP16 B1 | INT8 B1 | INT8 B4 | INT8 B8 | Status / failure reason |
+| --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| `YoloV8Detect` | `yolov8_detect` | INT8 | 0.3652 | 0.1239 | 0.5141 | 1.081 | — |
+| `Yolo26Detect` | `yolo26n_detect_raw` | INT8 | 0.3152 | 0.1156 | 0.4839 | 0.995 | — |
+| `YoloV5Detect` | `yolov5_detect` | INT8 | 0.07864 | 0.04357 | 0.1843 | 0.3765 | — |
+| `DetrDetect` | `rtdetr_l_detect` | conversion fails | — | — | — | — | Conversion fails: RKNN Conv rewrite channel mismatch (4 vs 256). |
+| `E2EDetect` | `yolo26n_e2e_detect` | INT8 | error | error | error | error | Runtime error: TopK/GatherElements index out of range; rewritten candidate not yet qualified. |
+| `GeneralDetect` | `yolov8n_detect` | INT8 | 0.1495 | 0.06851 ‡ | 0.2813 ‡ | 0.5844 ‡ | No decoded objects (‡); coarse fused-output quantization loses scores. |
+| `E2ERotated` | `yolo26n_e2e_obb` | INT8 | 0.001539 | 0.001767 ‡ | 0.008112 ‡ | 0.01628 ‡ | No decoded objects (‡); coarse fused-output quantization loses scores. |
+| `YoloV8Rotated` | `yolov8n_obb_raw` | INT8 | 0.6044 | 0.4283 | 1.763 | 4.537 | — |
+| `Yolo26Rotated` | `yolo26n_obb_raw` | INT8 | 0.4315 | 0.3487 | 1.416 | 2.843 | — |
+| `YoloV5Rotated` | `yolov5_rotated` | INT8 | — | 0.09146 ‡ | 0.3705 ‡ | 0.7413 ‡ | No FP16 source: QAT model retains INT8; test image has no matching objects (‡). |
+| `GeneralRotated` | `yolov8n_obb` | INT8 | 0.3472 | 0.01065 ‡ | 0.0441 ‡ | 0.08837 ‡ | No decoded objects (‡); coarse fused-output quantization loses scores. |
+| `GeneralClassify` | `yolov8n_classify` | INT8 | 0.0001666 | 0.0005384 | 0.004765 | 0.0134 | — |
+| `Embedding` | `yolov8n_classify_embedding` | INT8 | 0.0001348 | 0.0004969 | 0.004489 | 0.01292 | — |
+| `GeneralYoloPose` | `yolov8n_pose` | INT8 | 0.003619 | 0.000868 ‡ | 0.004582 ‡ | 0.009266 ‡ | No decoded objects (‡); coarse fused-output quantization loses scores. |
+| `YoloV8Keypoint` | `yolov8n_face` | INT8 | 0.02257 | 0.01344 | 0.05769 | 0.1178 | — |
+| `Yolo26Keypoint` | `yolo26n_pose_raw` | INT8 | 0.01788 | 0.01396 | 0.05963 | 0.1216 | — |
+| `E2EKeypoint` | `yolo26n_e2e_pose` | INT8 | 0.001255 ‡ | 0.001731 ‡ | 0.008213 ‡ | 0.01648 ‡ | No objects in either precision; INT8 fused-output quantization also loses scores. |
+| `RtmoKeypoint` | `rtmo_s_pose` | conversion fails | — | — | — | — | Conversion fails: RKNN Reshape rewrite, [1,300,2] to [300,256]. |
+| `GeneralKeypoint` | `rtmpose_m_pose` | INT8 | 0.01914 | 0.005418 | — | — | B4/B8 supported; RKNN timings pending remeasurement. |
+| `GeneralYoloSegment` | `yolov8n_segment` | INT8 | — | — | — | — | Withdrawn: FP16/INT8 object counts differ; output-0 score quantization loses probabilities. |
+| `YoloV8Segment` | `yolov8n_segment_raw` | INT8 | 0.9454 | 0.6709 | 3.088 | 6.639 | — |
+| `Yolo26Segment` | `yolo26n_segment_raw` | INT8 | 1.268 | 0.8964 | 4.078 | 8.119 | — |
+| `E2ESegment` | `yolo26n_e2e_segment` | INT8 | error | error | error | error | Runtime error: TopK/GatherElements index out of range; candidate has a score mismatch (0.126). |
+| `SemanticSegment` | `yolo26n_semantic` | INT8 | 1.058 | 0.8881 | 4.552 | 9.425 | — |
+| `Ocr` | `ppocrv6_tiny_det` | INT8 | 0.7009 | 0.7688 | 3.135 | 6.252 | — |
+| `Ocr` | `ppocrv6_tiny_rec` | INT8 | 0.2434 | 0.01659 | 0.06792 | 0.1427 | — |
 
 ## Pipeline
 
@@ -173,7 +207,7 @@ RK3588 CPU, RKNN FP16/INT8 output comparison (whole-batch ms):
   per caller, one OpenCV thread; total images per second over all callers.
   `hybridrt_bench_pipeline --benchmark_filter='BM_Batch/'`.
 
-| Platform | Path | Model | B1 | B4 | B8 |
+| Platform | Path | Model | B1 (images/s) | B4 (images/s) | B8 (images/s) |
 | --- | --- | --- | ---: | ---: | ---: |
 | M4 | CPU → ORT CoreML | `yolov8n_detect` | | | |
 | M4 | CPU → ORT CoreML | `yolov8n_segment` | | | |
@@ -200,6 +234,22 @@ RTX 3060 gains 1.23–1.82x throughput at B4 and 1.28–2.40x at B8 over B1. RK3
 within −4.1% to +1.2% at B4 and −6.0% to +4.4% at B8; batching gives no consistent throughput
 gain on these FP16 RKNN exports. These are aggregate throughput results; request latency grows
 with batch size. The board service was stopped during measurement and restored afterward.
+
+For RTX 3060, amortized wall time per image (`1000 / images_per_second`) falls from
+2.79 to 1.53 to 1.16 ms for detect, 2.76 to 2.01 to 1.61 ms for segment, 2.50 to
+1.53 to 1.17 ms for pose, and 0.902 to 0.733 to 0.704 ms for classify (B1/B4/B8).
+The raw detect JSON reports mean whole-call times of 22.29 / 48.88 / 74.18 ms with
+8 concurrent callers. These include pool waits; they are not isolated inference latency.
+The throughput relation is approximately `8 * B * 1000 / mean_call_ms` for this workload.
+
+Batching amortizes launches and can improve GPU utilization, but uploads still stage each
+host image, device outputs return to the host for decoding, and the pipeline synchronizes
+after preprocessing and inference. CPU decoding loops over the samples within each batch;
+OpenCV is single-threaded in this test, including mask decoding. The 3/2/3 pools remain fixed
+as batch size grows. These verified code paths explain why the pipeline cannot be assumed
+to scale linearly; segment and classify show smaller gains than detect and pose. The current
+aggregate results do not isolate GPU compute, transfers, CPU decoding or pool contention,
+so their individual bottleneck shares remain unmeasured. No additional speed tests were run.
 
 CPU ORT and TensorRT batch-1/4/8 correctness checks passed on the current 640 x 640 fixtures.
 The earlier RKNN batch comparison failed strict result equality even with the board service

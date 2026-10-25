@@ -74,13 +74,14 @@ auto argmax(const float* begin, std::int64_t count) -> std::int64_t {
   return std::distance(begin, std::max_element(begin, begin + count));
 }
 
-// One contiguous output: float32, or int8 ranked as integers (positive scale)
-// and dequantized only where a value is used.
+// One contiguous output sample: float32, or int8 ranked as integers
+// (positive scale) and dequantized only where a value is used.
 class OutputValues {
 public:
   OutputValues() = default;
-  OutputValues(const core::Buffer& buffer, bool int8)
-      : data_(buffer.memory()->cpu()), int8_(int8), scale_(buffer.scale()), zero_point_(buffer.zero_point()) {}
+  explicit OutputValues(const float* data) : data_(data) {}
+  OutputValues(const core::Buffer& buffer, std::size_t index)
+      : data_(sample_data(buffer, index)), int8_(true), scale_(buffer.scale()), zero_point_(buffer.zero_point()) {}
 
   // float32 data; only for float outputs.
   KZ_NODISCARD auto floats() const -> const float* { return static_cast<const float*>(data_); }
@@ -121,6 +122,7 @@ public:
                     "general_keypoint: simcc needs 2 outputs (x, y)");
     KZ_CHECK_RETURN(type != KeypointOutput::PointWithVisible || outputs.size() == 3, false,
                     "general_keypoint: point_with_visible needs 3 outputs");
+    const auto batch = engine.input_protos().front().shape.front();
     for (const auto& output : outputs) {
       const auto& shape = output.shape;
       const auto heatmap = type == KeypointOutput::Heatmap || type == KeypointOutput::HeatmapUdp;
@@ -128,9 +130,12 @@ public:
       KZ_CHECK_RETURN(
           shape.size() >= dimensions &&
               std::all_of(shape.begin(), shape.end(), [](std::int64_t value) -> bool { return value > 0; }) &&
-              std::all_of(shape.begin(), shape.end() - static_cast<std::ptrdiff_t>(dimensions),
-                          [](std::int64_t value) -> bool { return value == 1; }),
-          false, "general_keypoint: needs positive dimensions and one keypoint set per output");
+              (shape.size() == dimensions
+                   ? batch == 1
+                   : shape.front() == batch &&
+                         std::all_of(shape.begin() + 1, shape.end() - static_cast<std::ptrdiff_t>(dimensions),
+                                     [](std::int64_t value) -> bool { return value == 1; })),
+          false, "general_keypoint: needs positive dimensions, matching batch and one keypoint set per sample");
       switch (type) {
       case KeypointOutput::Heatmap:
       case KeypointOutput::HeatmapUdp:
@@ -167,23 +172,21 @@ public:
   }
 
 protected:
-  auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool override {
+  auto decode(KeypointResultMap& result, const core::Buffers& outputs, std::size_t index,
+              const preprocess::ImageTransform& transform) -> bool override {
     const auto type = param_.general_keypoint_type;
     const auto heatmap = type == KeypointOutput::Heatmap || type == KeypointOutput::HeatmapUdp;
     for (std::size_t i = 0; i < outputs.size(); ++i) {
       const auto& output = *outputs[i];
       // Contiguous int8 outputs are read in place, except heatmaps, which DARK refines as float maps.
-      if (!heatmap && output.data_type() == core::DataType::Int8 && output.is_contiguous() && output.scale() > 0.0F) {
-        data_[i] = OutputValues(output, true);
-        continue;
-      }
-      const core::Buffer* floats = &output;
-      if (floats->data_type() != core::DataType::Float32) {
-        dequantize_buffer(*floats, scratch_[i]);
-        floats = &scratch_[i];
-      }
-      data_[i] = OutputValues(*floats, false);
+      // Outputs without a batch dimension ([K, H, W] or [2, K], batch 1) are one sample.
+      const auto unbatched = output.shape().size() == (heatmap ? 3U : 2U);
+      if (!heatmap && output.data_type() == core::DataType::Int8 && output.is_contiguous() && output.scale() > 0.0F)
+        data_[i] = OutputValues(output, index);
+      else if (unbatched)
+        data_[i] = OutputValues(output_floats(output, scratch_[i]));
+      else
+        data_[i] = OutputValues(sample_floats(output, index, scratch_[i]));
     }
     auto& objects = result[0];
     switch (type) {

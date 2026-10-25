@@ -32,7 +32,7 @@ inline constexpr std::size_t kKeypointValues = 3;
 auto expand_per_class(Vector<float>& values, std::size_t class_num, const char* name) -> bool;
 
 // Whether every engine output is float32 or int8, the types HeadGridView and
-// dequantize_buffer() read. Checked once in init, so decode() relies on it.
+// sample_floats() read. Checked once in init, so decode() relies on it.
 auto is_float_outputs(const engine::Engine& engine, std::string_view name) -> bool;
 
 // Whether the engine has outputs and every one is 4-D, as head_channels() and
@@ -45,13 +45,22 @@ auto head_channels(const core::BufferProto& proto, engine::DataLayout layout) ->
 // Input-to-head scale along x and y of a 4-D head output.
 auto head_stride(const core::BufferProto& proto, engine::DataLayout layout, core::Size input) -> core::Point2f;
 
-// Element access into one engine output as a grid of rows x cols cells with
+// Bytes between consecutive samples of a batched host output.
+auto sample_bytes(const core::Buffer& output) -> std::size_t;
+
+// Host address of sample `index` of a batched host output, read in place.
+auto sample_data(const core::Buffer& output, std::size_t index) -> const void*;
+
+// Elements of one sample of a batched output.
+auto sample_volume(const core::Buffer& output) -> std::size_t;
+
+// Element access into one sample of an engine output as a grid of rows x cols cells with
 // channels, NCHW or NHWC, float32 or quantized int8, honoring buffer strides. Without a layout, a decoded
-// [1, rows, N] output is one grid row of N cells whose channels are its rows.
+// [B, rows, N] output is one grid row of N cells whose channels are its rows.
 // Other data types are rejected in init by is_float_outputs().
 class HeadGridView {
 public:
-  HeadGridView(const core::Buffer& buffer, std::optional<engine::DataLayout> layout);
+  HeadGridView(const core::Buffer& buffer, std::size_t index, std::optional<engine::DataLayout> layout);
 
   KZ_NODISCARD auto int8() const -> bool { return int8_; }
 
@@ -90,7 +99,7 @@ public:
                  : static_cast<const float*>(data_)[index];
   }
 
-  // Element (index, column) of a layout-less [1, N, C] output.
+  // Element (index, column) of a layout-less [B, N, C] output.
   KZ_NODISCARD auto at(std::size_t index, std::int64_t column) const -> float { return at(0, column, index); }
 
   // Bound in the raw domain: at() >= threshold implies raw() >= bound, so
@@ -221,13 +230,17 @@ inline auto first_max(const std::int8_t* values, std::size_t count) -> std::size
   return static_cast<std::size_t>(std::find(values, values + count, max) - values);
 }
 
-// Dequantizes an int8 output into `scratch`, a float32 host buffer of the
-// same shape, honoring strides. Decoders that read a whole output read
-// float32 outputs in place and call this for int8 ones; decoders reading part
-// of an output use HeadGridView instead.
-auto dequantize_buffer(const core::Buffer& output, core::Buffer& scratch) -> void;
+// float32 values of sample `index` of a host output: float32 outputs in
+// place, int8 ones dequantized into `scratch` (create_scratch()), honoring
+// strides. Decoders that read a whole sample use this; decoders reading part
+// of one use HeadGridView instead.
+auto sample_floats(const core::Buffer& output, std::size_t index, core::Buffer& scratch) -> const float*;
 
-// One dequantize_buffer() buffer per engine output, shaped like the int8 ones.
+// sample_floats() over the whole of an output without a batch dimension.
+auto output_floats(const core::Buffer& output, core::Buffer& scratch) -> const float*;
+
+// One sample_floats() buffer per engine output, holding one sample of the int8
+// ones; output_floats() grows it on first use.
 auto create_scratch(const engine::Engine& engine) -> Vector<core::Buffer>;
 
 } // namespace hrt::postprocess

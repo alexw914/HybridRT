@@ -79,7 +79,6 @@ three repetitions >=0.5 s after >=0.2 s warm-up, median ms; service stopped, fre
 | Postprocessor | Before | After |
 | --- | ---: | ---: |
 | GeneralDetect | 2.13893 | 0.06869 |
-| GeneralYoloSegment | 2.13874 | 0.06925 |
 | GeneralYoloPose | 0.02660 | 0.000868 |
 
 **Validation / limits:** All 256 INT8 values were compared with scalar score predicates at 9,216

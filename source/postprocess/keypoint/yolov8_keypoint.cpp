@@ -67,13 +67,13 @@ public:
   }
 
 protected:
-  auto decode(KeypointResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool override {
+  auto decode(KeypointResultMap& result, const core::Buffers& outputs, std::size_t index,
+              const preprocess::ImageTransform& transform) -> bool override {
     for (auto& per_class : candidates_)
       per_class.clear();
     candidates_.resize(param_.class_num);
     for (std::size_t head = 0; head < outputs.size(); ++head) {
-      const HeadGridView grid(*outputs[head], layout_);
+      const HeadGridView grid(*outputs[head], index, layout_);
       tables_[head].bind(grid, logit_threshold_);
       decode_head(grid, tables_[head], param_.strides[head]);
     }

@@ -248,22 +248,24 @@ the image; `prepare_other_cases.py rtmo` in the local assets/test/scripts/ direc
 with the M best pre-NMS candidates (`--candidates`, 300), and `RtmoKeypoint` thresholds and
 suppresses them. RTMO takes BGR, keep-ratio top-left resize, padding 114 and no normalization.
 
-`GeneralKeypoint` decodes one top-down crop per call; cascades pass detections as `src_rect`
-with `resize_type: "pad_outside"` and `pad_scale` (1.25 in mmpose). `general_keypoint_type`
-follows the outputs:
+`GeneralKeypoint` decodes one top-down crop per sample, including static batches. Cascades
+pass detections as per-sample `src_rect` with `resize_type: "pad_outside"` and `pad_scale`
+(1.25 in mmpose). For the batched `process` overload or `ImageModel`, the leading output
+dimension `B` must match the input batch; each sample uses its own source transform.
+All six modes support FP32 and INT8 outputs. `general_keypoint_type` follows the outputs:
 
-- `heatmap`: `[1, K, H, W]` maps (HRNet, SimpleBaseline, ViTPose); peak cell times
+- `heatmap`: `[B, K, H, W]` maps (HRNet, SimpleBaseline, ViTPose); peak cell times
   input / heatmap size, score the peak. `dark` refines as mmpose DARK (11 x 11 blur,
   sigma 2) at interior maxima of positive heatmaps and keeps the argmax otherwise.
 - `heatmap_udp`: the same maps from UDP-trained models (HRNet-UDP); peak cell times
   input / (heatmap size - 1), as mmpose `UDPHeatmap`. `dark` refines as mmpose
   `refine_keypoints_dark_udp`. Its `combined` offset maps are not supported, and the crop is the
   `pad_outside` resize rather than UDP's unbiased affine, a difference below one input pixel.
-- `simcc`: x `[1, K, W * r]` and y `[1, K, H * r]` distributions (RTMPose); bin / r,
+- `simcc`: x `[B, K, W * r]` and y `[B, K, H * r]` distributions (RTMPose); bin / r,
   score min(max x, max y).
-- `point_with_visible`: x, y and `[1, K, 3]` visibility distributions; the argmax state
+- `point_with_visible`: x, y and `[B, K, 3]` visibility distributions; the argmax state
   sets `visible`, its last channel the score.
-- `point_channel_first`, `point_channel_last`: normalized `[1, 2, K]` or `[1, K, 2]` points.
+- `point_channel_first`, `point_channel_last`: normalized `[B, 2, K]` or `[B, K, 2]` points.
 
 For `heatmap` and `simcc`, `score_activation` applies to the score and a keypoint is visible
 when the score exceeds `keypoint_threshold` (mmpose drops scores <= 0 and draws above 0.3).
@@ -681,6 +683,61 @@ ArgMax removed so the postprocessor receives class logits. Input/output shapes a
 | `SemanticSegmentBatch4.onnx` | `4x3x640x640` | `4x19x80x80` | `5b56d1508dcbf4da9e0b0da8e94080b5e45623ec75ebcbea29f52e876aeb5c26` |
 | `SemanticSegmentBatch8.onnx` | `8x3x640x640` | `8x19x80x80` | `d285e4d8150f9cdc8be2736c4ae70c79d9c310ccd4db8df5fa2985c31bbdf481` |
 
+### FP32-output ONNX postprocessing fixtures
+
+All 26 base template algos now have static B1/B4/B8 ONNX files: **78 models**, including
+both OCR stages. Files are in `assets/test/onnx/`: `<stem>.onnx`, `<stem>Batch4.onnx`,
+`<stem>Batch8.onnx`. Base models use the template preprocessing/postprocessing parameters;
+only the leading batch dimension changes. These fixtures have FP32 input/output; the
+user's YOLOv5 OBB graph still contains its original Q/DQ quantization internally.
+
+Local `assets/test/scripts/prepare_postprocess_onnx.py` reuses the existing static exports
+and validated native batch graphs, and expands the missing RT-DETR/RTMO graphs without
+replicating batch-1 networks. For RTMO it also expands the fixed pre-NMS candidate indices
+to select each sample independently; changing dimensions alone incorrectly selected batch0.
+All 78 pass ONNX checker and ONNX Runtime 1.23.2 CPU inference, one intra/inter-op thread,
+with static shapes and finite FP32 outputs. B4/B8 use alternating inputs from two random
+seeds and match concatenated independent B1 outputs (`rtol=1e-3`, `atol=1e-3`). This checks
+batch graph equivalence, not model accuracy. `GeneralKeypoint` supports B4/B8 through
+the common in-place per-sample decoding; unit tests cover all six modes, distinct samples and
+source transforms, repeated partial batches and FP32/INT8 outputs. Logs stay local under
+`assets/test/benchmark_results/postprocess_onnx_prepare/`. CPU postprocessing timings and
+decoder failures are recorded in [the benchmark table](../benchmark.md#postprocessing).
+
+<details>
+<summary>Static ONNX SHA256 (file stems as above)</summary>
+
+| Stem | B1 SHA256 | B4 SHA256 | B8 SHA256 |
+| --- | --- | --- | --- |
+| `YoloV8Detect` | `e2a57b77d38a136a3ac07ddd17b81930c4680e0d464ee615488c3a47bfdef303` | `4ca48cda7a4baba7b6866896d3c3dd858d9c5c34e89bcfbc85a1bcff61145aa9` | `c34f059d51a5f7d0faa9c24c7cd15fdbbde71aea3ec30d6f1572ca6b06666963` |
+| `Yolo26Detect` | `2089cfdd67660be0efec7477bbf2f6cabc2261c84bbd82c6a7e895b51bd8c49a` | `22bbffd44fc7fdcfd0b97a24df96611db4cba1fbe079df00c0728ec21b6077df` | `1e8e91a548bd0f9fd3cb24454dc8a82905dbb4c4fa9faf8cd726297a9e3e78bd` |
+| `YoloV5Detect` | `797416533eed5eb4c82098ec221bbe55368ad3c062f9d0217db87f129a78f172` | `9dd17ccab63ef76a690f02d72349415ab6e1d6618542c12f9125712b1ad5e47f` | `1a83b5eb3ee30f7e3a7d82790119a29f8e24df7fcd8b6e65202473bd3dcd132d` |
+| `DetrDetect` | `599b9b7484cb831312f585d4ec4885a95ae10d1e84dada14833f5c570828c9b9` | `908f0960c2348f0b2edb6b343f9071207a8893133bac9b024fcd869129a616f1` | `7868bc25b98f3d473bf38c9709a67aa3d793cedf10a151b66fd494554a79c171` |
+| `E2EDetect` | `08727943f090f5e8472cae3c08bcbb7b93c927820d3104ef7792f1d31277ec77` | `489804d2a8dcee0c242bf70deb3e9a2a15c7c960643227cddbc233703ea81c80` | `1e1218e9913e9b650c650d5e6b5017647e83994910f7e125839cab0d7441248f` |
+| `GeneralDetect` | `782006124ca30bc45ac1da40466b2541b06b203754fac8b5018fbbfbb602d36f` | `deb8c98ab42828ccc537eaad85838f1c5349a37fc20a256dbca23eb8cc477518` | `dc8f6cd8c46ccb2021f30663f97e96099d8675630fba64102e2f5f09393cfaee` |
+| `E2ERotated` | `0dc04234b1d82d87b8aebe5c364b4c298de0e2380ce61b74f9b117478e690e41` | `fcb764744c8cd171fce4356fec1be7a035be6c374c3fd44e75936ccc5108bba2` | `c4c3fb95e3f83d1c7dfb87a815e5cd4a892f592973db021a68ccc5cdc4b39ea3` |
+| `YoloV8Rotated` | `2a5de440d72ecb80cc4fbce50c59f6293e4bc89cb1fe8aaee8ca7d9ed3b89566` | `02ac9b9ecaa358bcb1cb2580c06ea8f0f2775811e36de2c5b208237cb08db31b` | `89d7b81be46c81250352141a9a16d3dc792b489e3e2b1e460b8e78a1fe2ca6c7` |
+| `Yolo26Rotated` | `003dc108ae1be9b94f7bbf3f154d871385224da96ca15fa0bc07bccb0bc2148f` | `2563f97944667cf3616840423f3bdbccc3c88e8b022a555a4adb4fdfe9903553` | `7921b429728a4bd999f209fa92a0e8ffdfa5990ac88313ce4411657a757cdd03` |
+| `YoloV5Rotated` | `afffc7a2813e15e9137648bc7655155827b1cdace2a0999b1919d1196be57dfb` | `b34b2e0f87f0f02036835b97deab82f0711b074ddd4f0042949030ea58c280f2` | `b800adcbf548e66f25e1860bbc7710dc52fe8869b873d0975c1030d5047023f7` |
+| `GeneralRotated` | `d87f86b2e475deccfd57410fdcb6d2de3886fcab4f6395888ddca4c35a2c12ee` | `fd1c5cfb33e8d913a60fffc4f145a5910c97b9b0434ef0fc1a41a0d22285349e` | `5524c2a5c5a6121065601e2d880b43051aadc108a7532c8f98113893948ec7cb` |
+| `GeneralClassify` | `46f101117e36acb79ebbd362250971b13d8dd906c7c877a2b7cc6af1fc1b8054` | `bb5992374ba65a0555d0bd30679a3610a5c7305f95e305542efd747e51c26b4e` | `f6bdb116cff2dbb19f8d23d3ec04a46dde18bf07d9ac02aaac6d9f05e843e4ce` |
+| `Embedding` | `46f101117e36acb79ebbd362250971b13d8dd906c7c877a2b7cc6af1fc1b8054` | `a7335372051eeceadfd09f54732e444354640a89c166439f79ee66a947e02b32` | `3fff23b9a79f1a997b04fa47868b782c9a2b78ae59410f2c24e1a195f9f7ed35` |
+| `GeneralYoloPose` | `b1684b889751d66d6e3f1a5f9e5a799c41e325fabef0cb552cbac82b385dbcba` | `4197a3fbe3181fb9deeea665cb3898c608500437cc85a4f3d69660e45debb194` | `58bd37d656e7a3e3139d71a6408baf5795a09ca21843cdc2dee75f99f828235d` |
+| `YoloV8Keypoint` | `af09683be4937ebe23e9da0346cbf46cd937b73ed5fac986e6205e6c7cdd2c25` | `aae3bb2527d37d730d452fa1f7315a0ee8a548bc51ad5c75b4570f2b4f16eaf0` | `66730ba15975fa202999bb3edc1ee2d84d096674a6ca7aca2a4e8f509f2cd091` |
+| `Yolo26Keypoint` | `513e12cd94482f799e2d1ad66fcb9603d7c3eb41ad38863e7ae566374e0eddc8` | `078d27ea4481797151bb6ddcb95e566e1f60cc3fee07fba5844dfb4b688b3e73` | `fa07d821221254315a16a4a8063cc8fedbc6562187eea48f538e563a31dfd660` |
+| `E2EKeypoint` | `ecd85eb31cf6889ab62600164d27698b881fcb27bd27c548b2dd4a67fb52c814` | `b8214f5de1a953b9ed2ee1ac56d6c365ad80b63a782714bc59b562a31eb62c9f` | `a32607c6af581d1a71a7230bdbe3a448179c21a926079774e55d71c4ab3f5236` |
+| `RtmoKeypoint` | `91d97d8251f7624d4da9cead6b2a8bd6ea36850cfe329122eebeb89b41f108d2` | `dbcd813f96aaadc010552458492acb0b9dd69a10cbef64bfe1b93e65b15166c0` | `218330131cb7999d358417b5be3a8b1649a17edc7bfbc996fa1dabd39e334e1e` |
+| `GeneralKeypoint` | `81e1025f9c938450d2ef88c0fba274fb57b0f9b49711dc7a52fef99c7ea3548d` | `a9c34dc4583b2a48bd5a134642629f55b60bf65fa6b42649103d934ab42f2351` | `7c00fa8af68d7ae003a9960362ee9c053763cee7bf1791ad91f7de33706a5348` |
+| `GeneralYoloSegment` | `a9c25c390e47e6a5e7b3c1dc22bee67ef28cd1746576f2c80a141717fd30dbc6` | `e13654d03168abf180dd73cfc3b28daf3b03dffef2a12f37ee4bf2d8cf4a9462` | `c0c2d436f510efdc26912b95311c0503b2f0bc2b7ebce23c6c151abf3a8e4ee1` |
+| `YoloV8Segment` | `fdbd46dc0a5ae4bb1cb1b32010fa131a43f370043077555f921890bcd2880494` | `64cb7907b657f231c1ce552b49be8d265d7bf77df4b34ed94ae6e0f24bfff99c` | `8730ee5c3456ac76b37c8d351227315b84cd6bf6c2b962e742f34fa3322023ae` |
+| `Yolo26Segment` | `85e5ec69cb0a06f82e6a27b4cdb6be36d91e041b3829d75887183f6506b18221` | `8413583b4ebbceeea6976b852a85dd1de47a4b51bac2bc6595499dbaf469235e` | `27144dbdf82be9b8e833e4bc403e696ca100f4395c035b7e798dbb550d9a6179` |
+| `E2ESegment` | `101060498337592b2c671f479001ca725d92049f99118e5b666f4c2273d9f096` | `3973820970ab832328d160708a04f405dbceae5e0f1cef7fa15c2beaecfcec1e` | `f7011579210041a39c4493a45b475e3666f9b753b10fca1eb0393f732cd70c21` |
+| `SemanticSegment` | `0297ea52c1e6da5047657153853e61136de4bfec675795c6bfb7ea9e1b071f28` | `5b56d1508dcbf4da9e0b0da8e94080b5e45623ec75ebcbea29f52e876aeb5c26` | `d285e4d8150f9cdc8be2736c4ae70c79d9c310ccd4db8df5fa2985c31bbdf481` |
+| `OcrDetection` | `7373329bed2ea0b66c173278112a6dab68a5f9f244723a302e4b1a674f9435c9` | `f70ed142c659d78633b78601a49f4b359cd78d17c7cdbfde93fc2a89062a9955` | `c4c335fdcea1e1cc975fd7b37c02cec80d6e031ee7c625de5b51b112eac0259a` |
+| `OcrRecognition` | `71b480e58fa36017c5e542b1157f659cc58da1233d64c716b7a26240ed2c1f31` | `2c905d8d0a3f11b406df5bbc135bda2b5feb40ad0c3b68927f813e9139847159` | `5d3f22468b3cacf072a0c3bd757d541901b4d419203100ee49a346b3745880ca` |
+
+</details>
+
 ### INT4 ONNX fixtures
 
 Pinned Hugging Face `onnx-community` exports are stored locally under
@@ -891,6 +948,17 @@ Against the ORT results of the same models on bus.jpg, airport.jpg and zidane.jp
 | `Yolo26Detect`, `Yolo26Keypoint`, `Yolo26Rotated` | same objects; boxes within 9.5 px, angles within 0.3 degrees; keypoints within 2 px at the median, one uncertain wrist off by 19.5 px |
 | `E2EDetect`, `E2EKeypoint`, `E2ESegment`, `E2ERotated` | YOLO26 exports convert but return no or wrong rows: the runtime reports GatherElements indexes out of range in the in-graph top-k; YOLOv8 `nms=True` exports do not convert (dynamic NonMaxSuppression) |
 | `DetrDetect`, `RtmoKeypoint` | RT-DETR-L and the fixed RTMO graph do not convert (shape errors in the toolkit's graph rewrites, also after onnxslim) |
+
+The `E2EDetect` and `E2ESegment` failures were reproduced in the RKNN graph tail,
+where TopK anchor indices feed broadcast `GatherElements`. A candidate export replaces
+these with per-sample row `Gather` operations and composes the selections on floating
+box/coefficient tensors, avoiding RKNN's unsupported integer-data Gather path. ORT
+checks preserve the outputs (with boxes clipped to the input canvas). Initial FP16
+board checks recover the same 5 detection objects and 4 segmentation objects as ORT;
+box IoU is above 0.996 and segmentation mask IoU above 0.997 on the checked image.
+One segmentation score differs by 0.126, so this is not yet an accuracy-qualified
+replacement. INT8 and native batch variants remain under validation; the existing
+benchmark errors have not been replaced with timings.
 
 Use raw-head or decoded exports on RKNN; for YOLO26, the raw heads. Milliseconds per call on one thread of the board (fp16, RGA
 preprocessing from a host image, 100 runs):

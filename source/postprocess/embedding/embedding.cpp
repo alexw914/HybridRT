@@ -33,15 +33,10 @@ public:
   }
 
 protected:
-  auto decode(EmbeddingResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& /*transform*/)
-      -> bool override {
-    const core::Buffer* floats = outputs.front().get();
-    if (floats->data_type() != core::DataType::Float32) {
-      dequantize_buffer(*floats, scratch_[0]);
-      floats = &scratch_[0];
-    }
-    const auto* data = static_cast<const float*>(floats->memory()->cpu());
-    result.assign(data, data + floats->volume());
+  auto decode(EmbeddingResult& result, const core::Buffers& outputs, std::size_t index,
+              const preprocess::ImageTransform& /*transform*/) -> bool override {
+    const auto* data = sample_floats(*outputs.front(), index, scratch_[0]);
+    result.assign(data, data + sample_volume(*outputs.front()));
     return true;
   }
 

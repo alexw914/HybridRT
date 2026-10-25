@@ -47,9 +47,9 @@ public:
   }
 
 protected:
-  auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool override {
-    const HeadGridView output(*outputs[0], std::nullopt);
+  auto decode(DetectResultMap& result, const core::Buffers& outputs, std::size_t index,
+              const preprocess::ImageTransform& transform) -> bool override {
+    const HeadGridView output(*outputs[0], index, std::nullopt);
     const auto count = static_cast<std::size_t>(outputs[0]->shape()[1]);
     for (std::size_t i = 0; i < count; ++i) {
       const auto label = output.at(i, 5);

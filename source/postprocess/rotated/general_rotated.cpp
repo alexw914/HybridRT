@@ -48,9 +48,9 @@ public:
   }
 
 protected:
-  auto decode(RotatedResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool override {
-    const HeadGridView rows(*outputs[0], std::nullopt);
+  auto decode(RotatedResultMap& result, const core::Buffers& outputs, std::size_t index,
+              const preprocess::ImageTransform& transform) -> bool override {
+    const HeadGridView rows(*outputs[0], index, std::nullopt);
     decode_rows(result, rows);
     return nms_rotated_reverse(result, param_.iou_threshold, transform);
   }

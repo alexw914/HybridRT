@@ -40,10 +40,10 @@ public:
   }
 
 protected:
-  auto decode(DetectResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool override {
+  auto decode(DetectResultMap& result, const core::Buffers& outputs, std::size_t index,
+              const preprocess::ImageTransform& transform) -> bool override {
     for (std::size_t head = 0; head < outputs.size(); ++head) {
-      const HeadGridView grid(*outputs[head], layout_);
+      const HeadGridView grid(*outputs[head], index, layout_);
       tables_[head].bind(grid);
       decode_head(result, grid, head);
     }

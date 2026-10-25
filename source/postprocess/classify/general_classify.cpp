@@ -51,16 +51,11 @@ public:
   }
 
 protected:
-  auto decode(ClassifyResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& /*transform*/)
-      -> bool override {
+  auto decode(ClassifyResult& result, const core::Buffers& outputs, std::size_t index,
+              const preprocess::ImageTransform& /*transform*/) -> bool override {
     for (std::size_t i = 0; i < outputs.size(); ++i) {
-      const core::Buffer* floats = outputs[i].get();
-      if (floats->data_type() != core::DataType::Float32) {
-        dequantize_buffer(*floats, scratch_[i]);
-        floats = &scratch_[i];
-      }
-      const auto* data = static_cast<const float*>(floats->memory()->cpu());
-      auto& scores = result.emplace_back(data, data + floats->volume());
+      const auto* data = sample_floats(*outputs[i], index, scratch_[i]);
+      auto& scores = result.emplace_back(data, data + sample_volume(*outputs[i]));
       if (activation_ == ClassifyActivation::Sigmoid) {
         std::transform(scores.begin(), scores.end(), scores.begin(), core::sigmoid);
       } else if (activation_ == ClassifyActivation::Softmax && !scores.empty()) {

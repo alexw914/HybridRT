@@ -176,21 +176,16 @@ public:
   }
 
 protected:
-  auto decode(OcrResult& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool override {
+  auto decode(OcrResult& result, const core::Buffers& outputs, std::size_t index,
+              const preprocess::ImageTransform& transform) -> bool override {
     const auto& output = *outputs[0];
     // Contiguous int8 maps are read in place; others are dequantized first.
     if (output.data_type() == core::DataType::Int8 && output.is_contiguous() && output.scale() > 0.0F) {
-      const auto* data = static_cast<const std::int8_t*>(output.memory()->cpu());
+      const auto* data = static_cast<const std::int8_t*>(sample_data(output, index));
       const MapValues map{output.scale(), output.zero_point()};
       return detection_ ? detect(result, data, map, transform) : recognize(result, data, map);
     }
-    const core::Buffer* floats = &output;
-    if (floats->data_type() != core::DataType::Float32) {
-      dequantize_buffer(*floats, scratch_[0]);
-      floats = &scratch_[0];
-    }
-    const auto* data = static_cast<const float*>(floats->memory()->cpu());
+    const auto* data = sample_floats(output, index, scratch_[0]);
     return detection_ ? detect(result, data, MapValues{}, transform) : recognize(result, data, MapValues{});
   }
 

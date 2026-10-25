@@ -145,14 +145,14 @@ public:
   }
 
 protected:
-  auto decode(SegmentResultMap& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool override {
+  auto decode(SegmentResultMap& result, const core::Buffers& outputs, std::size_t index,
+              const preprocess::ImageTransform& transform) -> bool override {
     const auto& output = *outputs[0];
     const auto& shape = output.shape();
     const auto channels = shape.size() == 4 ? static_cast<int>(shape[1]) : 1;
     const auto height = static_cast<int>(shape[shape.size() - 2]);
     const auto width = static_cast<int>(shape.back());
-    if (!output_labels(output, channels, height, width))
+    if (!output_labels(output, index, channels, height, width))
       return false;
 
     // Source pixel center -> network coordinate -> nearest output pixel, the
@@ -220,16 +220,17 @@ private:
           std::clamp(static_cast<int>(std::floor(scale * i + offset + 0.5)), 0, size - 1);
   }
 
-  auto output_labels(const core::Buffer& output, int channels, int height, int width) -> bool {
+  auto output_labels(const core::Buffer& output, std::size_t index, int channels, int height, int width) -> bool {
     labels_.create(height, width, CV_16U);
     const auto plane = static_cast<std::size_t>(height) * static_cast<std::size_t>(width);
     if (channels == 1 && (output.data_type() == core::DataType::Int32 || output.data_type() == core::DataType::Int64)) {
       if (!output.is_contiguous())
         return false;
+      const auto* data = sample_data(output, index);
       for (std::size_t i = 0; i < plane; ++i) {
         const auto value = output.data_type() == core::DataType::Int32
-                               ? static_cast<std::int64_t>(static_cast<const std::int32_t*>(output.memory()->cpu())[i])
-                               : static_cast<const std::int64_t*>(output.memory()->cpu())[i];
+                               ? static_cast<std::int64_t>(static_cast<const std::int32_t*>(data)[i])
+                               : static_cast<const std::int64_t*>(data)[i];
         labels_.ptr<std::uint16_t>()[i] = static_cast<std::uint16_t>(value);
       }
       return true;
@@ -238,15 +239,10 @@ private:
     // Quantized scores keep their order (the scale is positive), so int8 maps
     // skip dequantization.
     if (channels > 1 && output.data_type() == core::DataType::Int8 && output.is_contiguous()) {
-      argmax_channels(static_cast<const std::int8_t*>(output.memory()->cpu()), channels, plane, out);
+      argmax_channels(static_cast<const std::int8_t*>(sample_data(output, index)), channels, plane, out);
       return true;
     }
-    const core::Buffer* floats = &output;
-    if (floats->data_type() != core::DataType::Float32) {
-      dequantize_buffer(*floats, scratch_[0]);
-      floats = &scratch_[0];
-    }
-    const auto* data = static_cast<const float*>(floats->memory()->cpu());
+    const auto* data = sample_floats(output, index, scratch_[0]);
     if (channels == 1) {
       for (std::size_t i = 0; i < plane; ++i)
         out[i] = static_cast<std::uint16_t>(std::lround(data[i]));

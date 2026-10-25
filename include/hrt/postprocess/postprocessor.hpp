@@ -41,14 +41,12 @@ protected:
 
   auto to_host(const core::Buffers& outputs, core::Stream* stream) -> const core::Buffers*;
 
-  // Sample `index` of every output of `host` (from to_host()); outputs whose
-  // batch is 1 are returned as they are.
-  auto sample_outputs(const core::Buffers& host, std::size_t index) -> const core::Buffers*;
+  // Whether every output of `host` holds at least `count` samples.
+  KZ_NODISCARD auto has_samples(const core::Buffers& host, std::size_t count) const -> bool;
 
 private:
   core::Buffers host_;
   core::Buffers view_;
-  core::Buffers sample_;
 };
 
 template <typename Result>
@@ -60,28 +58,31 @@ public:
                core::Stream* stream = nullptr) -> bool {
     result.clear();
     const auto* host = to_host(outputs, stream);
-    return host != nullptr && decode(result, *host, transform);
+    return host != nullptr && decode(result, *host, 0, transform);
   }
 
   // One result per transform from batched outputs: sample i of every output
   // belongs to transforms[i], and samples past transforms.size() are ignored.
+  // Existing results are cleared and reused.
   auto process(Vector<Result>& results, const core::Buffers& outputs,
                const Vector<preprocess::ImageTransform>& transforms, core::Stream* stream = nullptr) -> bool {
-    results.assign(transforms.size(), Result{});
+    results.resize(transforms.size());
+    for (auto& result : results)
+      result.clear();
     const auto* host = to_host(outputs, stream);
-    if (host == nullptr)
+    if (host == nullptr || !has_samples(*host, transforms.size()))
       return false;
     for (std::size_t i = 0; i < transforms.size(); ++i) {
-      const auto* sample = sample_outputs(*host, i);
-      if (sample == nullptr || !decode(results[i], *sample, transforms[i]))
+      if (!decode(results[i], *host, i, transforms[i]))
         return false;
     }
     return true;
   }
 
 protected:
-  virtual auto decode(Result& result, const core::Buffers& outputs, const preprocess::ImageTransform& transform)
-      -> bool = 0;
+  // Decodes sample `index` of the batched host `outputs`, read in place.
+  virtual auto decode(Result& result, const core::Buffers& outputs, std::size_t index,
+                      const preprocess::ImageTransform& transform) -> bool = 0;
 };
 
 using DetectPostprocessor = Postprocessor<DetectResultMap>;
