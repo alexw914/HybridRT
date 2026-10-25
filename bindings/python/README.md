@@ -53,7 +53,7 @@ An engine whose outputs do not fit the postprocess config still aborts the
 process, as in C++.
 
 `examples/run_models.py` runs one algo per task (`yolov8n_detect`, `yolov8n_obb`, `yolov8n_pose`,
-`yolov8n_segment`, `yolov8n_classify`) and OCR (`ppocrv6_tiny_det` + `ppocrv6_small_rec`) on
+`yolov8n_segment`, `yolov8n_classify`) and OCR (`ppocrv6_tiny_det` + `ppocrv6_tiny_rec`) on
 `bus.jpg`, `airport.jpg` and `ocr_document.jpg`, read with OpenCV, and prints the results; algos
 missing from the package are skipped. Pack those algos of the template, or pass a manifest of them:
 
@@ -71,7 +71,7 @@ rotated boxes use `airport.jpg`. See [test model sources and exports](../../asse
 `OcrModel` selects detection and recognition algos from one JSON/.hrtc package:
 
 ```python
-with hrt.OcrModel("ocr.hrtc", "ppocrv6_tiny_det", "ppocrv6_small_rec") as model:
+with hrt.OcrModel("ocr.hrtc", "ppocrv6_tiny_det", "ppocrv6_tiny_rec") as model:
     for item in model(cv2.imread("document.png")):
         print(item.text, item.rect, item.detection_score, item.recognition_score)
 ```

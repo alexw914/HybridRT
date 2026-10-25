@@ -24,7 +24,7 @@ TEST(OcrModelTest, RunsPackedModelsWithoutExternalDictionary) {
   hrt::hrtc::Package package;
   package.name = "ocr";
   package.version = "1.0.0";
-  for (const auto name : {"ppocrv6_tiny_det", "ppocrv6_tiny_rec", "ppocrv6_small_rec"}) {
+  for (const auto name : {"ppocrv6_tiny_det", "ppocrv6_tiny_rec", "ppocrv6_tiny_rec_batch8"}) {
     const auto algo = hrt::test::template_algo(name);
     if (algo.is_null() || !std::filesystem::exists(hrt::test::template_model(algo)))
       GTEST_SKIP() << "OCR models unavailable";
@@ -44,7 +44,7 @@ TEST(OcrModelTest, RunsPackedModelsWithoutExternalDictionary) {
   std::filesystem::remove(path);
   ASSERT_TRUE(packed);
   package = {};
-  for (const auto name : {"ppocrv6_tiny_rec", "ppocrv6_small_rec"}) {
+  for (const auto name : {"ppocrv6_tiny_rec", "ppocrv6_tiny_rec_batch8"}) {
     const auto* recognition = packed->find(name);
     ASSERT_NE(recognition, nullptr);
     const kitzoo::json::Reader config{recognition->config};

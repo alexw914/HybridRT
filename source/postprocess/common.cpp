@@ -139,8 +139,15 @@ auto HeadGridView::raw_bound(float threshold) const -> float {
     return threshold;
   if (!(scale_ > 0.0F))
     return std::numeric_limits<float>::lowest();
-  const auto bound = std::floor(static_cast<double>(threshold) / static_cast<double>(scale_) + zero_point_);
-  return static_cast<float>(std::clamp(bound, -129.0, 128.0));
+  const auto estimate = std::floor(static_cast<double>(threshold) / static_cast<double>(scale_) + zero_point_);
+  auto bound = static_cast<std::int32_t>(std::clamp(estimate, -128.0, 128.0));
+  // Rounding down admits the zero-point bin for small positive thresholds,
+  // defeating block skipping on quantized decoded heads. Match float rounding.
+  while (bound < 128 && core::dequantize(static_cast<std::int8_t>(bound), scale_, zero_point_) < threshold)
+    ++bound;
+  while (bound > -128 && core::dequantize(static_cast<std::int8_t>(bound - 1), scale_, zero_point_) >= threshold)
+    --bound;
+  return static_cast<float>(bound);
 }
 
 namespace {

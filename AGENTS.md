@@ -79,12 +79,18 @@
   记录瓶颈与定位、改动、测量条件（平台、模型、输入、线程、次数、工具）、前后数据及剩余问题。
   普通功能不写入。引擎推理耗时只用 `tools/hrt-model-bench` 测量；
   benchmarks/ 只保留 preprocess_bench、postprocess_bench、pipeline_bench。
-- `assets/benchmark.md` 只记录当前数据，分前处理、后处理、Pipeline 三章，每章一张表；开头写公共方法和
+- `assets/benchmark.md` 只记录当前数据，分前处理、后处理、Pipeline 三章；前处理与 Pipeline 各一张表，
+  后处理分 CPU FP32 与 RK3588 量化对照两张表（CPU 按 B1/B4/B8，RK 按 FP16 B1 与 INT8 B1/B4/B8 分列）。开头写公共方法和
   平台表（设备、CPU、内存、加速器、OS、编译主机、编译器、CMake、构建类型、OpenCV、推理与设备 SDK、绑核），
   各章写测试内容与方法。统一用 Release 当前源码，Google Benchmark 3 次重复、每次 >=0.5 s、预热 >=0.2 s，取中位数。
 - 前处理只测 CPU、Metal、CUDA（host、device 源）：单调用者、OpenCV 单线程，1920x1080、2560x1440、
-  3840x2160 letterbox 到 640x640、1280x1280。后处理测模板全部 algo，用 ORT CPU 的真实 FP32 输出、
-  单线程，表中列模型输出形状；RK3588 另测四个基础模型 int8 RKNN 的量化输出。
+  3840x2160 letterbox 到 640x640、1280x1280。后处理只保留一个消费端或服务端 CPU 平台，
+  测模板全部 algo，用 ORT CPU 的真实 FP32 输出、单线程；表中输出形状的批次维统一写 `B`，
+  同模型只占一行，B1、B4、B8 分列整批耗时，不为 batch 变体另起行。
+  RKNN 覆盖全部后处理类型及 OCR 检测/识别，每个模型准备 INT8 batch1、4、8，FP16 只准备 batch1 对照；
+  仅跳过转换或运行失败的变体并记录原因，不以少数基础模型代替全类型覆盖。只测 RK3588 CPU 后处理，
+  输入在主机预处理，一次推理及 SDK 输出转换、拷贝均在计时外，复用真实输出，记录输出类型、scale 和 zero point，
+  不将 FP16/FP32 输出或空解码结果当作有效 INT8 后处理对比。INT8 正确性仍由单元测试覆盖。
 - Pipeline 只测 yolov8n detect、segment、pose、classify 四个 640x640 模型的 batch 1、4、8 静态导出，
   每次调用传 batch 张图；pool 3/2/3，8 个调用线程共享一个模型并循环固定的 32 张 COCO128 图；
   路径为 CPU→ORT CoreML、Metal→ORT CoreML、CUDA→TensorRT、RGA→RKNN、DVPP→CANN。

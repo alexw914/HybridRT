@@ -31,10 +31,13 @@ if(TARGET opencv_imgcodecs)
     hybridrt_add_benchmark(preprocess SOURCES preprocess_bench.cpp DEPENDS hrt::hybridrt opencv_imgcodecs)
 endif()
 if((HRT_USE_ORT OR HRT_USE_RKNN) AND TARGET opencv_imgcodecs)
-    foreach(name postprocess pipeline)
-        hybridrt_add_benchmark(${name} SOURCES ${name}_bench.cpp DEPENDS hrt::hybridrt opencv_imgcodecs)
-        target_compile_definitions(hybridrt_bench_${name} PRIVATE
-            $<$<BOOL:${HRT_USE_ORT}>:HRT_BENCH_ORT>
-            $<$<BOOL:${HRT_USE_RKNN}>:HRT_BENCH_RKNN>)
-    endforeach()
+    hybridrt_add_benchmark(postprocess SOURCES postprocess_bench.cpp DEPENDS hrt::hybridrt opencv_imgcodecs kitzoo::os)
+    target_compile_definitions(hybridrt_bench_postprocess PRIVATE
+        $<$<BOOL:${HRT_USE_RKNN}>:HRT_BENCH_RKNN>)
+endif()
+if((HRT_USE_ORT OR HRT_USE_RKNN) AND TARGET opencv_imgcodecs)
+    hybridrt_add_benchmark(pipeline SOURCES pipeline_bench.cpp DEPENDS hrt::hybridrt opencv_imgcodecs)
+    target_compile_definitions(hybridrt_bench_pipeline PRIVATE
+        $<$<BOOL:${HRT_USE_ORT}>:HRT_BENCH_ORT>
+        $<$<BOOL:${HRT_USE_RKNN}>:HRT_BENCH_RKNN>)
 endif()

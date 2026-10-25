@@ -4,6 +4,32 @@ Before/after optimization records, newest first. Current benchmark results and r
 
 Each entry states the cause/change, measurement conditions, data, and validation or limits. Values are historical for that source revision; later entries may supersede them. Missing historical settings are marked rather than inferred.
 
+## 2026-10-25: tighten INT8 score filtering bounds
+
+A floor-rounded quantized threshold admitted the zero-point bin for small positive score
+thresholds. SIMD block filtering then entered the scalar loop for almost every zero-confidence
+anchor. Compute the first representable INT8 value meeting the threshold, correcting against
+the same float dequantization as decoding; final score predicates are unchanged.
+
+**Measurement:** RK3588 A76 cores 4-7, cross-built GCC 12.2.1 Release, OpenCV 4.6.0 one thread,
+librknnrt 2.3.2, 640 x 640 batch-1 INT8 YOLOv8n exports, bus.jpg. Google Benchmark wall time,
+three repetitions >=0.5 s after >=0.2 s warm-up, median ms; service stopped, frequency scaling enabled.
+
+| Postprocessor | Before | After |
+| --- | ---: | ---: |
+| GeneralDetect | 2.13893 | 0.06869 |
+| GeneralYoloSegment | 2.13874 | 0.06925 |
+| GeneralYoloPose | 0.02660 | 0.000868 |
+
+**Validation / limits:** All 256 INT8 values were compared with scalar score predicates at 9,216
+threshold/scale/zero-point combinations, including adjacent float rounding boundaries; x86 and
+AArch64 passed. The measured detection/segment/pose models decode zero objects: their fused
+coordinate/confidence output has scale around 2.57 (pose 3.16), losing confidence precision during
+model quantization. The speedup fixes redundant filtering, not model accuracy; these figures do
+not compare equivalent detections with FP32 models. Raw results remain local in
+`standard640_postprocess_rk3588.json` and `standard640_postprocess_rk3588_tight_bound_b1.json`.
+Further testing uses the 5600X; RK measurements above are retained only as this optimization record.
+
 ## 2026-10-24: recognize all OCR lines of an image in one call
 
 OCR recognition ran once per detected line. Collecting all line regions in one ImageModel call lets a native batch-8 recognizer process eight lines per inference; tall lines still rotate on the host.

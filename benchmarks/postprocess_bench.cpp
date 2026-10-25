@@ -1,13 +1,16 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: benchmarks/postprocess_bench.cpp
-// Description: Benchmarks every template postprocessor on real model outputs,
-//              and the basic YOLO postprocessors on RKNN int8 outputs.
+// Description: Benchmarks template postprocessors on real engine outputs.
 // -----------------------------------------------------------------------------
 
 #include <hrt/postprocess/postprocessor_factory.hpp>
 
+#include <kitzoo/os/filesys.hpp>
+
 #include <benchmark/benchmark.h>
+#include <cstring>
+#include <type_traits>
 
 #include "yolo_fixture.hpp"
 
@@ -49,11 +52,30 @@ auto prepare(benchmark::State& state, const kitzoo::json::Json& entry, const std
   const auto& input = *inputs.front();
   const auto& shape = input.shape();
   auto* base = static_cast<std::byte*>(input.memory()->mutable_cpu());
+#ifdef HRT_BENCH_RKNN
+  const auto path = std::filesystem::path(HRT_SOURCE_DIR) / "assets/test/calib/rknn_int8" /
+                    entry["name"].get<hrt::String>() / "input_nhwc.bin";
+  std::error_code error;
+  const auto bytes = kitzoo::os::read_file(path, error);
+  if (error || bytes.size() != input.bytes()) {
+    state.SkipWithError("Prepared RKNN input is missing or has the wrong size");
+    return std::nullopt;
+  }
+  std::memcpy(base, bytes.data(), bytes.size());
+  hrt::preprocess::ImageTransform transform;
+  transform.input_size = *size;
+  if (!hrt::preprocess::calc_resize_position(transform.dst_roi, transform.src_roi, {0, 0, size->width, size->height},
+                                             source->rect(), source->size(), param)) {
+    state.SkipWithError("Invalid source mapping");
+    return std::nullopt;
+  }
+  prepared.transforms.assign(static_cast<std::size_t>(shape[0]), transform);
+#else
   auto preprocessor = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Cpu);
   for (std::int64_t i = 0; i < shape[0]; ++i) {
-    auto sample = hrt::core::Image::wrap(hrt::core::MemoryType::Cpu,
-                                         base + static_cast<std::size_t>(i) * input.stride()[1], param.dst_image_format,
-                                         *size, input.data_type());
+    auto sample =
+        hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, base + static_cast<std::size_t>(i) * input.stride()[1],
+                               param.dst_image_format, *size, input.data_type());
     const auto transform = sample ? preprocessor->process(*sample, *source, {}, param) : std::nullopt;
     if (!transform) {
       state.SkipWithError("Preprocessing failed");
@@ -61,6 +83,7 @@ auto prepare(benchmark::State& state, const kitzoo::json::Json& entry, const std
     }
     prepared.transforms.push_back(*transform);
   }
+#endif
   if (!engine->set_inputs(inputs) || !engine->set_outputs(prepared.outputs) || !engine->inference()) {
     state.SkipWithError("Inference failed");
     return std::nullopt;
@@ -92,9 +115,28 @@ auto measure_postprocessor(benchmark::State& state, Prepared& prepared) -> void 
     benchmark::DoNotOptimize(results);
   }
   state.SetItemsProcessed(state.iterations() * static_cast<std::int64_t>(prepared.transforms.size()));
+  if constexpr (requires { result.begin()->second.size(); }) {
+    const auto count = [](const Result& sample) {
+      std::size_t total = 0;
+      for (const auto& [type, objects] : sample)
+        total += objects.size();
+      return total;
+    };
+    std::size_t objects = batched ? 0 : count(result);
+    for (const auto& sample : results)
+      objects += count(sample);
+    state.counters["decoded_objects"] = static_cast<double>(objects);
+  } else if constexpr (std::is_same_v<Result, hrt::postprocess::OcrResult>) {
+    std::size_t objects = batched ? 0 : result.size();
+    for (const auto& sample : results)
+      objects += sample.size();
+    state.counters["decoded_objects"] = static_cast<double>(objects);
+  }
+  state.counters["seconds_per_image"] =
+      benchmark::Counter(static_cast<double>(prepared.transforms.size()),
+                         benchmark::Counter::kIsIterationInvariantRate | benchmark::Counter::kInvert);
 }
 
-#ifdef HRT_BENCH_ORT
 auto BM_Type(benchmark::State& state) -> void {
   cv::setNumThreads(1);
   const kitzoo::json::Reader reader(std::filesystem::path(HRT_SOURCE_DIR) / "assets/template/hrtc_template.json");
@@ -105,11 +147,27 @@ auto BM_Type(benchmark::State& state) -> void {
     return;
   }
   const auto name = algos[index]["name"].get<hrt::String>();
-  const auto entry = hrt::bench::template_entry(name);
+  auto entry = hrt::bench::template_entry(name, hrt::bench::Provider::Cpu, false);
   if (!entry.is_object()) {
     state.SkipWithError("Template model is missing");
     return;
   }
+#ifdef HRT_BENCH_RKNN
+  const auto quantized = state.range(1) != 0;
+  const auto batch = state.range(2);
+  auto path = std::filesystem::path(entry["config"]["engine"]["backends"][0]["data"].get<hrt::String>());
+  const auto suffix = batch > 1 ? "Batch" + std::to_string(batch) : hrt::String{};
+  path = std::filesystem::path(HRT_SOURCE_DIR) / "assets/test/rknn" /
+         (path.stem().string() + suffix + (quantized ? "Int8.rknn" : ".rknn"));
+  if (batch > 1)
+    entry["name"] = name + "_batch" + std::to_string(batch);
+  if (!std::filesystem::is_regular_file(path)) {
+    state.SkipWithMessage("RKNN model variant is unavailable");
+    return;
+  }
+  entry["config"]["engine"]["backends"] = {
+      {{"engine_type", "rknn"}, {"data", path.string()}, {"config", {{"image_input", true}}}}};
+#endif
   const auto& post = entry["config"]["postprocess"];
   const auto type = post["type"].get<hrt::String>();
   const auto is_ocr = type == "Ocr";
@@ -120,11 +178,20 @@ auto BM_Type(benchmark::State& state) -> void {
   auto prepared = prepare(state, entry, hrt::bench::wrap_bgr(bgr));
   if (!prepared)
     return;
-  state.SetLabel(type + ":" + name);
+  auto label = type + ":" + entry["name"].get<hrt::String>();
+#ifdef HRT_BENCH_RKNN
+  label += quantized ? "/int8_model" : "/fp16_model";
+#endif
+  state.SetLabel(label);
   state.counters["input_width"] = prepared->transforms.front().input_size.width;
   state.counters["input_height"] = prepared->transforms.front().input_size.height;
-  // Instance masks decode on OpenCV's threads; the second argument sets their number.
-  cv::setNumThreads(static_cast<int>(state.range(1)));
+  std::size_t int8_outputs = 0, fp32_outputs = 0;
+  for (const auto& output : prepared->outputs) {
+    int8_outputs += output->data_type() == hrt::core::DataType::Int8;
+    fp32_outputs += output->data_type() == hrt::core::DataType::Float32;
+  }
+  state.counters["int8_outputs"] = static_cast<double>(int8_outputs);
+  state.counters["fp32_outputs"] = static_cast<double>(fp32_outputs);
   if (type.ends_with("Detect"))
     measure_postprocessor<hrt::postprocess::DetectResultMap>(state, *prepared);
   else if (type.ends_with("Segment"))
@@ -146,52 +213,19 @@ auto type_cases(benchmark::Benchmark* bench) -> void {
   const kitzoo::json::Reader reader(std::filesystem::path(HRT_SOURCE_DIR) / "assets/template/hrtc_template.json");
   const auto& algos = reader.raw()["algos"];
   for (std::size_t i = 0; i < algos.size(); ++i) {
-    bench->Args({static_cast<std::int64_t>(i), 1});
-    const auto& type = algos[i]["config"]["postprocess"]["type"].get_ref<const hrt::String&>();
-    if (type.ends_with("Segment") && type != "SemanticSegment")
-      bench->Args({static_cast<std::int64_t>(i), 4});
-  }
-}
-
-#endif
-
 #ifdef HRT_BENCH_RKNN
-// The basic YOLO postprocessors on the int8 outputs of `<model>Int8.rknn` in assets/test/rknn, which keep their
-// quantization; arg: task (0 detect, 1 segment, 2 pose, 4 classify).
-auto BM_Rknn(benchmark::State& state) -> void {
-  cv::setNumThreads(1);
-  const auto task = static_cast<std::size_t>(state.range(0));
-  auto entry = hrt::bench::algo_entry(task, hrt::bench::Provider::Cpu, false);
-  if (!entry.is_object()) {
-    state.SkipWithError("Template algo is missing");
-    return;
-  }
-  auto path = std::filesystem::path(entry["config"]["engine"]["backends"][0]["data"].get<hrt::String>());
-  path = std::filesystem::path("assets/test/rknn") / (path.stem().string() + "Int8.rknn");
-  if (!std::filesystem::is_regular_file(path)) {
-    state.SkipWithMessage("RKNN int8 model is missing");
-    return;
-  }
-  entry["config"]["engine"]["backends"] = {
-      {{"engine_type", "rknn"}, {"data", path.string()}, {"config", {{"image_input", true}}}}};
-  auto& preprocess = entry["config"]["preprocess"];
-  preprocess["dst_image_format"] = "inter_rgb";
-  preprocess["std"] = {1, 1, 1};
-  const auto bgr = hrt::bench::task_image(task);
-  auto prepared = prepare(state, entry, hrt::bench::wrap_bgr(bgr));
-  if (!prepared)
-    return;
-  state.SetLabel(entry["config"]["postprocess"]["type"].get<hrt::String>() + ":" + entry["name"].get<hrt::String>() +
-                 "/int8");
-  hrt::bench::with_result(task, [&]<typename Result>() { measure_postprocessor<Result>(state, *prepared); });
-}
+    const auto& name = algos[i]["name"].get_ref<const hrt::String&>();
+    if (name.ends_with("_batch4") || name.ends_with("_batch8"))
+      continue;
+    bench->Args({static_cast<std::int64_t>(i), 0, 1});
+    for (const auto batch : {1, 4, 8})
+      bench->Args({static_cast<std::int64_t>(i), 1, batch});
+#else
+    bench->Arg(static_cast<std::int64_t>(i));
 #endif
+  }
+}
 
 } // namespace
 
-#ifdef HRT_BENCH_ORT
 BENCHMARK(BM_Type)->Apply(type_cases)->Unit(benchmark::kMillisecond)->UseRealTime();
-#endif
-#ifdef HRT_BENCH_RKNN
-BENCHMARK(BM_Rknn)->ArgName("task")->Arg(0)->Arg(1)->Arg(2)->Arg(4)->Unit(benchmark::kMillisecond)->UseRealTime();
-#endif

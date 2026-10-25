@@ -30,8 +30,7 @@ enum class Provider {
 };
 
 // OCR algos in the template and the image they read.
-inline constexpr Array<const char*, 4> kOcrAlgos{"ppocrv6_tiny_det", "ppocrv6_tiny_rec", "ppocrv6_small_rec",
-                                                 "ppocrv6_tiny_rec_batch8"};
+inline constexpr Array<const char*, 3> kOcrAlgos{"ppocrv6_tiny_det", "ppocrv6_tiny_rec", "ppocrv6_tiny_rec_batch8"};
 inline constexpr const char* kOcrImage = "ocr_document.png";
 
 // The template algo `name` on the ORT `provider`, or null when its local

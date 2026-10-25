@@ -66,7 +66,7 @@ See [test model sources and exports](../../assets/template/README.md#test-models
 
 ```rust
 let package = Package::load("ocr.hrtc")?;
-let mut model = hybridrt::OcrModel::new(&package, "ppocrv6_tiny_det", "ppocrv6_small_rec")?;
+let mut model = hybridrt::OcrModel::new(&package, "ppocrv6_tiny_det", "ppocrv6_tiny_rec")?;
 for item in model.run(&image)? {
     println!("{} {:?}", item.text, item.rect);
 }

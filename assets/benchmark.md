@@ -17,7 +17,7 @@ Common method for every chapter:
 | --- | --- | --- | --- | --- | --- |
 | Device | Mac mini | MacBook Pro | Shared Linux server | Desktop PC | Radxa Rock 5B+ |
 | CPU | Apple M4 | Apple M5 Pro, 15 cores | Intel Xeon Gold 6462C | AMD Ryzen 5 5600X, 6 cores / 12 threads | RK3588, 4x Cortex-A76 + 4x Cortex-A55 |
-| Memory | not recorded | 24 GB | not recorded | 32 GB | not recorded |
+| Memory | 24 GB | 24 GB | 48 GB | 32 GB | 8 GB |
 | Accelerator | M4 GPU / ANE (Metal, CoreML) | M5 Pro GPU / ANE (Metal, CoreML) | RTX 4090 (physical GPU 1) | RTX 3060 12 GB | RK3588 NPU, RGA |
 | OS | macOS arm64 | macOS 27.0.1 | Linux x86_64 | Windows host, WSL2 Ubuntu 24.04.3, kernel 6.18.40.1 | Debian 12 aarch64 |
 | Build host | native | native | native, fixed validation directory | native | cross-build on the RTX 3060 WSL2 host |
@@ -65,48 +65,97 @@ DVPP → CANN (Ascend) is planned and has no platform yet.
 
 ## Postprocessing
 
-- Content: every template algo, one per postprocess type plus the OCR variants, decoding real FP32
-  ONNX Runtime CPU outputs on the host: filtering, NMS, masks and mapping to source coordinates.
-  Inference is excluded; outputs are computed once and reused.
+- Content: all template algos, including static batch and OCR variants, on the Ryzen 5 5600X CPU.
+  Decode real FP32 ONNX Runtime CPU outputs: filtering, NMS, masks and source coordinate mapping.
+  Inference, FP16/INT8 conversion and host copies are excluded; outputs are computed once and reused.
 - Inputs: bus.jpg, airport.jpg for rotated boxes, ocr_document.png for OCR detection and its
-  (419, 16, 241, 50) crop for recognition, with the template thresholds.
-- RK3588 INT8: the four basic 640 x 640 models as int8 RKNN (`<model>Int8.rknn`, calibrated on
-  `assets/test/calib/coco64.txt`); their quantized outputs are decoded directly. `—` means not measured.
-- Method: one caller, one OpenCV thread; ms per call.
-  `hybridrt_bench_postprocess --benchmark_filter='^BM_Type/'` (ORT), `'^BM_Rknn/'` (RK3588).
-- Model outputs are those of the template models; `{a, b, c}` lists the stride-8/16/32 heads.
-  † M4 used an older export with a 640 x 480 input; ‡ M5 Pro used an earlier export (segment
-  640 x 480, classify 224 x 224). The four basic models are now 640 x 640; marked times await a rerun.
+  (419, 16, 241, 50) crop for recognition, with template thresholds.
+- Method: one caller, one OpenCV thread, no affinity; whole-batch milliseconds. Divide by B for
+  mean milliseconds per image. `B` is the batch dimension; `—` means no template model for that batch.
+  `hybridrt_bench_postprocess --benchmark_filter='^BM_Type/'`.
 
-| Type | Template algo | Model outputs | M5 Pro | M4 | RK3588 INT8 |
+5600X CPU, FP32 ONNX outputs:
+
+| Type | Template algo | Model outputs | CPU B1 | CPU B4 | CPU B8 |
 | --- | --- | --- | ---: | ---: | ---: |
-| `YoloV8Detect` | `yolov8_detect` | `1x144x{60x80, 30x40, 15x20}` | 0.039 | 0.045 | — |
-| `Yolo26Detect` | `yolo26n_detect_raw` | `1x84x{80x80, 40x40, 20x20}` | 0.046 | 0.050 | — |
-| `YoloV5Detect` | `yolov5_detect` | `1x255x{80x80, 40x40, 20x20}` | 0.016 | 0.017 | — |
-| `DetrDetect` | `rtdetr_l_detect` | `1x300x84` | 0.016 | 0.022 | — |
-| `E2EDetect` | `yolo26n_e2e_detect` | `1x300x6` | 0.000301 | 0.000267 | — |
-| `GeneralDetect` | `yolov8n_detect` | `1x84x8400` | 0.154 | 0.125 † | |
-| `E2ERotated` | `yolo26n_e2e_obb` | `1x300x7` | 0.000327 | 0.000323 | — |
-| `YoloV8Rotated` | `yolov8n_obb_raw` | `1x80x{60x80, 30x40, 15x20}` | 0.080 | 0.090 | — |
-| `Yolo26Rotated` | `yolo26n_obb_raw` | `1x20x{80x80, 40x40, 20x20}` | 0.066 | 0.076 | — |
-| `YoloV5Rotated` | `yolov5_rotated` | `1x24x{160x160, 80x80, 40x40}` | 0.029 | 0.034 | — |
-| `GeneralRotated` | `yolov8n_obb` | `1x20x21504` | 0.137 | 0.092 † | — |
-| `GeneralClassify` | `yolov8n_classify` | `1x1000` | 0.000056 ‡ | 0.000062 † | |
-| `Embedding` | `yolov8n_classify_embedding` | `1x1000` | 0.000041 ‡ | 0.000045 † | — |
-| `GeneralYoloPose` | `yolov8n_pose` | `1x56x8400` | 0.0024 | 0.002 † | |
-| `YoloV8Keypoint` | `yolov8n_face` | `1x80x{80x80, 40x40, 20x20}` | 0.0047 | 0.005 | — |
-| `Yolo26Keypoint` | `yolo26n_pose_raw` | `1x56x{80x80, 40x40, 20x20}` | 0.0042 | 0.0045 | — |
-| `E2EKeypoint` | `yolo26n_e2e_pose` | `1x300x57` | 0.000436 | 0.000412 | — |
-| `RtmoKeypoint` | `rtmo_s_pose` | `1x300x5`, `1x300x17x3` | 0.000962 | 0.001 | — |
-| `GeneralKeypoint` | `rtmpose_m_pose` | `1x17x384`, `1x17x512` | 0.0066 | 0.011 | — |
-| `GeneralYoloSegment` | `yolov8n_segment` | `1x116x8400`, `1x32x160x160` | 0.215 ‡ | 0.273 † | |
-| `YoloV8Segment` | `yolov8n_segment_raw` | `1x176x{60x80, 30x40, 15x20}`, `1x32x120x160` | 0.139 | 0.186 | — |
-| `Yolo26Segment` | `yolo26n_segment_raw` | `1x116x{80x80, 40x40, 20x20}`, `1x32x160x160` | 0.180 | 0.241 | — |
-| `E2ESegment` | `yolo26n_e2e_segment` | `1x300x38`, `1x32x160x160` | 0.124 | 0.169 | — |
-| `SemanticSegment` | `lraspp_voc_segment` | `1x21x512x512` | 2.827 | 3.464 | — |
-| `Ocr` | `ppocrv6_tiny_det` | `1x1x640x640` | 0.345 | 0.303 | — |
-| `Ocr` | `ppocrv6_tiny_rec` | `1x40x6906` | 0.123 | 0.134 | — |
-| `Ocr` | `ppocrv6_small_rec` | `1x40x18710` | 0.333 | 0.363 | — |
+| `YoloV8Detect` | `yolov8_detect` | `Bx144x{80x80, 40x40, 20x20}` | 0.08404 | — | — |
+| `Yolo26Detect` | `yolo26n_detect_raw` | `Bx84x{80x80, 40x40, 20x20}` | 0.07486 | — | — |
+| `YoloV5Detect` | `yolov5_detect` | `Bx255x{80x80, 40x40, 20x20}` | 0.03194 | — | — |
+| `DetrDetect` | `rtdetr_l_detect` | `Bx300x84` | 0.02268 | — | — |
+| `E2EDetect` | `yolo26n_e2e_detect` | `Bx300x6` | 0.0006331 | — | — |
+| `GeneralDetect` | `yolov8n_detect` | `Bx84x8400` | 0.0387 | 0.1792 | 0.3891 |
+| `E2ERotated` | `yolo26n_e2e_obb` | `Bx300x7` | 0.0007012 | — | — |
+| `YoloV8Rotated` | `yolov8n_obb_raw` | `Bx80x{128x128, 64x64, 32x32}` | 0.2561 | — | — |
+| `Yolo26Rotated` | `yolo26n_obb_raw` | `Bx20x{128x128, 64x64, 32x32}` | 0.1873 | — | — |
+| `YoloV5Rotated` | `yolov5_rotated` | `Bx24x{160x160, 80x80, 40x40}` | 0.03348 | — | — |
+| `GeneralRotated` | `yolov8n_obb` | `Bx20x6300` | 0.1745 | — | — |
+| `GeneralClassify` | `yolov8n_classify` | `Bx1000` | 5.497e-05 | 0.0008464 | 0.001665 |
+| `Embedding` | `yolov8n_classify_embedding` | `Bx1000` | 4.466e-05 | — | — |
+| `GeneralYoloPose` | `yolov8n_pose` | `Bx56x8400` | 0.001526 | 0.007363 | 0.01439 |
+| `YoloV8Keypoint` | `yolov8n_face` | `Bx80x{80x80, 40x40, 20x20}` | 0.009672 | — | — |
+| `Yolo26Keypoint` | `yolo26n_pose_raw` | `Bx56x{80x80, 40x40, 20x20}` | 0.007871 | — | — |
+| `E2EKeypoint` | `yolo26n_e2e_pose` | `Bx300x57` | 0.001121 | — | — |
+| `RtmoKeypoint` | `rtmo_s_pose` | `Bx300x5`, `Bx300x17x3` | 0.001591 | — | — |
+| `GeneralKeypoint` | `rtmpose_m_pose` | `Bx17x384`, `Bx17x512` | 0.006682 | — | — |
+| `GeneralYoloSegment` | `yolov8n_segment` | `Bx116x8400`, `Bx32x160x160` | 0.3411 | 1.714 | 4.807 |
+| `YoloV8Segment` | `yolov8n_segment_raw` | `Bx176x{60x80, 30x40, 15x20}`, `Bx32x120x160` | 0.3004 | — | — |
+| `Yolo26Segment` | `yolo26n_segment_raw` | `Bx116x{80x80, 40x40, 20x20}`, `Bx32x160x160` | 0.3686 | — | — |
+| `E2ESegment` | `yolo26n_e2e_segment` | `Bx300x38`, `Bx32x160x160` | 0.2673 | — | — |
+| `SemanticSegment` | `lraspp_voc_segment` | `Bx21x512x512` | 2.941 | — | — |
+| `Ocr` | `ppocrv6_tiny_det` | `Bx1x640x640` | 0.6162 | — | — |
+| `Ocr` | `ppocrv6_tiny_rec` | `Bx40x6906` | 0.1211 | — | 0.9974 |
+
+RK3588 CPU, RKNN FP16/INT8 output comparison (whole-batch ms):
+
+- Coverage: every postprocess type and both OCR stages. Each model needs INT8 B1/B4/B8;
+  keep FP16 B1 only as its comparison. Convert and validate each variant; record conversion or
+  runtime failures explicitly. A filename or weight precision alone does not establish INT8 output.
+- Same warm-up, three repetitions and median method as above; one caller, one OpenCV thread,
+  A76 cores 4-7. Model shapes and thresholds come from the template; input images are resized on
+  the build host. One RKNN inference, output conversion and host copies run before timing.
+- Model preparation is complete: 72 native INT8-output variants (24 model groups x B1/B4/B8)
+  and 23 FP16-output B1 references passed SDK IO checks. RT-DETR and RTMO fail conversion; the
+  user QAT YOLOv5 OBB model has no FP16 counterpart. No additional speed tests were run.
+  `—` means not timed or unavailable. Classification, Embedding and recognition now use explicit
+  output quantization; their earlier FP16-output timings are excluded. `error` marks a prior
+  in-graph GatherElements failure; no timing is accepted. Conversion/query results are detailed
+  in [the model reference](template/README.md#rknn-on-rk3588).
+- `‡` means zero decoded objects on the test image: only scan/filter work is measured, not NMS/masks.
+  Fused coordinate/confidence outputs lose scores at coarse scales (about 2.57–3.16); these results
+  cannot establish useful detection accuracy or a speedup over FP32. The user-specific YOLOv5 OBB
+  model also has no objects on airport.jpg; that image is not an accuracy reference for its classes.
+- Local raw results: `rknn_all_int8_query.log`, `rknn_postprocess_all_int8.json` and per-algo logs in
+  `assets/test/benchmark_results/rknn_postprocess_all_int8/`. SDK versions match the platform matrix;
+  the board service was stopped during timing and restored afterward. Frequency scaling stayed enabled.
+
+| Type | Template algo | Native INT8 output | FP16 B1 | INT8 B1 | INT8 B4 | INT8 B8 |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| `YoloV8Detect` | `yolov8_detect` | INT8 | — | 0.146 | — | — |
+| `Yolo26Detect` | `yolo26n_detect_raw` | INT8 | — | 0.114 | — | — |
+| `YoloV5Detect` | `yolov5_detect` | INT8 | — | 0.08607 | — | — |
+| `DetrDetect` | `rtdetr_l_detect` | unavailable | — | — | — | — |
+| `E2EDetect` | `yolo26n_e2e_detect` | INT8 | — | error | — | — |
+| `GeneralDetect` | `yolov8n_detect` | INT8 | — | 0.06842 ‡ | 0.2764 ‡ | 0.5587 ‡ |
+| `E2ERotated` | `yolo26n_e2e_obb` | INT8 | — | 0.001763 ‡ | — | — |
+| `YoloV8Rotated` | `yolov8n_obb_raw` | INT8 | — | 0.4901 | — | — |
+| `Yolo26Rotated` | `yolo26n_obb_raw` | INT8 | — | 0.3463 | — | — |
+| `YoloV5Rotated` | `yolov5_rotated` | INT8 | — | 0.09145 ‡ | — | — |
+| `GeneralRotated` | `yolov8n_obb` | INT8 | — | 0.01065 ‡ | — | — |
+| `GeneralClassify` | `yolov8n_classify` | INT8 | — | — | — | — |
+| `Embedding` | `yolov8n_classify_embedding` | INT8 | — | — | — | — |
+| `GeneralYoloPose` | `yolov8n_pose` | INT8 | — | 0.0008675 ‡ | 0.004563 ‡ | 0.009211 ‡ |
+| `YoloV8Keypoint` | `yolov8n_face` | INT8 | — | 0.02534 | — | — |
+| `Yolo26Keypoint` | `yolo26n_pose_raw` | INT8 | — | 0.02057 | — | — |
+| `E2EKeypoint` | `yolo26n_e2e_pose` | INT8 | — | 0.001741 ‡ | — | — |
+| `RtmoKeypoint` | `rtmo_s_pose` | unavailable | — | — | — | — |
+| `GeneralKeypoint` | `rtmpose_m_pose` | INT8 | — | 0.01993 | — | — |
+| `GeneralYoloSegment` | `yolov8n_segment` | INT8 | — | 0.06919 ‡ | 0.2826 ‡ | 0.5724 ‡ |
+| `YoloV8Segment` | `yolov8n_segment_raw` | INT8 | — | 0.6855 | — | — |
+| `Yolo26Segment` | `yolo26n_segment_raw` | INT8 | — | 0.8849 | — | — |
+| `E2ESegment` | `yolo26n_e2e_segment` | INT8 | — | error | — | — |
+| `SemanticSegment` | `lraspp_voc_segment` | INT8 | — | 13.75 | — | — |
+| `Ocr` | `ppocrv6_tiny_det` | INT8 | — | 1.697 | — | — |
+| `Ocr` | `ppocrv6_tiny_rec` | INT8 | — | — | — | — |
 
 ## Pipeline
 
@@ -135,11 +184,20 @@ DVPP → CANN (Ascend) is planned and has no platform yet.
 | RTX 4090 | CUDA → TensorRT | `yolov8n_segment` | | | |
 | RTX 4090 | CUDA → TensorRT | `yolov8n_pose` | | | |
 | RTX 4090 | CUDA → TensorRT | `yolov8n_classify` | | | |
-| RTX 3060 | CUDA → TensorRT | `yolov8n_detect` | | | |
-| RTX 3060 | CUDA → TensorRT | `yolov8n_segment` | | | |
-| RTX 3060 | CUDA → TensorRT | `yolov8n_pose` | | | |
-| RTX 3060 | CUDA → TensorRT | `yolov8n_classify` | | | |
-| RK3588 | RGA → RKNN | `yolov8n_detect` | | | |
-| RK3588 | RGA → RKNN | `yolov8n_segment` | | | |
-| RK3588 | RGA → RKNN | `yolov8n_pose` | | | |
-| RK3588 | RGA → RKNN | `yolov8n_classify` | | | |
+| RTX 3060 | CUDA → TensorRT | `yolov8n_detect` | 358.9 | 654.7 | 862.8 |
+| RTX 3060 | CUDA → TensorRT | `yolov8n_segment` | 361.8 | 497.1 | 621.1 |
+| RTX 3060 | CUDA → TensorRT | `yolov8n_pose` | 399.7 | 654.7 | 853.1 |
+| RTX 3060 | CUDA → TensorRT | `yolov8n_classify` | 1109.0 | 1364.9 | 1419.8 |
+| RK3588 | RGA → RKNN | `yolov8n_detect` | 65.3 | 62.6 | 61.4 |
+| RK3588 | RGA → RKNN | `yolov8n_segment` | 52.9 | 51.6 | 50.2 |
+| RK3588 | RGA → RKNN | `yolov8n_pose` | 55.3 | 54.7 | 57.7 |
+| RK3588 | RGA → RKNN | `yolov8n_classify` | 114.3 | 115.7 | 116.0 |
+
+RTX 3060 gains 1.23–1.82x throughput at B4 and 1.28–2.40x at B8 over B1. RK3588 stays
+within −4.1% to +1.2% at B4 and −6.0% to +4.4% at B8; batching gives no consistent throughput
+gain on these FP16 RKNN exports. These are aggregate throughput results; request latency grows
+with batch size. The board service was stopped during measurement and restored afterward.
+
+CPU ORT and TensorRT batch-1/4/8 correctness checks passed on the current 640 x 640 fixtures.
+The earlier RKNN batch comparison failed strict result equality even with the board service
+stopped; its throughput figures above do not establish equivalence with batch 1. Further performance testing has been stopped; model conversion and output-type checks are complete.

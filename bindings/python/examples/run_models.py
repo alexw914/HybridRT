@@ -19,7 +19,7 @@ CASES = [  # (algo, image): one per task.
     ("yolov8n_segment", "bus.jpg"),
     ("yolov8n_classify", "bus.jpg"),
 ]
-OCR = ("ppocrv6_tiny_det", "ppocrv6_small_rec", "ocr_document.jpg")
+OCR = ("ppocrv6_tiny_det", "ppocrv6_tiny_rec", "ocr_document.jpg")
 
 
 def print_result(result):

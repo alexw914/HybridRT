@@ -49,7 +49,7 @@ fn runs_ocr_models_when_available() {
     let rgb = decoder.decode().unwrap();
     let (width, height) = decoder.dimensions().unwrap();
     let image = Image::new(&rgb, ImageFormat::InterRgb, width as u32, height as u32).unwrap();
-    for recognition in ["ppocrv6_tiny_rec", "ppocrv6_small_rec"] {
+    for recognition in ["ppocrv6_tiny_rec", "ppocrv6_tiny_rec_batch8"] {
         let mut model = OcrModel::new(&package, "ppocrv6_tiny_det", recognition).unwrap();
         let result = model.run(&image).unwrap();
         assert!(result.iter().any(|item| item.text.contains("BOARDING")));

@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: tests/model/image_model_test.cpp
-// Description: Tests the pooled image model pipeline on ONNX Runtime and TensorRT.
+// Description: Tests image model pooling, static batches and engine fixtures.
 // -----------------------------------------------------------------------------
 
 #include <hrt/model/image_model.hpp>
@@ -772,37 +772,50 @@ TEST_F(ImageModelTest, MatchesBatchOneOnTensorRtStaticBatchModels) {
 
 #ifdef HRT_RKNN_MODEL_TEST
 TEST_F(ImageModelTest, QueriesRknnBatchFixtures) {
-  for (const auto name : {"GeneralClassify", "GeneralDetect", "GeneralYoloPose", "GeneralYoloSegment"}) {
-    for (const auto suffix : {"", "Batch4", "Batch8"}) {
-      const auto path = hrt::test::source_root() / "assets/test/rknn" / (hrt::String(name) + suffix + ".rknn");
-      if (!std::filesystem::is_regular_file(path))
-        GTEST_SKIP() << path;
-      std::error_code error;
-      auto bytes = kitzoo::os::read_file(path, error);
-      ASSERT_FALSE(error) << path;
-      rknn_context context = 0;
-      ASSERT_EQ(rknn_init(&context, bytes.data(), static_cast<std::uint32_t>(bytes.size()), 0, nullptr), RKNN_SUCC);
-      KZ_SCOPE_EXIT {
-        rknn_destroy(context);
-      };
-      rknn_sdk_version version{};
-      ASSERT_EQ(rknn_query(context, RKNN_QUERY_SDK_VERSION, &version, sizeof(version)), RKNN_SUCC);
-      KZ_LOG_INFO("RKNN {}: runtime={}, driver={}, embedded mean=0 std=255, RGB input", path.filename().string(),
-                  version.api_version, version.drv_version);
-      rknn_input_output_num count{};
-      ASSERT_EQ(rknn_query(context, RKNN_QUERY_IN_OUT_NUM, &count, sizeof(count)), RKNN_SUCC);
-      for (const auto query : {RKNN_QUERY_INPUT_ATTR, RKNN_QUERY_NATIVE_INPUT_ATTR, RKNN_QUERY_OUTPUT_ATTR}) {
-        const auto size = query == RKNN_QUERY_OUTPUT_ATTR ? count.n_output : count.n_input;
-        for (std::uint32_t i = 0; i < size; ++i) {
-          rknn_tensor_attr attr{};
-          attr.index = i;
-          ASSERT_EQ(rknn_query(context, query, &attr, sizeof(attr)), RKNN_SUCC);
-          KZ_LOG_INFO("RKNN query={} index={} name={} ndims={} dims=[{},{},{},{}] fmt={} type={} zp={} scale={} "
-                      "w_stride={} h_stride={}",
-                      static_cast<int>(query), i, attr.name, attr.n_dims, attr.dims[0], attr.dims[1], attr.dims[2],
-                      attr.dims[3], static_cast<int>(attr.fmt), static_cast<int>(attr.type), attr.zp, attr.scale,
-                      attr.w_stride, attr.h_stride);
+  const auto directory = hrt::test::source_root() / "assets/test/rknn";
+  if (!std::filesystem::is_directory(directory))
+    GTEST_SKIP() << directory;
+  hrt::Vector<std::filesystem::path> paths;
+  for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+    const auto path = entry.path();
+    const auto stem = path.stem().string();
+    if (path.extension() == ".rknn" &&
+        (stem.ends_with("Int8") || (!stem.ends_with("Batch4") && !stem.ends_with("Batch8"))))
+      paths.push_back(path);
+  }
+  if (paths.empty())
+    GTEST_SKIP() << "RKNN fixtures unavailable";
+  std::sort(paths.begin(), paths.end());
+  for (const auto& path : paths) {
+    std::error_code error;
+    auto bytes = kitzoo::os::read_file(path, error);
+    ASSERT_FALSE(error) << path;
+    rknn_context context = 0;
+    ASSERT_EQ(rknn_init(&context, bytes.data(), static_cast<std::uint32_t>(bytes.size()), 0, nullptr), RKNN_SUCC);
+    KZ_SCOPE_EXIT {
+      rknn_destroy(context);
+    };
+    rknn_sdk_version version{};
+    ASSERT_EQ(rknn_query(context, RKNN_QUERY_SDK_VERSION, &version, sizeof(version)), RKNN_SUCC);
+    KZ_LOG_INFO("RKNN {}: runtime={}, driver={}", path.filename().string(), version.api_version, version.drv_version);
+    rknn_input_output_num count{};
+    ASSERT_EQ(rknn_query(context, RKNN_QUERY_IN_OUT_NUM, &count, sizeof(count)), RKNN_SUCC);
+    for (const auto query : {RKNN_QUERY_INPUT_ATTR, RKNN_QUERY_NATIVE_INPUT_ATTR, RKNN_QUERY_OUTPUT_ATTR}) {
+      const auto size = query == RKNN_QUERY_OUTPUT_ATTR ? count.n_output : count.n_input;
+      for (std::uint32_t i = 0; i < size; ++i) {
+        rknn_tensor_attr attr{};
+        attr.index = i;
+        ASSERT_EQ(rknn_query(context, query, &attr, sizeof(attr)), RKNN_SUCC);
+        ASSERT_GT(attr.n_dims, 0U) << path;
+        if (attr.type == RKNN_TENSOR_INT8) {
+          EXPECT_TRUE(std::isfinite(attr.scale)) << path;
+          EXPECT_GT(attr.scale, 0.0F) << path;
         }
+        KZ_LOG_INFO("RKNN query={} index={} name={} ndims={} dims=[{},{},{},{}] fmt={} type={} zp={} scale={} "
+                    "w_stride={} h_stride={}",
+                    static_cast<int>(query), i, attr.name, attr.n_dims, attr.dims[0], attr.dims[1], attr.dims[2],
+                    attr.dims[3], static_cast<int>(attr.fmt), static_cast<int>(attr.type), attr.zp, attr.scale,
+                    attr.w_stride, attr.h_stride);
       }
     }
   }

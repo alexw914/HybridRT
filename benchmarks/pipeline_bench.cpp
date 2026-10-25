@@ -82,14 +82,14 @@ auto BM_Pooled(benchmark::State& state) -> void {
   state.SetItemsProcessed(state.iterations());
 }
 
-// OcrModel on the document image; args: recognizer (0 tiny, 1 small, 2 tiny with a static batch of 8), provider.
+// OcrModel on the document image; args: recognizer (0 tiny, 1 tiny with a static batch of 8), provider.
 // Counter
 // "lines" is the number of recognized text lines per call.
 auto BM_Ocr(benchmark::State& state) -> void {
   cv::setNumThreads(1);
   const auto recognizer = static_cast<std::size_t>(state.range(0));
   const auto provider = static_cast<hrt::bench::Provider>(state.range(1));
-  constexpr hrt::Array<const char*, 3> kRecognizers{"tiny", "small", "tiny_batch8"};
+  constexpr hrt::Array<const char*, 2> kRecognizers{"tiny", "tiny_batch8"};
   state.SetLabel(hrt::String(kRecognizers.at(recognizer)) + "/" +
                  kProviders.at(static_cast<std::size_t>(state.range(1))));
   auto det = hrt::bench::template_entry(hrt::bench::kOcrAlgos[0], provider);
@@ -174,8 +174,8 @@ auto batch_entry(std::size_t task, std::int64_t pipeline, std::int64_t batch) ->
     if (context)
       context->set_current();
     const auto param = hrt::hrtc::load_algo(entry);
-    auto probe = hrt::engine::Engine::create(pipeline == 2 ? hrt::engine::EngineType::TensorRt
-                                                           : hrt::engine::EngineType::Rknn);
+    auto probe =
+        hrt::engine::Engine::create(pipeline == 2 ? hrt::engine::EngineType::TensorRt : hrt::engine::EngineType::Rknn);
     if (!param || !probe || !std::filesystem::is_regular_file(path) || !probe->initialize(param->engines.front()))
       return {};
   }
@@ -273,7 +273,7 @@ BENCHMARK(BM_Task)
     ->UseRealTime();
 BENCHMARK(BM_Ocr)
     ->ArgNames({"rec", "provider"})
-    ->ArgsProduct({{0, 1, 2}, kProviderArgs})
+    ->ArgsProduct({{0, 1}, kProviderArgs})
     ->Unit(benchmark::kMillisecond)
     ->UseRealTime();
 BENCHMARK(BM_Pooled)

@@ -15,7 +15,7 @@ with models and configuration stored in a single .hrtc package.
 | Classification | Classification scores, including YOLO classification exports |
 | Embedding | Raw feature vectors, e.g. ReID or image retrieval |
 | Semantic segmentation | Per-pixel class scores or labels |
-| OCR | PP-OCR DB text detection and CTC recognition, including PP-OCRv6 tiny/small |
+| OCR | PP-OCR DB text detection and CTC recognition, including PP-OCRv6 tiny |
 
 Model support depends on the exported output format. See the
 [model and configuration reference](assets/template/README.md) for compatible exports,

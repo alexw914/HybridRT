@@ -53,7 +53,7 @@ def test_reports_ocr_errors(ocr_package):
         assert error.value.status == hrt.Status.INVALID_CONFIG
 
 
-@pytest.mark.parametrize("recognition", ["ppocrv6_tiny_rec", "ppocrv6_small_rec"])
+@pytest.mark.parametrize("recognition", ["ppocrv6_tiny_rec", "ppocrv6_tiny_rec_batch8"])
 @pytest.mark.parametrize("provider", ["cpu", pytest.param("coreml", marks=pytest.mark.skipif(
     sys.platform != "darwin", reason="CoreML requires macOS"))])
 def test_runs_ocr_models(ocr_package, recognition, provider):

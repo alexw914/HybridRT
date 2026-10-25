@@ -13,6 +13,7 @@
 #include <limits>
 
 #include "fake_engine.hpp"
+#include "include/postprocess/common.hpp"
 
 #ifdef HRT_ORT_MODEL_TEST
 #include <opencv2/imgcodecs.hpp>
@@ -382,6 +383,38 @@ TEST(DetectGeneralTest, ScansScoreRowsAcrossBlocksAndTail) {
     hrt::postprocess::DetectResultMap result;
     ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(80, 80)));
     expect_hits(result, 0.25F, 1.0F);
+  }
+}
+
+TEST(DetectGeneralTest, KeepsTightInt8BoundsAtFloatRoundingEdges) {
+  const auto output = proto(DataType::Int8, {1, 5, 256});
+  hrt::Vector<std::int8_t> values(5 * 256);
+  for (int q = -128; q <= 127; ++q)
+    values[static_cast<std::size_t>(4 * 256 + q + 128)] = static_cast<std::int8_t>(q);
+  auto buffer = hrt::test::create_buffer(output, values);
+  hrt::postprocess::CellScanner scanner;
+  for (const auto scale : {0.1F, 0.5F, 2.5745716F}) {
+    for (const auto zero_point : {-128, -126, 0, 127}) {
+      buffer->set_quantization(scale, zero_point);
+      const hrt::postprocess::HeadGridView grid(*buffer, std::nullopt);
+      for (int q = -128; q <= 127; ++q) {
+        const auto score = scale * static_cast<float>(q - zero_point);
+        for (const auto threshold : {std::nextafter(score, -std::numeric_limits<float>::infinity()), score,
+                                     std::nextafter(score, std::numeric_limits<float>::infinity())}) {
+          hrt::Vector<std::uint32_t> expected;
+          int bound = 128;
+          for (int value = -128; value <= 127; ++value) {
+            const auto real = scale * static_cast<float>(value - zero_point);
+            if (real >= threshold)
+              bound = std::min(bound, value);
+            if (real > threshold)
+              expected.push_back(static_cast<std::uint32_t>(value + 128));
+          }
+          EXPECT_EQ(grid.raw_bound(threshold), static_cast<float>(bound));
+          EXPECT_EQ(scanner.scan_channel(grid, 4, threshold), expected);
+        }
+      }
+    }
   }
 }
 

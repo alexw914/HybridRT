@@ -17,7 +17,7 @@ const CASES: [(&str, &str); 5] = [
     ("yolov8n_segment", "bus.jpg"),
     ("yolov8n_classify", "bus.jpg"),
 ];
-const OCR: (&str, &str, &str) = ("ppocrv6_tiny_det", "ppocrv6_small_rec", "ocr_document.jpg");
+const OCR: (&str, &str, &str) = ("ppocrv6_tiny_det", "ppocrv6_tiny_rec", "ocr_document.jpg");
 
 /// RGB pixels, width and height of a JPEG file, or None when it cannot be read.
 fn read_jpeg(path: &Path) -> Option<(Vec<u8>, u32, u32)> {

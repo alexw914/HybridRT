@@ -300,17 +300,15 @@ directory, and a failed image makes the exit code 1. Each result is one text lin
 | `detection_score`, `recognition_score` | Text region score of the detector and mean character score of the recognizer. |
 
 ```sh
-hrt-ocr -m ocr.hrtc -r ppocrv6_small_rec -e ort -i assets/test/images -o ocr_results.json
+hrt-ocr -m ocr.hrtc -r ppocrv6_tiny_rec -e ort -i assets/test/images -o ocr_results.json
 ```
 
 ## OCR model
 
 `model::OcrModel` combines one detection algo and one recognition algo from a loaded
 `hrtc::Package`. Load `.json` with `hrtc::load_json` or `.hrtc` with `hrtc::load`, then call
-`OcrModel::create(package, "ppocrv6_tiny_det", "ppocrv6_tiny_rec")`. Select
-`ppocrv6_small_rec` instead for the alternative recognizer. The two recognition models
-are alternatives, not successive stages. Each algo keeps its own backend alternatives, but
-both stages must run on one device: CPU engines (ONNX Runtime CPU, MNN, ncnn, RKNN), CUDA
+`OcrModel::create(package, "ppocrv6_tiny_det", "ppocrv6_tiny_rec")`. Each algo keeps its own backend
+alternatives, but both stages must run on one device: CPU engines (ONNX Runtime CPU, MNN, ncnn, RKNN), CUDA
 (TensorRT) or Ascend. Recognition is created on the detection context and only its engines
 of that device are tried; without one, `create` aborts. No package schema or existing
 image-model result type changes.
@@ -381,7 +379,7 @@ build/release/examples/hybridrt_example_ocr_model -m assets/template/hrtc_templa
   -i assets/test/images/ocr_document.png -p coreml -o assets/test/ocr_coreml_tiny.json
 ```
 
-Use `-r ppocrv6_small_rec` for the small recognizer, `-p cpu` for CPU, or omit `-p` to keep
+Use `-p cpu` for CPU, or omit `-p` to keep
 the package's engine configs. The JSON example loads only the two selected algos so absent
 unrelated template models do not prevent execution. JSON output contains text, `rect` as `[x, y, width, height]` and
 both scores. The C API uses separate `HrtOcrModel`/`HrtOcrResult` handles and `hrt_ocr_*`
@@ -402,16 +400,21 @@ backend in `hrtc_device_config.json` therefore uses `NeuralNetwork`.
 
 Template model files live in `assets/test/onnx/`, named after their postprocessor.
 All external input/output dimensions are positive, fixed integers; batch is 1 except in the
-static batch-4 fixtures below. `Ocr` has
-separate `OcrDetection.onnx`, `OcrRecognition.onnx` (tiny) and `OcrRecognitionSmall.onnx`
-files because detection and recognition need different networks. `Embedding.onnx` is a
+static batch-4 and batch-8 fixtures below. `Ocr` has
+separate `OcrDetection.onnx` and `OcrRecognition.onnx` (tiny) files because detection and
+recognition need different networks. `Embedding.onnx` is a
 copy of the classifier and returns its 1000 class scores as an example vector.
 Models, source weights, scripts and validation results stay local and untracked.
 
-The current collection contains 27 files covering all 25 postprocessor types.
+The collection covers all 25 postprocessor types, with static batch variants for selected models.
 `YoloV5Rotated` uses the user-provided `v0013_obbczs_detection_0808int8.onnx`.
-Its anchors, normalization and angle convention remain unconfirmed; its template
-configuration supports pipeline checks rather than an accuracy reference.
+Its user-supplied configuration uses confidence threshold 0.3, IoU threshold 0.1 and
+these stride-8/16/32 anchor groups (width, height pairs):
+`[49.25, 48.78125, 308.75, 21.09375, 94.1875, 94.8125]`,
+`[474.75, 31.90625, 145.25, 141.875, 578.0, 59.40625]`,
+`[218.75, 222.75, 533.0, 527.5, 1000.0, 514.5]`. The template records these values.
+Normalization and the angle convention still require an accuracy reference. The ONNX graph already contains quantization parameters;
+RKNN must preserve them with `do_quantization=False`, rather than quantize it again.
 
 The collection was regenerated on 2026-10-21 on macOS arm64 (Apple M5 Pro) with Python 3.10,
 Ultralytics 8.4.183, PyTorch 2.14.1, torchvision 0.29.1, ONNX 1.23.2 and ONNX Runtime 1.23.2;
@@ -429,30 +432,30 @@ Single-thread timing results and reproduction commands are in [benchmark.md](../
 
 | Algo | ONNX file in `assets/test/onnx/` | Input NCHW | SHA256 |
 | --- | --- | --- | --- |
-| `yolov8_detect` | `YoloV8Detect.onnx` | `1 x 3 x 480 x 640` | `714820197e0c37fbf4e395ea4c3fafb512a8b60e2d565cac03b190194e18013d` |
-| `yolo26n_detect_raw` | `Yolo26Detect.onnx` | `1 x 3 x 640 x 640` | `0fc641edc5ba266959e0135deeec849937f8049882a2269a0cea0021c7049b57` |
-| `yolov5_detect` | `YoloV5Detect.onnx` | `1 x 3 x 640 x 640` | `968d45c63e7bf811a7fe0e6e73c0740afd079996985608714b79d39faffc6fd3` |
-| `rtdetr_l_detect` | `DetrDetect.onnx` | `1 x 3 x 640 x 640` | `89e10a08e26eb872fa9cd6d0397b2eb9569fa2df5d1d37653ae5fa36fc08e862` |
-| `yolo26n_e2e_detect` | `E2EDetect.onnx` | `1 x 3 x 640 x 640` | `cc54c1e9bfc069212f274d07ca10450ad08b83f078ac8e09cd1e532eeeb1a100` |
+| `yolov8_detect` | `YoloV8Detect.onnx` | `1 x 3 x 640 x 640` | `e2a57b77d38a136a3ac07ddd17b81930c4680e0d464ee615488c3a47bfdef303` |
+| `yolo26n_detect_raw` | `Yolo26Detect.onnx` | `1 x 3 x 640 x 640` | `2089cfdd67660be0efec7477bbf2f6cabc2261c84bbd82c6a7e895b51bd8c49a` |
+| `yolov5_detect` | `YoloV5Detect.onnx` | `1 x 3 x 640 x 640` | `797416533eed5eb4c82098ec221bbe55368ad3c062f9d0217db87f129a78f172` |
+| `rtdetr_l_detect` | `DetrDetect.onnx` | `1 x 3 x 640 x 640` | `599b9b7484cb831312f585d4ec4885a95ae10d1e84dada14833f5c570828c9b9` |
+| `yolo26n_e2e_detect` | `E2EDetect.onnx` | `1 x 3 x 640 x 640` | `08727943f090f5e8472cae3c08bcbb7b93c927820d3104ef7792f1d31277ec77` |
 | `yolov8n_detect` | `GeneralDetect.onnx` | `1 x 3 x 640 x 640` | `782006124ca30bc45ac1da40466b2541b06b203754fac8b5018fbbfbb602d36f` |
-| `yolo26n_e2e_obb` | `E2ERotated.onnx` | `1 x 3 x 640 x 640` | `13476c2bb3d7966df6c880036ecc4a3cdf41318e3d2e6bca483f4306ef691f63` |
-| `yolov8n_obb_raw` | `YoloV8Rotated.onnx` | `1 x 3 x 480 x 640` | `36223a5306c60c620186aa58a5a9c9bdcd34ad181c119d096edb8c2d30089a4a` |
-| `yolo26n_obb_raw` | `Yolo26Rotated.onnx` | `1 x 3 x 640 x 640` | `9393f99be7ee049e797b77032e6b9d95dc07ff5d6ba275cf626b9bda5d0a494c` |
+| `yolo26n_e2e_obb` | `E2ERotated.onnx` | `1 x 3 x 1024 x 1024` | `0dc04234b1d82d87b8aebe5c364b4c298de0e2380ce61b74f9b117478e690e41` |
+| `yolov8n_obb_raw` | `YoloV8Rotated.onnx` | `1 x 3 x 1024 x 1024` | `2a5de440d72ecb80cc4fbce50c59f6293e4bc89cb1fe8aaee8ca7d9ed3b89566` |
+| `yolo26n_obb_raw` | `Yolo26Rotated.onnx` | `1 x 3 x 1024 x 1024` | `003dc108ae1be9b94f7bbf3f154d871385224da96ca15fa0bc07bccb0bc2148f` |
 | `yolov5_rotated` | `YoloV5Rotated.onnx` | `1 x 3 x 1280 x 1280` | `afffc7a2813e15e9137648bc7655155827b1cdace2a0999b1919d1196be57dfb` |
-| `yolov8n_obb` | `GeneralRotated.onnx` | `1 x 3 x 1024 x 1024` | `c207d49b65f8173265f2e2ff66f59bfef54b0b6d6da578a31c223b190e13dd60` |
+| `yolov8n_obb` | `GeneralRotated.onnx` | `1 x 3 x 480 x 640` | `d87f86b2e475deccfd57410fdcb6d2de3886fcab4f6395888ddca4c35a2c12ee` |
 | `yolov8n_classify` | `GeneralClassify.onnx` | `1 x 3 x 640 x 640` | `46f101117e36acb79ebbd362250971b13d8dd906c7c877a2b7cc6af1fc1b8054` |
 | `yolov8n_classify_embedding` | `Embedding.onnx` | `1 x 3 x 640 x 640` | `46f101117e36acb79ebbd362250971b13d8dd906c7c877a2b7cc6af1fc1b8054` |
 | `yolov8n_pose` | `GeneralYoloPose.onnx` | `1 x 3 x 640 x 640` | `b1684b889751d66d6e3f1a5f9e5a799c41e325fabef0cb552cbac82b385dbcba` |
 | `yolov8n_face` | `YoloV8Keypoint.onnx` | `1 x 3 x 640 x 640` | `af09683be4937ebe23e9da0346cbf46cd937b73ed5fac986e6205e6c7cdd2c25` |
-| `yolo26n_pose_raw` | `Yolo26Keypoint.onnx` | `1 x 3 x 640 x 640` | `0c0b46ec46f05727218ee2431942e02f40d9f928a4a12d720ccadfba715fd59a` |
-| `yolo26n_e2e_pose` | `E2EKeypoint.onnx` | `1 x 3 x 640 x 640` | `18be1d966c3c0c5c38a81fc301933ec94bb2633313e2806f14999de3001a2f8f` |
-| `rtmo_s_pose` | `RtmoKeypoint.onnx` | `1 x 3 x 640 x 640` | `f686d078c403183ebb428fc7b3818bc7ebb838fd8486423dc20688a1f8079c31` |
-| `rtmpose_m_pose` | `GeneralKeypoint.onnx` | `1 x 3 x 256 x 192` | `204ed5161fc30dd26f1af8e40d87426a2f5885828840e4abdad2e22b77d487d7` |
+| `yolo26n_pose_raw` | `Yolo26Keypoint.onnx` | `1 x 3 x 640 x 640` | `513e12cd94482f799e2d1ad66fcb9603d7c3eb41ad38863e7ae566374e0eddc8` |
+| `yolo26n_e2e_pose` | `E2EKeypoint.onnx` | `1 x 3 x 640 x 640` | `ecd85eb31cf6889ab62600164d27698b881fcb27bd27c548b2dd4a67fb52c814` |
+| `rtmo_s_pose` | `RtmoKeypoint.onnx` | `1 x 3 x 640 x 640` | `91d97d8251f7624d4da9cead6b2a8bd6ea36850cfe329122eebeb89b41f108d2` |
+| `rtmpose_m_pose` | `GeneralKeypoint.onnx` | `1 x 3 x 256 x 192` | `81e1025f9c938450d2ef88c0fba274fb57b0f9b49711dc7a52fef99c7ea3548d` |
 | `yolov8n_segment` | `GeneralYoloSegment.onnx` | `1 x 3 x 640 x 640` | `a9c25c390e47e6a5e7b3c1dc22bee67ef28cd1746576f2c80a141717fd30dbc6` |
 | `yolov8n_segment_raw` | `YoloV8Segment.onnx` | `1 x 3 x 480 x 640` | `fdbd46dc0a5ae4bb1cb1b32010fa131a43f370043077555f921890bcd2880494` |
-| `yolo26n_segment_raw` | `Yolo26Segment.onnx` | `1 x 3 x 640 x 640` | `52f066c5e682fddf899466d975d4f7c0bc727fb49424072fc7d986f9d09b8ed8` |
-| `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `78cb9fff568e1a006523a54ae96c1f43ea6b376e93dd637e10eede16128335f4` |
-| `lraspp_voc_segment` | `SemanticSegment.onnx` | `1 x 3 x 512 x 512` | `70e2c6d571872208589c43a491fde37fbf73376481343119a5c67dfd55df8c6f` |
+| `yolo26n_segment_raw` | `Yolo26Segment.onnx` | `1 x 3 x 640 x 640` | `85e5ec69cb0a06f82e6a27b4cdb6be36d91e041b3829d75887183f6506b18221` |
+| `yolo26n_e2e_segment` | `E2ESegment.onnx` | `1 x 3 x 640 x 640` | `101060498337592b2c671f479001ca725d92049f99118e5b666f4c2273d9f096` |
+| `lraspp_voc_segment` | `SemanticSegment.onnx` | `1 x 3 x 512 x 512` | `e610481d6dfedf62285bf7de02c1a67a786dc3abb342a5e5db108b67c89daf6b` |
 
 Static batch-4 and batch-8 fixtures are exported directly from official [Ultralytics weights](https://github.com/ultralytics/assets/releases/tag/v8.3.0),
 using local `assets/test/scripts/export_static_batch.py` (arguments: the batches to export):
@@ -481,7 +484,7 @@ benchmarks skip them elsewhere.
 | `yolov8n_segment_batch8` | `GeneralYoloSegmentBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 116 x 8400; 8 x 32 x 160 x 160` | `c0c2d436f510efdc26912b95311c0503b2f0bc2b7ebce23c6c151abf3a8e4ee1` |
 
 Additional OCR fixtures use official PaddlePaddle ONNX weights. The `ppocrv6_tiny_det`,
-`ppocrv6_tiny_rec`, `ppocrv6_tiny_rec_batch8` and `ppocrv6_small_rec` template algos run through
+`ppocrv6_tiny_rec` and `ppocrv6_tiny_rec_batch8` template algos run through
 `OcrModel`, which recognizes all lines of an image in one `ImageModel` call: the batch-8
 recognizer reads eight lines per inference and gives the texts of the batch-1 one.
 
@@ -489,27 +492,25 @@ recognizer reads eight lines per inference and gives the texts of the batch-1 on
 | --- | --- | --- | --- |
 | `OcrDetection.onnx` | `1 x 3 x 640 x 640` | `1 x 1 x 640 x 640` | `7373329bed2ea0b66c173278112a6dab68a5f9f244723a302e4b1a674f9435c9` |
 | `OcrRecognition.onnx` | `1 x 3 x 48 x 320` | `1 x 40 x 6906` | `71b480e58fa36017c5e542b1157f659cc58da1233d64c716b7a26240ed2c1f31` |
-| `OcrRecognitionSmall.onnx` | `1 x 3 x 48 x 320` | `1 x 40 x 18710` | `e01ba7ec62993bd6328fd737bc7bf39873d3c8d6f146b6752a0b651bc9929920` |
 | `OcrRecognitionBatch8.onnx` | `8 x 3 x 48 x 320` | `8 x 40 x 6906` | `5d3f22468b3cacf072a0c3bd757d541901b4d419203100ee49a346b3745880ca` |
 
 Sources: [tiny detection](https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_det_onnx),
-[tiny recognition](https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_rec_onnx),
-[small recognition](https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx).
+[tiny recognition](https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_rec_onnx).
 Original `inference.onnx` and `inference.yml` files live under
 `assets/test/weights/ocr/<model>/`; recognition `characters.txt` files contain the original
-dictionary entries, without the CTC blank or appended space. Tiny and small dictionaries differ.
+dictionary entries, without the CTC blank or appended space.
 Local `assets/test/scripts/fix_ocr_shapes.py` fixes batch and image dimensions, sets output
 dimensions from real inference and runs ONNX shape inference; the files remain FP32 at their
 original opsets (14 for detection, 11 for recognition). It also writes the `characters.txt`
 files from `inference.yml` and `OcrRecognitionBatch8.onnx` from the tiny recognizer with a batch
 of 8. Rerun on 2026-10-24 (ONNX 1.16.1, ONNX Runtime 1.23.2) from originals with SHA256
-`193bab7a...` (tiny det), `9ef676d6...` (tiny rec) and `5435fd74...` (small rec), it reproduced the
-three batch-1 files byte for byte.
+`193bab7a...` (tiny det) and `9ef676d6...` (tiny rec), it reproduced the
+two batch-1 files byte for byte.
 
 ONNX 1.17.0 checker and ONNX Runtime 1.31.0 CPU zero/random-input runs passed on macOS arm64.
 All external input/output dimensions are positive integers. Original and fixed model outputs
 agree within `rtol=1e-4, atol=1e-4`; maximum absolute errors were 2.09e-7 (det),
-2.74e-5 (tiny rec) and 5.07e-6 (small rec). Recognition argmax sequences are identical.
+2.74e-5 (tiny rec). Recognition argmax sequences are identical.
 Fixed shapes can enable different fused runtime kernels. These checks establish runnable,
 fixed-shape models, not OCR accuracy or compatibility with other backends.
 Local `assets/test/ocr_shape_validation.json` records shapes, source hashes and comparison results.
@@ -522,7 +523,7 @@ End-to-end OCR was compared with PaddleOCR 3.7.0 (PaddlePaddle 3.3.1, CPU, macOS
 the local `assets/test/images/ocr_document.png` (896 x 528), with document orientation,
 unwarping and textline orientation disabled. With PaddleOCR detection limited to a 640 long
 side, matched boxes reach IoU >= 0.9; 28 of 34 reference lines match exactly with
-`ppocrv6_tiny_rec` and 29 of 34 with `ppocrv6_small_rec`. Most remaining differences are
+`ppocrv6_tiny_rec`. Most remaining differences are
 spaces or single characters from integer axis-aligned crops versus PaddleOCR's rotated
 sub-pixel crops. PaddleOCR widens recognition input beyond 320 for long lines; the fixed
 48 x 320 recognizers compress the 737 x 39 footer line and misread it. A 48 x 960 export
@@ -662,17 +663,201 @@ Results checked against independent references on bus.jpg (ONNX Runtime 1.31.0, 
 - `rtmpose_m_pose` after `yolov8n_detect`: visible keypoints within 5 px of mmpose's affine crop
   and SimCC decoding, visibility 17/17 for all 4 people.
 
+### INT4 ONNX fixtures
+
+Pinned Hugging Face `onnx-community` exports are stored locally under
+`assets/test/onnx/int4/<repository>/model_q4.onnx`; their original configuration and
+preprocessor configuration are alongside them. LFS SHA256 values were checked after download.
+These are weight-only INT4 models with FP32 input/output, not packed INT4 output tests.
+ONNX Runtime 1.23.2 CPU smoke inference with zero inputs produced finite FP32 outputs for all
+the retained models. The checks establish loading and execution, not task accuracy or HybridRT
+postprocessor integration; these models are not part of the template benchmark table.
+
+| Repository | Revision | 4-bit MatMulNBits nodes | Output at smoke-test input | ONNX SHA256 |
+| --- | --- | ---: | --- | --- |
+| [dinov2-small](https://huggingface.co/onnx-community/dinov2-small/tree/8b1f705a3a7f6f062f6bdd21986c1583d3ef105d) | `8b1f705a3a7f6f062f6bdd21986c1583d3ef105d` | 72 | `1x257x384` | `5504f49e6b698e0b69d6bdf93a82278167cc12132588c5d1ea3f2e875efdb89d` |
+| [vit-base-patch16-224-ONNX](https://huggingface.co/onnx-community/vit-base-patch16-224-ONNX/tree/cbd8c61cf91321b8dc986b5cbf84af9db7eac1a7) | `cbd8c61cf91321b8dc986b5cbf84af9db7eac1a7` | 72 | `1x1000` | `993e4e1c98c0ee591ce37e97becf8e7413bb111cc0908385edc100cfac0edef5` |
+| [detr-resnet-50-ONNX](https://huggingface.co/onnx-community/detr-resnet-50-ONNX/tree/1b7b402cbb89a4f96db3bc81c06e73b5a607973b) | `1b7b402cbb89a4f96db3bc81c06e73b5a607973b` | 100 | `1x100x92; 1x100x4` | `ad7affaea89b2326f71abbb9293a06879a5ba777ec5fcaf0412313d369f79e67` |
+
+Each retained graph explicitly sets `MatMulNBits.bits=4`; convolution and other operations
+may remain FP32. Only one model per family is retained. Static `model_q4_batch1.onnx`,
+`model_q4_batch4.onnx` and `model_q4_batch8.onnx` use 224 x 224 input and fixed output shapes.
+All nine variants passed ONNX checker and ORT CPU zero-input inference with finite FP32 outputs.
+For DETR this resolution is a smoke-test fixture, not its recommended accuracy evaluation size.
+
+| Static INT4 model family | Batch 1 SHA256 | Batch 4 SHA256 | Batch 8 SHA256 |
+| --- | --- | --- | --- |
+| `dinov2-small` | `0bfd3673e3238aae84895ff44282852b7eb5876a744158d4d92d43ed9a5e3957` | `d727aa7a738203dfc392badc8bcf321d0e1e5eed243371aa7bfa106140be0541` | `60546dd5f1f41cfc203ea55e076f50f0462f609930eea02754fc18d7ebfcf47a` |
+| `vit-base-patch16-224-ONNX` | `b51b1de7c890c6c486802fbe60688756f8f0715fc8c15deb816ff71c98da6174` | `6b4d963a8ceeec5f9915370605d1a848d72ac08919854843eb3b5d29dafca30f` | `dfb4326655393c1286f2e7057c22de75fdc79b4f89e047f125d4e926b8ca4934` |
+| `detr-resnet-50-ONNX` | `5642aebf149cef8257fe93ecebf2ed1ec4b9eeb436030a553395206c5716a1aa` | `214fd2df5fddbc22bf97b81faf37e8af903a1774b6c5bbef7bedcffb707dc7d9` | `beb6e23f7fea5b665c3917b8fa18d8f8193316353aeb57f363a0f678b4f31963` |
+
+### INT8 ONNX fixtures
+
+Only YOLOv8n detection is retained from the basic YOLO family. The local
+`assets/test/scripts/prepare_quantized_onnx.py` builds CPU QDQ Conv/MatMul/Gemm with signed INT8
+activations and per-channel INT8 weights from the FP32 fixtures above, using ORT 1.23.2 and
+64 COCO images with letterbox RGB / 255 preprocessing. FP32-output intermediate models stay
+in `/tmp`; the retained `assets/test/onnx/int8/GeneralDetect{,Batch4,Batch8}Int8.onnx` files
+have FP32 input and **native INT8 output**, checked by real ORT inference for all three batches.
+
+The final QuantizeLinear uses symmetric per-channel scales (axis 1), calibrated on the same
+64 images plus bus.jpg. This keeps pixel coordinates and confidence on separate scales.
+Scales and zero points are embedded as initializers and in the ONNX
+`hybridrt.output_quantization` metadata. These are output/type fixtures, not an accuracy claim.
+HybridRT's ORT backend currently maps INT8 storage but does not propagate these quantization
+parameters, and Buffer holds only one scale/zero point; these per-channel outputs must not be
+fed directly to the existing postprocessors. They are not added to the FP32 benchmark table.
+
+| File under `assets/test/onnx/int8/` | Input | Output dtype / shape | SHA256 |
+| --- | --- | --- | --- |
+| `GeneralDetectInt8.onnx` | `1x3x640x640` FP32 | INT8 `1x84x8400` | `f960d292d91f2521b050c9b744267892d37b7032004972a18fa4fc65d9a01797` |
+| `GeneralDetectBatch4Int8.onnx` | `4x3x640x640` FP32 | INT8 `4x84x8400` | `a5f3906dbb47364465f8ca813c3e5bbee727a275cba47720b6f471cfb3c08d88` |
+| `GeneralDetectBatch8Int8.onnx` | `8x3x640x640` FP32 | INT8 `8x84x8400` | `733329dd0948396e5d377c48756ea91da569656a38cc1e445b7d6bd241ca6fa8` |
+
 ### RKNN on RK3588
 
-`rknn_convert.py` in the local assets/test/scripts/ directory (rknn-toolkit2 2.3.2, matching the board runtime) converts each ONNX test model to
-an fp16 `.rknn` of the same name in `assets/test/rknn/`, with the model's mean/std built in. The four basic
-640 x 640 models and their batch-4 and batch-8 exports are converted with the defaults (mean 0, std 255);
-`ImageModelTest.MatchesBatchOneOnRknnStaticBatchModels` compares them with RGA preprocessing on the board.
-The four batch-1 basic models are also converted to int8 as `<model>Int8.rknn`, with
-`--dataset assets/test/calib/coco64.txt` (64 COCO128 images), for `hybridrt_bench_postprocess` `BM_Rknn`. Its algo then runs on RKNN with the same
-`postprocess`; `preprocess` drops `mean`/`std` and takes `dst_image_format: "inter_rgb"` (`inter_bgr` for
-RTMO), and the backend is `{"engine_type": "rknn", "config": {"image_input": true}}`. A raw-head pose model
-uses the `yolov8n_face` postprocess with `reg_max: 16` and the default `keypoint_num` of 17.
+`assets/test/scripts/rknn_convert.py` uses rknn-toolkit2 2.3.2, matching librknnrt 2.3.2
+on RK3588. Mean/std are embedded in the model; `image_input: true` feeds raw uint8 NHWC,
+with interleaved RGB or BGR matching the template. FP16 models are kept for the four basic
+640 x 640 batch-1/4/8 pipeline fixtures.
+
+For postprocessing, the collection covers 26 model groups (25 postprocessor types, with
+separate OCR detection and recognition). Final preparation on 2026-10-25 produced **72 native
+INT8-output models** (24 groups x batch 1/4/8) and **23 FP16-output batch-1 models**. All 95
+loaded with librknnrt 2.3.2; SDK queries verified batch dimensions, output types, finite positive
+INT8 scales and zero points. This final check does not run inference or measure speed.
+
+`prepare_rknn_fp16.py` prepares the floating batch-1 models. `prepare_rknn_batches.py` expands
+the remaining static batch graphs and prepares integer outputs; each expanded graph was checked
+against independent batch-1 ORT results. Native batch graphs passed for the prepared variants.
+Vision calibration uses 64 COCO images; OCR uses document/line crops with template normalization.
+Input bytes for later board tests are prepared on the build host.
+
+Classification, Embedding and CTC recognition exports otherwise retain FP16 output after RKNN
+weight quantization. Their integer variants explicitly quantize the output probabilities with
+`QuantizeLinear`, scale `1/255`, zero point `-128`. These are INT8 **output** fixtures; their bodies
+may still use FP16, so they are for postprocess comparison, not inference-precision benchmarks.
+OCR required basic graph folding and replacement of two remaining inference BatchNorm nodes by
+equivalent channelwise Mul/Add (`fix_rknn_ocr_output.py`). The quantized ORT outputs matched
+before/after that rewrite for batch 1/4/8 on the checked inputs.
+
+Unavailable references:
+
+- RT-DETR-L and RTMO fail batch-1 conversion at optimization levels 3 and 0 in toolkit
+  MatMul/Conv and Reshape rewrites; their batch-4/8 RKNN variants are not generated.
+- The user YOLOv5 OBB source is QAT. Its INT8 batch-1/4/8 exports preserve that quantization.
+  RKNN also changes explicit FP16 output casts back to INT8, so no independent FP16 counterpart
+  is supplied. A file with INT8 outputs is not kept under the FP16 reference filename.
+
+Converted files are local under `assets/test/rknn/`. Final metadata is recorded locally in
+`assets/test/benchmark_results/rknn_full_conversion_query.log`; conversion and batch-equivalence
+logs are in the same directory. Models and conversion scripts remain untracked. Earlier measured
+results are in [benchmark.md](../benchmark.md); no further speed tests were run after preparation
+was requested. Prior in-graph GatherElements failures of the E2E exports remain runtime limitations;
+conversion and IO validation do not establish task accuracy or correct NPU inference for those graphs.
+
+<details>
+<summary>Converted RKNN model hashes and verified output types</summary>
+
+| Algo | File in `assets/test/rknn/` | Native output | SHA256 |
+| --- | --- | --- | --- |
+| `yolov8_detect` | `YoloV8Detect.rknn` | FP16 | `1dc08f8932494c91f78b049088fd165193e20ff9f906a9fff1f2e28da775b040` |
+| `yolov8_detect` | `YoloV8DetectInt8.rknn` | INT8 | `8d898eb0feb7cf012868dd38cf707d3786179d53d9112f617ced336faa386b64` |
+| `yolov8_detect` | `YoloV8DetectBatch4Int8.rknn` | INT8 | `13b527970b8a10da33e2e6167adf44e7f5def3ef92a95e6974dc97a8ac3087f2` |
+| `yolov8_detect` | `YoloV8DetectBatch8Int8.rknn` | INT8 | `df9a416917fd451626b395e2b4180761c59d111445aade1a12b6a35efdcfca69` |
+| `yolo26n_detect_raw` | `Yolo26Detect.rknn` | FP16 | `c207705731f0ee415ce4d19449a421682da768afad34281be63778c2023fbbf2` |
+| `yolo26n_detect_raw` | `Yolo26DetectInt8.rknn` | INT8 | `024b7c4a13f278c05f529a97c143fc476cd535f5a4c57985df2e24aabe34778f` |
+| `yolo26n_detect_raw` | `Yolo26DetectBatch4Int8.rknn` | INT8 | `72676cb52f30de01304cc48e2b572fed6b83f4aa026537cda9758ee9b711f924` |
+| `yolo26n_detect_raw` | `Yolo26DetectBatch8Int8.rknn` | INT8 | `2cc1f534d6902934985c6eda36808c50f6269b782ead511ed0d99838e5e8cc31` |
+| `yolov5_detect` | `YoloV5Detect.rknn` | FP16 | `937337e2459e854c73ab33912b6e1ff896d4bd66241d273f9953137f59fa20ba` |
+| `yolov5_detect` | `YoloV5DetectInt8.rknn` | INT8 | `b4d020c780283c079b73731fb7c467442036f9f673dbe34955e04c11fa92dcf6` |
+| `yolov5_detect` | `YoloV5DetectBatch4Int8.rknn` | INT8 | `fd2ff306e882360ae77f0b68e27bacabad1a14ce86c09ea342ad84e1e92fcacd` |
+| `yolov5_detect` | `YoloV5DetectBatch8Int8.rknn` | INT8 | `eed2c2fd5311ccdc236becfd50023289a67d6289e26cfeb14e75fa1acd0168e7` |
+| `yolo26n_e2e_detect` | `E2EDetect.rknn` | FP16 | `32507cc5f1bbf4288e5ad741934761d988cf704c2dbc50a0064148a67cbdb27f` |
+| `yolo26n_e2e_detect` | `E2EDetectInt8.rknn` | INT8 | `ca95752ff5bfbe022927748cddd61d963b2cc2d06dd344d422a125a0d385f58e` |
+| `yolo26n_e2e_detect` | `E2EDetectBatch4Int8.rknn` | INT8 | `541168d91a90fdee6b73d3baf8bf8a614e487a02b3e22e304275a6180feef193` |
+| `yolo26n_e2e_detect` | `E2EDetectBatch8Int8.rknn` | INT8 | `9480984ba57d10987d0a35627330c35473db7ead47d67183c2fdfe5c9226bce2` |
+| `yolov8n_detect` | `GeneralDetect.rknn` | FP16 | `aa9276ed9f0cc95fdb5eddc44c752d97da85d4a4e34e720944d5bb9e53cb655d` |
+| `yolov8n_detect` | `GeneralDetectInt8.rknn` | INT8 | `dd1dcdaccddb0c257a6856febb80a06499de646870b16817e31441d8c740f634` |
+| `yolov8n_detect` | `GeneralDetectBatch4Int8.rknn` | INT8 | `2a2adb3f6eb3e9575ec37598f4a45f86b4186a107bf6c377d0c7ddfbc2491a1e` |
+| `yolov8n_detect` | `GeneralDetectBatch8Int8.rknn` | INT8 | `ca721479cccd199cf90c2256b45acee5a3c41da3cc00c74b8dd09b013a9773d8` |
+| `yolo26n_e2e_obb` | `E2ERotated.rknn` | FP16 | `4230c3de95bcfd3e9e76f713ab0a78df9236763d4195fdbcef6406c47e1597b6` |
+| `yolo26n_e2e_obb` | `E2ERotatedInt8.rknn` | INT8 | `0108774cac8baaee6f0abe2d4311f43c15a09ef1787e564e1dac02552ae41394` |
+| `yolo26n_e2e_obb` | `E2ERotatedBatch4Int8.rknn` | INT8 | `f80bd7e4fe9344bbf76234d19500a6ecd6b86fe8c9b8712e4de65b346af1f927` |
+| `yolo26n_e2e_obb` | `E2ERotatedBatch8Int8.rknn` | INT8 | `989114a60c9685214ff81ae43b95305f6e3e674ca83a4af26291b269f55b8a79` |
+| `yolov8n_obb_raw` | `YoloV8Rotated.rknn` | FP16 | `85fe6213a142f627336ae0939e1521457b3fca5f94796b5777712bfc18de07fa` |
+| `yolov8n_obb_raw` | `YoloV8RotatedInt8.rknn` | INT8 | `5c678b5f726cf7bc39c76ebcc060290aa2565d68f66310be7e81ef429f4f9950` |
+| `yolov8n_obb_raw` | `YoloV8RotatedBatch4Int8.rknn` | INT8 | `ed00e75a8b2fec641b686d3571e990c915ae048d803e43ab6895be10e76e9ae5` |
+| `yolov8n_obb_raw` | `YoloV8RotatedBatch8Int8.rknn` | INT8 | `a5b1a9e4607e992cbf524635e58f5ee9760ab69d1751b21165e9e12185b94322` |
+| `yolo26n_obb_raw` | `Yolo26Rotated.rknn` | FP16 | `4b81268e97950fc6dfe30fde4c269dc57ffef116fe3ec0d4cf4b32abd963d637` |
+| `yolo26n_obb_raw` | `Yolo26RotatedInt8.rknn` | INT8 | `dc9719e150651ac023c0efa4db47565d02e3f6f5d4639cfa032c804e5361a4d1` |
+| `yolo26n_obb_raw` | `Yolo26RotatedBatch4Int8.rknn` | INT8 | `1e755d50151c820a1c005068b150490ad8278d689c2e3d39527f5da22cc5a6eb` |
+| `yolo26n_obb_raw` | `Yolo26RotatedBatch8Int8.rknn` | INT8 | `835772beafebe4119c8bd872f02f0e5dcd7bbfb1819bdbdb59c590ec43327e75` |
+| `yolov5_rotated` | `YoloV5RotatedInt8.rknn` | INT8 | `bf9ac1f52d7abe5d80a7bbba08f1a4404785a57cd786ca7103c6936ea908bbca` |
+| `yolov5_rotated` | `YoloV5RotatedBatch4Int8.rknn` | INT8 | `7a83f6399c611d220f4c24d7f143ff5d62b4e8ced63ec9f2643929ef869270a7` |
+| `yolov5_rotated` | `YoloV5RotatedBatch8Int8.rknn` | INT8 | `5b3c0394505df35fcf495bee4f2242f6ec5cd2dac60cd56c16b0b779c423ffe9` |
+| `yolov8n_obb` | `GeneralRotated.rknn` | FP16 | `44c6ddc8cd54d0506a4ad59e7c3cfbe15049bd3a04dfbf37f90336e64d78b69a` |
+| `yolov8n_obb` | `GeneralRotatedInt8.rknn` | INT8 | `7794e52c85e704441b8dbb5c82d6e9612bdf66cdaacf978c441619bf6c960154` |
+| `yolov8n_obb` | `GeneralRotatedBatch4Int8.rknn` | INT8 | `2edcbd7c4d567beed5dd6b386065888ce1e712a2dc91256852b1a0baa7a3c7b1` |
+| `yolov8n_obb` | `GeneralRotatedBatch8Int8.rknn` | INT8 | `ca418147d00a4c943037692797463cbb8326dee618b6e3beeeffff0692818bd0` |
+| `yolov8n_classify` | `GeneralClassify.rknn` | FP16 | `98b23d07602b4219a7a2a1fb5139528a3fdd619b6190bd45e77406d60a46f1ae` |
+| `yolov8n_classify` | `GeneralClassifyInt8.rknn` | INT8 | `d0d40eb4361fbad50a620fc4bf2540ebb09f546baed082fa060d5edb54a87426` |
+| `yolov8n_classify` | `GeneralClassifyBatch4Int8.rknn` | INT8 | `cae1010434b9fd46c3daf0aefe807225f4a5cb237b52a6e0757b01dc72dac58e` |
+| `yolov8n_classify` | `GeneralClassifyBatch8Int8.rknn` | INT8 | `fa1eea162eb6381ef9c018d4c5466dfad3c77019b5ebf3b5b758b9431bf98063` |
+| `yolov8n_classify_embedding` | `Embedding.rknn` | FP16 | `f4060460286ad9ddda1ec6fa2dd1de610e9920bfcef71b04b713d6fb8163febf` |
+| `yolov8n_classify_embedding` | `EmbeddingInt8.rknn` | INT8 | `9cea3b23dae5f0c72dcc57957bca00019ab80d79baaae6d2f403dbb50cb55ecb` |
+| `yolov8n_classify_embedding` | `EmbeddingBatch4Int8.rknn` | INT8 | `9a3717979fbeb16e25ed98af4ee07450f283744f33f21646e5296b5e105e59d6` |
+| `yolov8n_classify_embedding` | `EmbeddingBatch8Int8.rknn` | INT8 | `3fec4fc7cd4faaabc083c2683c517fac0d96ce7290fea6ccb983eb82f1581073` |
+| `yolov8n_pose` | `GeneralYoloPose.rknn` | FP16 | `45c001fe387bdae9b649a8491339e500f485d870eda3d34812d4c0cb82d648e6` |
+| `yolov8n_pose` | `GeneralYoloPoseInt8.rknn` | INT8 | `7bfb9630154087a66bf3a78bc44d56e5dd047abba5bfd210824f1598afef557c` |
+| `yolov8n_pose` | `GeneralYoloPoseBatch4Int8.rknn` | INT8 | `95a73c8d5b470ba66bdffd85149a3f43b818b8ffd3706d52b4923697c691d9f6` |
+| `yolov8n_pose` | `GeneralYoloPoseBatch8Int8.rknn` | INT8 | `7aad702661894cdc51b3ed24986352b5ede23a087b9e88b1e15c830c74909ef3` |
+| `yolov8n_face` | `YoloV8Keypoint.rknn` | FP16 | `402fcfbd33b42a6f3920b61e980191cf5b04ad868d8404f7a01c15fb3052a518` |
+| `yolov8n_face` | `YoloV8KeypointInt8.rknn` | INT8 | `dc7bd9b27c9589371a7c9a4b4632f644881a0b5316af27666be371973d6ca34b` |
+| `yolov8n_face` | `YoloV8KeypointBatch4Int8.rknn` | INT8 | `29169c9b62fac66da17e47ed31ccec6766e253b15fd6b128e9d8f1b8e2c6012a` |
+| `yolov8n_face` | `YoloV8KeypointBatch8Int8.rknn` | INT8 | `2550a83bf9e26d32b60817bd09e9b11e5b8adb282dcac1f619d55ab31459cae9` |
+| `yolo26n_pose_raw` | `Yolo26Keypoint.rknn` | FP16 | `929f38ff11ca1e619770cde1f64a8d3badc0024b4ddf974a1943bdb479083081` |
+| `yolo26n_pose_raw` | `Yolo26KeypointInt8.rknn` | INT8 | `4f9c34b193bff56fb7208ed588ce297e860748e2961463c2b93d0b4ddaa46e84` |
+| `yolo26n_pose_raw` | `Yolo26KeypointBatch4Int8.rknn` | INT8 | `1140cdfebbf54eb695657fdd797958edeb2b9c2015837b2386a48443db12c50d` |
+| `yolo26n_pose_raw` | `Yolo26KeypointBatch8Int8.rknn` | INT8 | `baef38fff97b690364d787c91f4790a31ea6cd97aa070ac6bc297a1c8130c312` |
+| `yolo26n_e2e_pose` | `E2EKeypoint.rknn` | FP16 | `03dc1a7d497d690e72ae99caa52375b033a5f3f491b1834b38b194e10b6f2ca3` |
+| `yolo26n_e2e_pose` | `E2EKeypointInt8.rknn` | INT8 | `a3aa0bd724bd26f28ab40ac0933ccfe6deffc897e08ab3fcd31d2d036717a1d0` |
+| `yolo26n_e2e_pose` | `E2EKeypointBatch4Int8.rknn` | INT8 | `293d6be5a54cdf4cd43c65866dc82ee76820c84a3cda82d0bb65c4bc78d818f2` |
+| `yolo26n_e2e_pose` | `E2EKeypointBatch8Int8.rknn` | INT8 | `544a84a4f5f99e3361c394088883c3085d768bbceecc99a67a70738f939cce9a` |
+| `rtmpose_m_pose` | `GeneralKeypoint.rknn` | FP16 | `2cd06553cbec1c0cd75716b544df4f08c99a5dde33b69d2aea79a05a65eda06c` |
+| `rtmpose_m_pose` | `GeneralKeypointInt8.rknn` | INT8 | `3273d999990e1c58c77183891c29815ef4979262558b44e58e5a6636a58cbf3a` |
+| `rtmpose_m_pose` | `GeneralKeypointBatch4Int8.rknn` | INT8 | `28e2f8a17f69a669ac4de5a5c7b5971611663502700942da20c56a8e505f51bd` |
+| `rtmpose_m_pose` | `GeneralKeypointBatch8Int8.rknn` | INT8 | `4bdd892ae4d7c8f047283bd1393c2e2c2f567947d06b909e7ca4466abec7885f` |
+| `yolov8n_segment` | `GeneralYoloSegment.rknn` | FP16 | `94252b58b25fd5021f36b504bc57837f7d33d32d6f06dfc5bd1e5802e25f9c99` |
+| `yolov8n_segment` | `GeneralYoloSegmentInt8.rknn` | INT8 | `4962367ead3eeab7cddd9cd74f472ca2522053d0afd10db760499d573eaa2144` |
+| `yolov8n_segment` | `GeneralYoloSegmentBatch4Int8.rknn` | INT8 | `9d6aba82a8f6b83aba5a36a50837d3d03c88e8c534f4662b4645f59c42c4becf` |
+| `yolov8n_segment` | `GeneralYoloSegmentBatch8Int8.rknn` | INT8 | `3159309c51ea481c8c26e86f433ed197e30998357ac810730e34e7303a3677b5` |
+| `yolov8n_segment_raw` | `YoloV8Segment.rknn` | FP16 | `655ecc345e8656195f6466abbf6309d01b5d4e77f1ef4f82c4fecf4e064c5d42` |
+| `yolov8n_segment_raw` | `YoloV8SegmentInt8.rknn` | INT8 | `3b37be9862c4935ac607d2624ec747b2f2100cc36bd124851357770ca93a551f` |
+| `yolov8n_segment_raw` | `YoloV8SegmentBatch4Int8.rknn` | INT8 | `e1f9383243a4dc195d92ad10eaa98a27c79e51a49f38d96a143dc25acf0c9fab` |
+| `yolov8n_segment_raw` | `YoloV8SegmentBatch8Int8.rknn` | INT8 | `c576ab5ebff2f95665312ef669205e00af01d3a7e10a1065ffe00ba0503fa12f` |
+| `yolo26n_segment_raw` | `Yolo26Segment.rknn` | FP16 | `5fc57053a95205fb9f9a44a7a7679900ce55d5db308e1d148819a8a646a1b004` |
+| `yolo26n_segment_raw` | `Yolo26SegmentInt8.rknn` | INT8 | `e9f2a650b4feacbbb8aca82be77befa8d036338bac7d89ca66b925186976f167` |
+| `yolo26n_segment_raw` | `Yolo26SegmentBatch4Int8.rknn` | INT8 | `c8244a7530b624a5176b11e15427cffddd3c57e99e6a290e745d2a20328abfe1` |
+| `yolo26n_segment_raw` | `Yolo26SegmentBatch8Int8.rknn` | INT8 | `7a112f374fcf9df7cc995ba37464f5677b360b8531763cabf701f8bb94198052` |
+| `yolo26n_e2e_segment` | `E2ESegment.rknn` | FP16 | `e16ec5dd9e6fd52ed17106af39539bfccb80a149db14fc60b67ed254ba1dfc74` |
+| `yolo26n_e2e_segment` | `E2ESegmentInt8.rknn` | INT8 | `b2ee26161981929c632ef052c1c2c14c8ded45a315b9b88d420987ea4344dda3` |
+| `yolo26n_e2e_segment` | `E2ESegmentBatch4Int8.rknn` | INT8 | `1e022a159ab9e38fb8e3fc8ba9d9683ec2128e39b2979fe70753f9b3f2e8185a` |
+| `yolo26n_e2e_segment` | `E2ESegmentBatch8Int8.rknn` | INT8 | `e1bb70851990e593d9deafbd006343446c6b1875fba78f575d97446166f64bfa` |
+| `lraspp_voc_segment` | `SemanticSegment.rknn` | FP16 | `a22c334461ae0827e3692efc88efc69be37549216280add40aa0fb26218628de` |
+| `lraspp_voc_segment` | `SemanticSegmentInt8.rknn` | INT8 | `c9dd08b3eb75c8b2d3c28b8f67d0576bab76f4ce2c713375737707334797f851` |
+| `lraspp_voc_segment` | `SemanticSegmentBatch4Int8.rknn` | INT8 | `90f076660f82c1eea3bd7d3d0b76acbe61eab8fac25a4710143ea40c36cc324c` |
+| `lraspp_voc_segment` | `SemanticSegmentBatch8Int8.rknn` | INT8 | `d6a727f0f1e1e59c142d698e104ba9fc8fb5b8ddb070809dfaeecd835a44210a` |
+| `ppocrv6_tiny_det` | `OcrDetection.rknn` | FP16 | `59c2845ffb7ac3eb52d987e1a81eebe50f73db1f02114a43500d98ae90ed6b85` |
+| `ppocrv6_tiny_det` | `OcrDetectionInt8.rknn` | INT8 | `faad92a5b8c89b09e8b20fdd4e6e3e1a76185951625e2152fa78c577b5c5e62e` |
+| `ppocrv6_tiny_det` | `OcrDetectionBatch4Int8.rknn` | INT8 | `4e7d4a75b24b06696ce8c2bc0d62b297de974b0f3e41a53aa0e562c3bbb575e3` |
+| `ppocrv6_tiny_det` | `OcrDetectionBatch8Int8.rknn` | INT8 | `8102535ff05919f018fae308557b8f72c96a56494d3d28d5e5fabb0ddc191f04` |
+| `ppocrv6_tiny_rec` | `OcrRecognition.rknn` | FP16 | `e0307627e6bb180acb554a50afc4895a4b4481cbde41ec6baa20bd700ea615ad` |
+| `ppocrv6_tiny_rec` | `OcrRecognitionInt8.rknn` | INT8 | `1b0703f6c411c85cec867747a84dc19028e766b696618e0c5d70f105b306c2d7` |
+| `ppocrv6_tiny_rec` | `OcrRecognitionBatch4Int8.rknn` | INT8 | `6188679fc89b8c4625c39ce8e57962758fa870f4919bd45b22f0c4936cbd2309` |
+| `ppocrv6_tiny_rec` | `OcrRecognitionBatch8Int8.rknn` | INT8 | `31b96483e0fb3793039e22e39b8834b196877558692448844974c6958c8603b0` |
+
+</details>
 
 Against the ORT results of the same models on bus.jpg, airport.jpg and zidane.jpg (librknnrt 2.3.2):
 
@@ -782,7 +967,6 @@ which includes CPU preprocessing and postprocessing):
 | `yolo26n_e2e_segment` (640 x 480) | 1.76 | 4.08 |
 | `ppocrv6_tiny_det` (640) | 0.93 | 27.63 for the whole OCR cascade |
 | `ppocrv6_tiny_rec` (48 x 320) | 0.31 | one call per text line |
-| `ppocrv6_small_rec` (48 x 320) | 0.65 | one call per text line |
 
 FP32 models track the reference more closely throughout: `GeneralRotated` reaches mean IoU
 0.9997 and `E2ESegment` 0.9998, against 0.9944 and 0.9984 in FP16.
