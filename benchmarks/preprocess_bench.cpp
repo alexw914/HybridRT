@@ -393,6 +393,65 @@ auto cuda_cases(benchmark::Benchmark* bench) -> void {
   bench->Args({3840, 2160, 224, 224, 3});
 }
 
+// RKNN image inputs stay interleaved uint8; their normalization belongs to the model.
+auto BM_RgaResolution(benchmark::State& state) -> void {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  cv::setNumThreads(1);
+  auto processor = ImagePreprocessor::create(ImagePreprocessorType::Rga);
+  if (!processor) {
+    state.SkipWithMessage("RGA preprocessing is unavailable");
+    return;
+  }
+  const Size source_size{static_cast<int>(state.range(0)), static_cast<int>(state.range(1))};
+  const Size target_size{static_cast<int>(state.range(2)), static_cast<int>(state.range(3))};
+  const auto resident = state.range(4) != 0;
+  state.SetLabel(resident ? "rga_dma_source_rgb_u8" : "rga_host_source_rgb_u8");
+  cv::Mat pixels(source_size.height, source_size.width, CV_8UC3);
+  cv::randu(pixels, 0, 256);
+  auto host =
+      Image::wrap(MemoryType::Cpu, pixels.data, ImageFormat::InterBgr, source_size, DataType::Uint8, pixels.step);
+  Image device(MemoryType::DmaBuffer, ImageFormat::InterBgr, DataType::Uint8, source_size);
+  Image target(MemoryType::DmaBuffer, ImageFormat::InterRgb, DataType::Uint8, target_size);
+  if (!host || !device.valid() || !target.valid() ||
+      !Buffer::copy(*device.buffer(), *host->buffer(), CopyPolicy::DirectCopy)) {
+    state.SkipWithError("Cannot prepare RGA dma-buffers");
+    return;
+  }
+  if (!processor->supports(ImageOperation::Fill, target, target) ||
+      !processor->supports(ImageOperation::Resize, target, device)) {
+    state.SkipWithError("RGA buffers do not satisfy hardware format, stride or address limits");
+    return;
+  }
+  ImagePreprocessorParam param;
+  param.dst_image_format = ImageFormat::InterRgb;
+  param.resize_type = ResizeType::LetterBox;
+  param.normalize_type = NormalizeType::None;
+  param.default_color = {114, 114, 114};
+  const auto& source = resident ? device : *host;
+  // RGA operators use IM_SYNC; the returned dma-buffer is ready for its consumer.
+  for (int i = 0; i < 20; ++i) {
+    if (!processor->process(target, source, {}, param)) {
+      state.SkipWithError("RGA warmup failed");
+      return;
+    }
+  }
+  for (auto _ : state) {
+    if (!processor->process(target, source, {}, param)) {
+      state.SkipWithError("RGA preprocessing failed");
+      break;
+    }
+    benchmark::DoNotOptimize(target.memory()->cpu());
+  }
+}
+
+auto rga_cases(benchmark::Benchmark* bench) -> void {
+  for (const int width : {1920, 2560, 3840})
+    for (const auto size : {hrt::core::Size{640, 640}, hrt::core::Size{1280, 1280}})
+      for (const int resident : {0, 1})
+        bench->Args({width, width * 9 / 16, size.width, size.height, resident});
+}
+
 } // namespace
 
 BENCHMARK(BM_ImageLayout)->DenseRange(0, 2)->Unit(benchmark::kNanosecond)->UseRealTime();
@@ -405,4 +464,5 @@ BENCHMARK(BM_Resolution)
     ->UseRealTime()
     ->MeasureProcessCPUTime();
 BENCHMARK(BM_CudaResolution)->Apply(cuda_cases)->Unit(benchmark::kMillisecond)->UseRealTime();
+BENCHMARK(BM_RgaResolution)->Apply(rga_cases)->Unit(benchmark::kMillisecond)->UseRealTime();
 BENCHMARK(BM_Batch)->ArgsProduct({{1, 4}, {0, 1, 2, 3, 4, 5, 6, 7}})->Unit(benchmark::kMillisecond)->UseRealTime();

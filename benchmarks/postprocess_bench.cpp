@@ -167,6 +167,23 @@ auto BM_Type(benchmark::State& state) -> void {
   }
   entry["config"]["engine"]["backends"] = {
       {{"engine_type", "rknn"}, {"data", path.string()}, {"config", {{"image_input", true}}}}};
+#else
+  const auto batch = state.range(1);
+  auto& backend = entry["config"]["engine"]["backends"][0];
+  auto path = std::filesystem::path(backend["data"].get<hrt::String>());
+  if (batch > 1) {
+    path = path.parent_path() / (path.stem().string() + "Batch" + std::to_string(batch) + ".onnx");
+    entry["name"] = name + "_batch" + std::to_string(batch);
+  }
+  if (!std::filesystem::is_regular_file(path)) {
+    state.SkipWithMessage("ONNX model variant is unavailable");
+    return;
+  }
+  backend["engine_type"] = "ort";
+  backend["data"] = path.string();
+  backend["config"]["execution_provider"] = "cpu";
+  backend["config"]["intra_op_num_threads"] = 1;
+  backend["config"]["inter_op_num_threads"] = 1;
 #endif
   const auto& post = entry["config"]["postprocess"];
   const auto type = post["type"].get<hrt::String>();
@@ -181,6 +198,8 @@ auto BM_Type(benchmark::State& state) -> void {
   auto label = type + ":" + entry["name"].get<hrt::String>();
 #ifdef HRT_BENCH_RKNN
   label += quantized ? "/int8_model" : "/fp16_model";
+#else
+  label += "/onnx_fp32";
 #endif
   state.SetLabel(label);
   state.counters["input_width"] = prepared->transforms.front().input_size.width;
@@ -192,6 +211,12 @@ auto BM_Type(benchmark::State& state) -> void {
   }
   state.counters["int8_outputs"] = static_cast<double>(int8_outputs);
   state.counters["fp32_outputs"] = static_cast<double>(fp32_outputs);
+#ifndef HRT_BENCH_RKNN
+  if (fp32_outputs != prepared->outputs.size() || prepared->transforms.size() != static_cast<std::size_t>(batch)) {
+    state.SkipWithError("ONNX outputs must be FP32 with the requested static batch");
+    return;
+  }
+#endif
   if (type.ends_with("Detect"))
     measure_postprocessor<hrt::postprocess::DetectResultMap>(state, *prepared);
   else if (type.ends_with("Segment"))
@@ -213,15 +238,16 @@ auto type_cases(benchmark::Benchmark* bench) -> void {
   const kitzoo::json::Reader reader(std::filesystem::path(HRT_SOURCE_DIR) / "assets/template/hrtc_template.json");
   const auto& algos = reader.raw()["algos"];
   for (std::size_t i = 0; i < algos.size(); ++i) {
-#ifdef HRT_BENCH_RKNN
     const auto& name = algos[i]["name"].get_ref<const hrt::String&>();
     if (name.ends_with("_batch4") || name.ends_with("_batch8"))
       continue;
+#ifdef HRT_BENCH_RKNN
     bench->Args({static_cast<std::int64_t>(i), 0, 1});
     for (const auto batch : {1, 4, 8})
       bench->Args({static_cast<std::int64_t>(i), 1, batch});
 #else
-    bench->Arg(static_cast<std::int64_t>(i));
+    for (const auto batch : {1, 4, 8})
+      bench->Args({static_cast<std::int64_t>(i), batch});
 #endif
   }
 }

@@ -83,8 +83,11 @@
   后处理分 CPU FP32 与 RK3588 量化对照两张表（CPU 按 B1/B4/B8，RK 按 FP16 B1 与 INT8 B1/B4/B8 分列）。开头写公共方法和
   平台表（设备、CPU、内存、加速器、OS、编译主机、编译器、CMake、构建类型、OpenCV、推理与设备 SDK、绑核），
   各章写测试内容与方法。统一用 Release 当前源码，Google Benchmark 3 次重复、每次 >=0.5 s、预热 >=0.2 s，取中位数。
-- 前处理只测 CPU、Metal、CUDA（host、device 源）：单调用者、OpenCV 单线程，1920x1080、2560x1440、
-  3840x2160 letterbox 到 640x640、1280x1280。后处理只保留一个消费端或服务端 CPU 平台，
+- 前处理测 CPU、Metal、CUDA（host、device 源）：单调用者、OpenCV 单线程，1920x1080、2560x1440、
+  3840x2160 letterbox 到 640x640、1280x1280。RK3588 前处理只测 RGA，覆盖相同分辨率的 host 与 dma-buffer 源；
+  输出 interleaved RGB uint8 dma-buffer，不归一化，记录 RGA 填充、缩放（含 BGR/RGB 通道交换）、缓存同步及同步完成的整段耗时，
+  host 源计入 staging，常驻 dma-buffer 源的初始拷贝在计时外；不与 float32 输出路径混为相同工作量。
+  后处理只保留一个消费端或服务端 CPU 平台，
   测模板全部 algo，用 ORT CPU 的真实 FP32 输出、单线程；表中输出形状的批次维统一写 `B`，
   同模型只占一行，B1、B4、B8 分列整批耗时，不为 batch 变体另起行。
   RKNN 覆盖全部后处理类型及 OCR 检测/识别，每个模型准备 INT8 batch1、4、8，FP16 只准备 batch1 对照；
