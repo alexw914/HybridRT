@@ -56,6 +56,13 @@ differences. Other conversions (gray inputs or sources, RGBA or float sources) r
 A static batch whose samples all fuse runs as one kernel launch (up to 16 samples per kernel);
 on the CPU the samples of a batch run on OpenCV's threads.
 
+Metal accepts HWC RGB/BGR uint8 sources on unified-memory Macs and writes RGB/BGR FP32
+as CHW (`planar_rgb`/`planar_bgr`) or HWC (`inter_rgb`/`inter_bgr`). Source and destination
+rows may be padded; HWC pixels remain packed RGB/BGR triplets. Linear and nearest sampling
+use the fused Metal kernel; cubic and unsupported formats fall back to CPU. Output layout
+must match the model input. ORT currently reports NCHW to `ImageModel`; NHWC ORT models
+can be fed through the individual preprocessing and engine APIs, as tested below.
+
 Host frames for CUDA preprocessing are uploaded first, which usually costs more than the kernel
 (about 0.53 ms of 0.59 ms for a 1920 x 1080 BGR frame into 640 x 640 on an RTX 3060). Two choices
 of the caller shorten it:
@@ -501,6 +508,19 @@ benchmarks skip them elsewhere.
 | `yolov8n_detect_batch8` | `GeneralDetectBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 84 x 8400` | `e4e977efa425ffef0d9b70fc62003231ada785f63b3d5d525358aa1a4e472184` |
 | `yolov8n_pose_batch8` | `GeneralYoloPoseBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 56 x 8400` | `14f5126534571abf1b35b1144c93df6c1cd4905622c9502896a0e31862517e02` |
 | `yolov8n_segment_batch8` | `GeneralYoloSegmentBatch8.onnx` | `8 x 3 x 640 x 640` | `8 x 116 x 8400; 8 x 32 x 160 x 160` | `4994d3c819c1bd38a5e9707eb34915876948dce6809861bcd786d7c2135e7329` |
+
+NHWC Metal fixture: `assets/test/onnx/GeneralClassifyNhwc.onnx` adapts the official
+YOLOv8n classifier above with a `[1,640,640,3]` FP32 input and an entry Transpose
+`[0,3,1,2]`; weights and `[1,1000]` output are unchanged. Local
+`assets/test/scripts/prepare_nhwc_classify.py` uses ONNX 1.20.1 and ONNX Runtime 1.31.0
+to create/check it. SHA256:
+`a69ba8ed45c625ba654a22f40f88344a32e3401dfc8164ad6de8221b77788c32`.
+Random-input outputs matched the NCHW source exactly. On M5 Pro, bus.jpg with nearest
+resize and std 255 gave top-1 608 for both CPU and Metal preprocessing; maximum output
+error was 4.10e-8 with ORT CPU and 0 with ORT CoreML. The test checks all 1000 output
+values and asserts Metal fused support; it is a layout/correctness check, not a batch or
+performance comparison. Logs: local `assets/test/benchmark_results/metal_nhwc_model_test.log`
+and `metal_hwc_preprocess_test.log`.
 
 Additional OCR fixtures use official PaddlePaddle ONNX weights. The `ppocrv6_tiny_det`,
 `ppocrv6_tiny_rec` and `ppocrv6_tiny_rec_batch8` template algos run through

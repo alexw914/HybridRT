@@ -970,6 +970,9 @@ TEST(ImagePreprocessorTest, MetalMatchesCpuAcrossGeometryStridesAndFrameChanges)
   auto invalid_source = uniform_bgr(8, 8, {10, 20, 30});
   Image invalid_target(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {8, 8});
   EXPECT_FALSE(metal->process(invalid_target, invalid_source.image, {-1, 0, 8, 8}, ImagePreprocessorParam{}));
+  Image padded_pixels(MemoryType::Cpu, ImageFormat::InterRgb, DataType::Float32, {8, 8}, {1024, 128, 16});
+  ASSERT_TRUE(padded_pixels.valid());
+  EXPECT_FALSE(metal->supports(ImageOperation::Fused, padded_pixels, invalid_source.image));
   for (const auto size : {Size{13, 7}, Size{31, 17}, Size{9, 15}, Size{13, 7}}) {
     const auto pitch = static_cast<std::size_t>(size.width * 3 + 16);
     auto src = uniform_bgr(size.width, size.height, {0, 0, 0}, pitch);
@@ -982,11 +985,14 @@ TEST(ImagePreprocessorTest, MetalMatchesCpuAcrossGeometryStridesAndFrameChanges)
     auto source = Image::wrap(MemoryType::Cpu, src.pixels.data(), source_format, size, DataType::Uint8, pitch);
     ASSERT_TRUE(source);
     const int side = size.width == 31 ? 16 : 8;
-    const auto row = static_cast<std::size_t>(side + 4) * sizeof(float);
-    const auto plane = row * static_cast<std::size_t>(side);
-    for (const auto format : {ImageFormat::PlanarRgb, ImageFormat::PlanarBgr}) {
+    for (const auto format :
+         {ImageFormat::PlanarRgb, ImageFormat::PlanarBgr, ImageFormat::InterRgb, ImageFormat::InterBgr}) {
+      const auto planar = format == ImageFormat::PlanarRgb || format == ImageFormat::PlanarBgr;
+      const auto row = static_cast<std::size_t>(side * (planar ? 1 : 3) + 4) * sizeof(float);
+      const auto plane = row * static_cast<std::size_t>(side);
+      const Stride stride = planar ? Stride{plane * 3, plane, row} : Stride{plane, row, 3 * sizeof(float)};
       Image expected(MemoryType::Cpu, format, DataType::Float32, {side, side});
-      Image actual(MemoryType::Cpu, format, DataType::Float32, {side, side}, {plane * 3, plane, row});
+      Image actual(MemoryType::Cpu, format, DataType::Float32, {side, side}, stride);
       for (const auto resize : {ResizeType::Normal, ResizeType::LetterBox, ResizeType::KeepRatio,
                                 ResizeType::CenterCrop, ResizeType::PadOutside, ResizeType::TextLine}) {
         for (const auto interpolation :
@@ -1001,6 +1007,7 @@ TEST(ImagePreprocessorTest, MetalMatchesCpuAcrossGeometryStridesAndFrameChanges)
             param.mean = {1, 2, 3};
             param.std = {255, 127, 63};
             param.default_color = {11, 22, 33};
+            ASSERT_TRUE(metal->supports(ImageOperation::Fused, actual, *source));
             const Rect crop{1, 1, size.width - 2, size.height - 2};
             const auto reference = cpu->process(expected, *source, crop, param);
             const auto result = metal->process(actual, *source, crop, param);
@@ -1018,7 +1025,7 @@ TEST(ImagePreprocessorTest, MetalMatchesCpuAcrossGeometryStridesAndFrameChanges)
                   const auto tolerance = interpolation == InterpolationMode::Linear
                                              ? 1.01F / (normalized ? param.std[static_cast<std::size_t>(c)] : 1.0F)
                                              : 1.0e-6F;
-                  EXPECT_NEAR(planar_at(actual, c, x, y), planar_at(expected, c, x, y), tolerance);
+                  EXPECT_NEAR(value_at(actual, c, x, y), value_at(expected, c, x, y), tolerance);
                 }
           }
         }

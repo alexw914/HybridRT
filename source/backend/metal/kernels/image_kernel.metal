@@ -15,7 +15,7 @@ struct Params {
 kernel void preprocess(device const uchar* src [[buffer(0)]], device float* dst [[buffer(1)]],
                        constant Params& p [[buffer(2)]], uint2 xy [[thread_position_in_grid]]) {
   if (xy.x >= p.dw || xy.y >= p.dh) return;
-  const uint index = xy.y * p.dst_row + xy.x;
+  const uint index = xy.y * p.dst_row + (p.dst_plane == 0 ? xy.x * 3 : xy.x);
   const bool inside = xy.x >= p.left && xy.x < p.left + p.rw &&
                       xy.y >= p.top && xy.y < p.top + p.rh;
   float3 value = float3(p.fill[0], p.fill[1], p.fill[2]);
@@ -44,6 +44,6 @@ kernel void preprocess(device const uchar* src [[buffer(0)]], device float* dst 
     float result = value[p.swap ? 2 - channel : channel];
     if (p.normalization == 1 || (p.normalization == 2 && inside))
       result = (result - p.mean[channel]) * p.scale[channel];
-    dst[channel * p.dst_plane + index] = result;
+    dst[index + (p.dst_plane == 0 ? channel : channel * p.dst_plane)] = result;
   }
 }

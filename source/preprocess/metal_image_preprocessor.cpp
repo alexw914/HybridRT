@@ -99,12 +99,14 @@ auto MetalImagePreprocessor::accepts(core::MemoryType type) const -> bool {
 // The kernel works on wrapped host memory in place. Discrete GPUs would read it over the bus for every tap, so they
 // leave the work to the CPU flow; the float output must be addressable in whole elements.
 auto MetalImagePreprocessor::supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool {
+  const auto planar = dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::PlanarBgr;
   return op == ImageOperation::Fused && state_->unified && accepts(src.memory()->memory_type()) &&
          accepts(dst.memory()->memory_type()) && src.data_type() == core::DataType::Uint8 &&
          dst.data_type() == core::DataType::Float32 &&
          (src.format() == core::ImageFormat::InterRgb || src.format() == core::ImageFormat::InterBgr) &&
-         (dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::PlanarBgr) &&
-         dst.stride()[1] % sizeof(float) == 0 && dst.stride()[2] % sizeof(float) == 0;
+         (planar || dst.format() == core::ImageFormat::InterRgb || dst.format() == core::ImageFormat::InterBgr) &&
+         (planar || dst.stride()[2] == 3 * sizeof(float)) && dst.stride()[1] % sizeof(float) == 0 &&
+         dst.stride()[2] % sizeof(float) == 0;
 }
 
 auto MetalImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
@@ -128,8 +130,11 @@ auto MetalImagePreprocessor::fused(core::Image& dst, const ImageTransform& trans
         input + static_cast<std::size_t>(from.y) * src_stride + static_cast<std::size_t>(from.x) * 3;
     const auto src_extent =
         static_cast<std::size_t>(from.height - 1) * src_stride + static_cast<std::size_t>(from.width) * 3;
-    const auto dst_extent = 2 * dst.stride()[1] + static_cast<std::size_t>(dst.size().height - 1) * dst.stride()[2] +
-                            static_cast<std::size_t>(dst.size().width) * sizeof(float);
+    const auto planar = dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::PlanarBgr;
+    const auto dst_row = dst.stride()[planar ? 2 : 1];
+    const auto dst_plane = planar ? dst.stride()[1] : 0;
+    const auto dst_extent = 2 * dst_plane + static_cast<std::size_t>(dst.size().height - 1) * dst_row +
+                            static_cast<std::size_t>(dst.size().width) * sizeof(float) * (planar ? 1 : 3);
     const auto capacity = std::min(static_cast<std::size_t>([state_->device maxBufferLength]),
                                    static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()));
     KZ_CHECK_RETURN(src_extent <= capacity && dst_extent <= capacity, false,
@@ -141,8 +146,8 @@ auto MetalImagePreprocessor::fused(core::Image& dst, const ImageTransform& trans
     KZ_CHECK_RETURN(src_buffer != nil && dst_buffer != nil, false, "metal: cannot wrap host image memory");
     Params params{};
     params.src_row = static_cast<std::uint32_t>(src_stride);
-    params.dst_row = static_cast<std::uint32_t>(dst.stride()[2] / sizeof(float));
-    params.dst_plane = static_cast<std::uint32_t>(dst.stride()[1] / sizeof(float));
+    params.dst_row = static_cast<std::uint32_t>(dst_row / sizeof(float));
+    params.dst_plane = static_cast<std::uint32_t>(dst_plane / sizeof(float));
     params.sw = static_cast<std::uint32_t>(from.width);
     params.sh = static_cast<std::uint32_t>(from.height);
     params.dw = static_cast<std::uint32_t>(dst.size().width);
@@ -151,7 +156,8 @@ auto MetalImagePreprocessor::fused(core::Image& dst, const ImageTransform& trans
     params.rh = static_cast<std::uint32_t>(to.height);
     params.left = static_cast<std::uint32_t>(to.x);
     params.top = static_cast<std::uint32_t>(to.y);
-    params.swap = (src.format() == core::ImageFormat::InterRgb) != (dst.format() == core::ImageFormat::PlanarRgb);
+    params.swap = (src.format() == core::ImageFormat::InterRgb) !=
+                  (dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::InterRgb);
     params.nearest = param.interpolation_mode == InterpolationMode::Nearest;
     params.normalization = param.normalize_type == NormalizeType::Full  ? 1U
                            : param.normalize_type == NormalizeType::Roi ? 2U

@@ -1,16 +1,26 @@
 // -----------------------------------------------------------------------------
 // HybridRT | C++20 Model Inference Framework
 // File: tests/engine/onnxruntime_engine_test.cpp
-// Description: Tests the ONNX Runtime backend on a generated Relu model.
+// Description: Tests ONNX Runtime execution, configuration and NHWC image inputs.
 // -----------------------------------------------------------------------------
 
 #include <hrt/engine/engine.hpp>
 #include <hrt/hrtc/hrtc.hpp>
+#include <hrt/preprocess/image_preprocessor.hpp>
 
+#include <kitzoo/log/logger.hpp>
+
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <gtest/gtest.h>
 #include <initializer_list>
 #include <string_view>
+
+#ifdef HRT_ORT_MODEL_TEST
+#include <opencv2/imgcodecs.hpp>
+#endif
 
 #include "onnx_model.hpp"
 #include "template_config.hpp"
@@ -58,6 +68,66 @@ TEST(OnnxruntimeEngineTest, RunsReluModel) {
 #ifdef __APPLE__
 TEST(OnnxruntimeEngineTest, RunsOnCoreml) {
   expect_relu(R"({"execution_provider": "coreml", "provider_options": {"ModelFormat": "MLProgram"}})");
+}
+#endif
+
+#ifdef HRT_ORT_MODEL_TEST
+TEST(OnnxruntimeEngineTest, RunsNhwcClassifierWithMetalPreprocessing) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto algo = hrt::test::template_algo("yolov8n_classify");
+  if (!algo.is_object())
+    GTEST_SKIP() << "Classifier template unavailable";
+  auto path = hrt::test::template_model(algo);
+  path.replace_filename(path.stem().string() + "Nhwc.onnx");
+  const auto bgr = cv::imread((hrt::test::source_root() / "assets/test/images/bus.jpg").string());
+  if (!std::filesystem::is_regular_file(path) || bgr.empty())
+    GTEST_SKIP() << "NHWC classifier or bus.jpg unavailable";
+  auto metal = ImagePreprocessor::create(ImagePreprocessorType::Metal);
+  if (!metal)
+    GTEST_SKIP() << "Metal GPU unavailable";
+  auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  algo["config"]["engine"]["backends"][0]["data"] = path.string();
+  const auto source =
+      Image::wrap(MemoryType::Cpu, bgr.data, ImageFormat::InterBgr, {bgr.cols, bgr.rows}, DataType::Uint8, bgr.step);
+  ASSERT_TRUE(source);
+  auto param = algo["config"]["preprocess"].get<ImagePreprocessorParam>();
+  param.dst_image_format = ImageFormat::InterRgb;
+  param.interpolation_mode = InterpolationMode::Nearest;
+  for (const auto provider : {"cpu", "coreml"}) {
+    SCOPED_TRACE(provider);
+    algo["config"]["engine"]["backends"][0]["config"]["execution_provider"] = provider;
+    const auto loaded = hrt::hrtc::load_algo(algo);
+    ASSERT_TRUE(loaded);
+    auto engine = hrt::engine::Engine::create("ort");
+    ASSERT_TRUE(engine->initialize(loaded->engines.front()));
+    ASSERT_EQ(engine->input_protos().front().shape, (Shape{1, 640, 640, 3}));
+    ASSERT_EQ(engine->output_protos().front().shape, (Shape{1, 1000}));
+    auto input = std::make_shared<Buffer>(engine->input_protos().front());
+    auto output = std::make_shared<Buffer>(engine->output_protos().front());
+    Image target(input->memory()->ref(), ImageFormat::InterRgb, DataType::Float32, {640, 640});
+    ASSERT_TRUE(target.valid());
+    ASSERT_TRUE(metal->supports(ImageOperation::Fused, target, *source));
+    ASSERT_TRUE(engine->set_inputs({input}));
+    ASSERT_TRUE(engine->set_outputs({output}));
+    ASSERT_TRUE(cpu->process(target, *source, {}, param));
+    ASSERT_TRUE(engine->inference());
+    const auto* values = static_cast<const float*>(output->memory()->cpu());
+    const hrt::Vector<float> expected(values, values + output->volume());
+    ASSERT_TRUE(metal->process(target, *source, {}, param));
+    ASSERT_TRUE(engine->inference());
+    values = static_cast<const float*>(output->memory()->cpu());
+    float max_error = 0.0F;
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+      ASSERT_TRUE(std::isfinite(values[i]));
+      max_error = std::max(max_error, std::abs(values[i] - expected[i]));
+      EXPECT_NEAR(values[i], expected[i], 1.0e-5F);
+    }
+    const auto expected_class = std::max_element(expected.begin(), expected.end()) - expected.begin();
+    const auto actual_class = std::max_element(values, values + expected.size()) - values;
+    EXPECT_EQ(actual_class, expected_class);
+    KZ_LOG_INFO("NHWC classifier {}: top-1 {}, max CPU/Metal error {}", provider, actual_class, max_error);
+  }
 }
 #endif
 

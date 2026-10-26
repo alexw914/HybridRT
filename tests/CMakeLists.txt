@@ -99,7 +99,8 @@ if(HRT_USE_CUDA)
 endif()
 
 if(HRT_USE_ORT)
-    hybridrt_add_unit_test(onnxruntime_engine SOURCES engine/onnxruntime_engine_test.cpp DEPENDS hrt::hybridrt)
+    hybridrt_add_unit_test(onnxruntime_engine SOURCES engine/onnxruntime_engine_test.cpp DEPENDS hrt::hybridrt kitzoo::log)
+    hybridrt_enable_model_test(onnxruntime_engine)
 endif()
 
 if(HRT_USE_TENSORRT)
