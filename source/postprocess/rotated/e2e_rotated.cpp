@@ -12,7 +12,6 @@
 #include <numbers>
 
 #include "include/postprocess/common.hpp"
-#include "include/postprocess/nms.hpp"
 #include "include/postprocess/postprocessor_creators.hpp"
 
 namespace hrt::postprocess {
@@ -54,6 +53,8 @@ public:
 protected:
   auto decode(RotatedResultMap& result, const core::Buffers& outputs, std::size_t index,
               const preprocess::ImageTransform& transform) -> bool override {
+    if (!check_rotated_transform(transform))
+      return false;
     const HeadGridView output(*outputs[0], index, std::nullopt);
     const auto count = static_cast<std::size_t>(outputs[0]->shape()[1]);
     for (std::size_t i = 0; i < count; ++i) {
@@ -70,12 +71,11 @@ protected:
       const auto angle = output.at(i, 6);
       if (!(width > 0.0F && height > 0.0F) || !std::isfinite(angle))
         continue;
-      result[cls].push_back(
-          {{{output.at(i, 0), output.at(i, 1)}, {width, height}, angle * 180.0F / std::numbers::pi_v<float>},
-           score,
-           static_cast<std::int64_t>(cls)});
+      const core::RotatedRect rect{
+          {output.at(i, 0), output.at(i, 1)}, {width, height}, angle * 180.0F / std::numbers::pi_v<float>};
+      result[cls].push_back({transform.reverse(rect), score, static_cast<std::int64_t>(cls)});
     }
-    return rotated_reverse(result, transform);
+    return true;
   }
 
 private:

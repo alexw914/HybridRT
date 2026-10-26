@@ -165,6 +165,19 @@ auto check_yolo26_heads(Yolo26Param& param, const engine::Engine& engine, std::s
   return true;
 }
 
+auto check_rotated_transform(const preprocess::ImageTransform& transform) -> bool {
+  const auto& src = transform.src_roi;
+  const auto& dst = transform.dst_roi;
+  // Letterbox dimensions are rounded to integer pixels, and a device preprocessor may round
+  // them again, as DVPP does to even values: each side can miss the exact ratio by two pixels.
+  const auto difference =
+      std::abs(static_cast<std::int64_t>(src.width) * dst.height - static_cast<std::int64_t>(src.height) * dst.width);
+  const auto tolerance = 2 * (static_cast<std::int64_t>(src.width) + static_cast<std::int64_t>(src.height));
+  const auto uniform = difference <= tolerance;
+  KZ_CHECK_RETURN(uniform, false, "rotated: source mapping requires uniform scaling");
+  return true;
+}
+
 HeadGridView::HeadGridView(const core::Buffer& buffer, std::size_t index, std::optional<engine::DataLayout> layout)
     : int8_(buffer.data_type() == core::DataType::Int8), scale_(buffer.scale()), zero_point_(buffer.zero_point()) {
   const auto& shape = buffer.shape();

@@ -7,12 +7,10 @@
 
 #include "include/postprocess/nms.hpp"
 
-#include <kitzoo/log/logger.hpp>
-
 #include <algorithm>
-#include <cmath>
-#include <cstdint>
 #include <numeric>
+
+#include "include/postprocess/common.hpp"
 
 // OpenCV 5 moved rotatedRectangleIntersection and contourArea to geometry.
 #if __has_include(<opencv2/geometry.hpp>)
@@ -99,29 +97,18 @@ auto nms_reverse(DetectResultMap& result, const Vector<float>& iou_threshold,
   }
 }
 
-auto rotated_reverse(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool {
-  const auto& src = transform.src_roi;
-  const auto& dst = transform.dst_roi;
-  // Letterbox dimensions are rounded to integer pixels, and a device preprocessor may round
-  // them again, as DVPP does to even values: each side can miss the exact ratio by two pixels.
-  const auto difference =
-      std::abs(static_cast<std::int64_t>(src.width) * dst.height - static_cast<std::int64_t>(src.height) * dst.width);
-  const auto tolerance = 2 * (static_cast<std::int64_t>(src.width) + static_cast<std::int64_t>(src.height));
-  const auto uniform = difference <= tolerance;
-  if (!uniform)
-    result.clear();
-  KZ_CHECK_RETURN(uniform, false, "rotated: source mapping requires uniform scaling");
-  for (auto& [cls, boxes] : result)
-    for (auto& box : boxes)
-      box.rect = transform.reverse(box.rect);
-  return true;
-}
-
 auto nms_rotated_reverse(RotatedResultMap& result, const Vector<float>& iou_threshold,
                          const preprocess::ImageTransform& transform) -> bool {
-  for (auto& [cls, boxes] : result)
+  if (!check_rotated_transform(transform)) {
+    result.clear();
+    return false;
+  }
+  for (auto& [cls, boxes] : result) {
     nms_rotated(boxes, iou_threshold[cls]);
-  return rotated_reverse(result, transform);
+    for (auto& box : boxes)
+      box.rect = transform.reverse(box.rect);
+  }
+  return true;
 }
 
 } // namespace hrt::postprocess

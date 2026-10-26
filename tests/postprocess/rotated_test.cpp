@@ -181,6 +181,12 @@ TEST(RotatedTest, E2EDecodesRowsWithoutNms) {
   EXPECT_NEAR(box.rect.angle, 15.0F, 1e-4F);
   EXPECT_FLOAT_EQ(box.score, 0.9F);
   EXPECT_EQ(hrt::model::task_type("E2ERotated"), hrt::model::Task::Rotated);
+  const hrt::preprocess::ImageTransform stretched{{0, 0, 64, 64}, {0, 0, 128, 64}, {64, 64}};
+  EXPECT_FALSE(postprocessor->process(result, {hrt::test::create_buffer(output, values)}, stretched));
+  EXPECT_TRUE(result.empty());
+  const hrt::Vector<float> empty_rows(values.size(), 0.0F);
+  EXPECT_FALSE(postprocessor->process(result, {hrt::test::create_buffer(output, empty_rows)}, stretched));
+  EXPECT_TRUE(result.empty());
 }
 
 TEST(RotatedTest, E2EAbortsOnInvalidConfigOrOutputs) {

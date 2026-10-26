@@ -9,6 +9,7 @@
 #define HRT_POSTPROCESS_COMMON_HPP
 
 #include <hrt/engine/engine.hpp>
+#include <hrt/preprocess/image_preprocessor.hpp>
 
 #include <kitzoo/core/macro.hpp>
 #include <kitzoo/log/logger.hpp>
@@ -52,6 +53,9 @@ auto check_yolov5_heads(YoloV5Param& param, const engine::Engine& engine, std::s
 auto check_yolov8_heads(YoloV8Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
 
 auto check_yolo26_heads(Yolo26Param& param, const engine::Engine& engine, std::size_t extra_channels) -> bool;
+
+// Whether rotated boxes can retain their angle under this source mapping.
+auto check_rotated_transform(const preprocess::ImageTransform& transform) -> bool;
 
 // Bytes between consecutive samples of a batched host output.
 auto sample_bytes(const core::Buffer& output) -> std::size_t;

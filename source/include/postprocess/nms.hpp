@@ -28,10 +28,6 @@ auto nms_rotated(RotatedResult& boxes, float iou_threshold) -> void;
 auto nms_reverse(DetectResultMap& result, const Vector<float>& iou_threshold,
                  const preprocess::ImageTransform& transform) -> void;
 
-// Maps network-space rotated boxes back to the source; fails without uniform
-// scaling.
-auto rotated_reverse(RotatedResultMap& result, const preprocess::ImageTransform& transform) -> bool;
-
 auto nms_rotated_reverse(RotatedResultMap& result, const Vector<float>& iou_threshold,
                          const preprocess::ImageTransform& transform) -> bool;
 
