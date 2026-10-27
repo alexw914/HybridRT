@@ -148,7 +148,26 @@ __global__ auto preprocess_kernel(PreprocessBatch batch) -> void {
     return;
   }
   float value[3];
-  if (s.interpolation == ResizeInterpolation::Cubic) {
+  if (s.interpolation == ResizeInterpolation::Linear) {
+    int x0 = 0, x1 = 0, y0 = 0, y1 = 0, ax0 = 0, ax1 = 0, ay0 = 0, ay1 = 0;
+    linear_tap(rx, s.scale_x, s.src_width, x0, x1, ax0, ax1);
+    linear_tap(ry, s.scale_y, s.src_height, y0, y1, ay0, ay1);
+    int p00[3], p01[3], p10[3], p11[3];
+    fetch(s, x0, y0, p00);
+    fetch(s, x1, y0, p01);
+    fetch(s, x0, y1, p10);
+    fetch(s, x1, y1, p11);
+    for (int c = 0; c < 3; ++c)
+      value[c] = linear_value(p00[c] * ax0 + p01[c] * ax1, p10[c] * ax0 + p11[c] * ax1, ay0, ay1);
+  } else if (s.interpolation == ResizeInterpolation::Nearest) {
+    // In double as OpenCV: exact products such as 78 * 50 / 156 must floor the same way.
+    const int sx = min(static_cast<int>(floor(static_cast<double>(rx) * s.scale_x)), s.src_width - 1);
+    const int sy = min(static_cast<int>(floor(static_cast<double>(ry) * s.scale_y)), s.src_height - 1);
+    int p[3];
+    fetch(s, sx, sy, p);
+    for (int c = 0; c < 3; ++c)
+      value[c] = static_cast<float>(p[c]);
+  } else {
     int xs[4], ys[4], wx[4], wy[4];
     cubic_taps(rx, s.scale_x, s.src_width, xs, wx);
     cubic_taps(ry, s.scale_y, s.src_height, ys, wy);
@@ -168,25 +187,6 @@ __global__ auto preprocess_kernel(PreprocessBatch batch) -> void {
     }
     for (int c = 0; c < 3; ++c)
       value[c] = static_cast<float>(saturate(__float2int_rn(sum[c])));
-  } else if (s.interpolation == ResizeInterpolation::Nearest) {
-    // In double as OpenCV: exact products such as 78 * 50 / 156 must floor the same way.
-    const int sx = min(static_cast<int>(floor(static_cast<double>(rx) * s.scale_x)), s.src_width - 1);
-    const int sy = min(static_cast<int>(floor(static_cast<double>(ry) * s.scale_y)), s.src_height - 1);
-    int p[3];
-    fetch(s, sx, sy, p);
-    for (int c = 0; c < 3; ++c)
-      value[c] = static_cast<float>(p[c]);
-  } else {
-    int x0 = 0, x1 = 0, y0 = 0, y1 = 0, ax0 = 0, ax1 = 0, ay0 = 0, ay1 = 0;
-    linear_tap(rx, s.scale_x, s.src_width, x0, x1, ax0, ax1);
-    linear_tap(ry, s.scale_y, s.src_height, y0, y1, ay0, ay1);
-    int p00[3], p01[3], p10[3], p11[3];
-    fetch(s, x0, y0, p00);
-    fetch(s, x1, y0, p01);
-    fetch(s, x0, y1, p10);
-    fetch(s, x1, y1, p11);
-    for (int c = 0; c < 3; ++c)
-      value[c] = linear_value(p00[c] * ax0 + p01[c] * ax1, p10[c] * ax0 + p11[c] * ax1, ay0, ay1);
   }
   for (int c = 0; c < 3; ++c)
     store(s, x, y, c, value[s.channel[c]] * s.alpha[c] + s.beta[c]);

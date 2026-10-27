@@ -4,6 +4,16 @@ Before/after optimization records, newest first. Current benchmark results and r
 
 Each entry states the cause/change, measurement conditions, data, and validation or limits. Values are historical for that source revision; later entries may supersede them. Missing historical settings are marked rather than inferred.
 
+## 2026-10-26: check CUDA linear interpolation first
+
+The CUDA preprocessing kernel previously checked Cubic and Nearest before reaching
+Linear. The branch order is now Linear, Nearest, Cubic, so the common Linear path
+is checked first. Interpolation calculations are unchanged.
+
+**Measurement / limits:** No before/after timing was collected; no speedup is claimed.
+The local macOS environment has no CUDA compiler or device, so CUDA build, runtime
+correctness and performance remain unverified. Formatting and diff checks passed.
+
 ## 2026-10-25: read batch outputs without per-sample view allocations
 
 Batch decoding previously created Memory/Buffer views and copied shape/stride metadata for
