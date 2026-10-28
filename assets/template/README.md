@@ -107,7 +107,7 @@ normalization). Model conversion and preprocessing must match the selected backe
 
 | Engine | Keys (all optional) |
 | --- | --- |
-| `ort` | `intra_op_num_threads`, `inter_op_num_threads` (0: ONNX Runtime's default); `execution_provider`: `cpu`, `coreml` (falls back to the CPU without CoreML); `provider_options` (CoreML only): `ModelFormat` `NeuralNetwork`/`MLProgram`, `MLComputeUnits` `ALL`/`CPUOnly`/`CPUAndGPU`, `RequireStaticInputShapes` and `EnableOnSubgraphs` `"0"`/`"1"`; `custom_op_libraries`: paths; `input_shapes` |
+| `ort` | `intra_op_num_threads`, `inter_op_num_threads` (0: ONNX Runtime's default); `execution_provider`: `cpu`, `coreml`, `cuda`, `tensorrt`, `openvino`, `dml`, `qnn`, `xnnpack`, `cann`, `dnnl`, `webgpu`, `vitisai` (falls back to the CPU with a warning when the ONNX Runtime package lacks it or it fails to start, including on options it rejects); `provider_options`: string keys and values passed to the provider unchanged, as named in its ONNX Runtime documentation (e.g. CoreML `ModelFormat` `NeuralNetwork`/`MLProgram`, `MLComputeUnits`; CUDA `device_id`; OpenVINO `device_type`; QNN `backend_type`; DirectML only `device_id`); `custom_op_libraries`: paths; `input_shapes` |
 | `ncnn` | `num_threads` (4) |
 | `mnn` | `forward_type`: `cpu`, `opencl`, `metal`, `vulkan`, `cuda`, `nn`, `auto`; `num_thread` (4); `cache_file`, `cache_dir`: OpenCL tuning cache |
 | `trt` | `plugin_libraries`: paths, loaded before the engine is deserialized; `input_shapes` (within optimization profile 0) |
@@ -145,7 +145,7 @@ Per platform:
 | `trt` | `device: "auto"` preprocesses with CUDA into the device input. |
 | `cann` | `device: "auto"` preprocesses with DVPP (VPC), which only crops, resizes and pads uint8 images: it has no normalization and no layout conversion, so the `.om` it feeds must do those in AIPP (`atc --insert_op_conf=<aipp.cfg>`, with `mean_chn_*`/`var_reci_chn_*` and `csc_switch`), as for RKNN's `image_input: true`. Use `dst_image_format: "inter_bgr"` or a YUV format, keep `mean`/`std` at their defaults, and give the model a width that is a multiple of 16, as VPC needs a row stride that is a multiple of 16 and at least 32. Engine inputs come from the DVPP memory pool, which VPC requires of the images it reads and writes, while outputs and staging use `aclrtMalloc`. An `.om` without AIPP takes float32, which VPC cannot write, so the CPU operators run the whole step; where VPC cannot run at all, such as a container without the media service, `device: "auto"` picks the CPU preprocessor outright. Only the steps VPC really runs get its even regions. ATC defaults to FP16: add `--precision_mode=must_keep_origin_dtype` to match an FP32 reference. |
 | `mnn` | `forward_type: "metal"` needs an SDK built with Metal; on Linux with RGA and a dma-heap `device: "auto"` uses the RGA, as for `ncnn`. |
-| `ort` | `execution_provider: "coreml"` needs a CoreML build; models with a dynamic batch need no `input_shapes`, other dynamic dims do. |
+| `ort` | Each provider needs an ONNX Runtime package built with it (e.g. CoreML on macOS, `onnxruntime-gpu` for CUDA and TensorRT, the DirectML package on Windows); `dml` also needs `dml_provider_factory.h` at build time. Engine buffers stay in host memory, so GPU providers copy inputs and outputs on every run and preprocessing runs on the CPU; on NVIDIA GPUs the `trt` engine avoids those copies. Models with a dynamic batch need no `input_shapes`, other dynamic dims do. |
 
 ## postprocess
 

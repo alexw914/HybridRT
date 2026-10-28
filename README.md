@@ -129,7 +129,8 @@ Enable one or more backends by providing their SDK paths at CMake configuration 
 | [RKNN](https://github.com/airockchip/rknn-toolkit2) | rknn | RKNN | `-DRKNN_ROOT=<sdk>` `-DRGA_ROOT=<sdk>` | Not pinned | 2.3.2 |
 | [CANN](https://www.hiascend.com/en/software/cann) | cann | Ascend OM | `-DCANN_ROOT=<sdk>` | 8.2 | 8.2 and 9.0.0 |
 
-ONNX Runtime supports CPU and optional CoreML execution. MNN acceleration depends on
+ONNX Runtime runs on the CPU or on an execution provider its package includes, such as CoreML,
+CUDA, TensorRT, OpenVINO, DirectML or QNN. MNN acceleration depends on
 the selected SDK and platform; CPU is the validated macOS configuration.
 Image preprocessing supports CPU, CUDA, Apple Metal, Rockchip RGA and Ascend DVPP;
 postprocessing runs on the CPU. Backend availability depends on the target hardware

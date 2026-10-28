@@ -69,6 +69,12 @@ TEST(OnnxruntimeEngineTest, RunsReluModel) {
 TEST(OnnxruntimeEngineTest, RunsOnCoreml) {
   expect_relu(R"({"execution_provider": "coreml", "provider_options": {"ModelFormat": "MLProgram"}})");
 }
+
+// The macOS package has no CUDA provider, and CoreML rejects the bad option.
+TEST(OnnxruntimeEngineTest, FallsBackToCpuWithoutProvider) {
+  expect_relu(R"({"execution_provider": "cuda", "provider_options": {"device_id": "0"}})");
+  expect_relu(R"({"execution_provider": "coreml", "provider_options": {"ModelFormat": "Bad"}})");
+}
 #endif
 
 #ifdef HRT_ORT_MODEL_TEST

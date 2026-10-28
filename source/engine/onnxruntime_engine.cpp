@@ -12,6 +12,7 @@
 #include <kitzoo/log/logger.hpp>
 
 #include <algorithm>
+#include <charconv>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -20,49 +21,69 @@
 
 #include "include/core/config.hpp"
 
-#if defined(__APPLE__) && __has_include(<coreml_provider_factory.h>)
-#include <coreml_provider_factory.h>
-#define HRT_ORT_COREML
+#if defined(_WIN32) && __has_include(<dml_provider_factory.h>)
+#include <dml_provider_factory.h>
+#define HRT_ORT_DML
 #endif
 
 namespace hrt::engine {
 
 namespace {
 
-#ifdef HRT_ORT_COREML
-// Provider option names follow newer ONNX Runtime releases; the flags cannot
-// express MLComputeUnits "CPUAndNeuralEngine".
-auto coreml_flags(const Map<String, String>& options, core::Problems& problems) -> std::uint32_t {
-  std::uint32_t flags = COREML_FLAG_USE_NONE;
-  for (const auto& [key, value] : options) {
-    const auto bad = [&]() -> void {
-      problems.push_back("config.provider_options." + key + ": unknown value \"" + value + "\"");
-    };
-    if (key == "ModelFormat") {
-      if (value == "MLProgram")
-        flags |= COREML_FLAG_CREATE_MLPROGRAM;
-      else if (value != "NeuralNetwork")
-        bad();
-    } else if (key == "MLComputeUnits") {
-      if (value == "CPUOnly")
-        flags |= COREML_FLAG_USE_CPU_ONLY;
-      else if (value == "CPUAndGPU")
-        flags |= COREML_FLAG_USE_CPU_AND_GPU;
-      else if (value != "ALL")
-        bad();
-    } else if (key == "RequireStaticInputShapes" || key == "EnableOnSubgraphs") {
-      if (value == "1")
-        flags |=
-            key == "EnableOnSubgraphs" ? COREML_FLAG_ENABLE_ON_SUBGRAPH : COREML_FLAG_ONLY_ALLOW_STATIC_INPUT_SHAPES;
-      else if (value != "0")
-        bad();
-    } else {
-      problems.push_back("config.provider_options." + key + ": unknown key");
-    }
-  }
-  return flags;
+// Config names and the GetAvailableProviders names, which the generic append also accepts.
+constexpr Array<Pair<std::string_view, const char*>, 12> kProviders{{
+    {"cpu", "CPUExecutionProvider"},
+    {"coreml", "CoreMLExecutionProvider"},
+    {"cuda", "CUDAExecutionProvider"},
+    {"tensorrt", "TensorrtExecutionProvider"},
+    {"openvino", "OpenVINOExecutionProvider"},
+    {"dml", "DmlExecutionProvider"},
+    {"qnn", "QNNExecutionProvider"},
+    {"xnnpack", "XnnpackExecutionProvider"},
+    {"cann", "CANNExecutionProvider"},
+    {"dnnl", "DnnlExecutionProvider"},
+    {"webgpu", "WebGpuExecutionProvider"},
+    {"vitisai", "VitisAIExecutionProvider"},
+}};
+
+// Providers configured through an options object, which takes the string options before it is appended.
+template <typename Options>
+auto append_with_options(OrtSessionOptions* session_options, const Vector<const char*>& keys,
+                         const Vector<const char*>& values, auto create, auto update, auto append, auto release)
+    -> OrtStatus* {
+  Options* options = nullptr;
+  if (auto* status = create(&options); status != nullptr)
+    return status;
+  KZ_SCOPE_EXIT {
+    release(options);
+  };
+  if (auto* status = update(options, keys.data(), values.data(), keys.size()); status != nullptr)
+    return status;
+  return append(session_options, options);
 }
+
+// DirectML takes only an adapter index, and needs memory patterns off and sequential execution.
+auto append_dml(const OrtApi* api, KZ_MAYBE_UNUSED OrtSessionOptions* session_options,
+                KZ_MAYBE_UNUSED const Map<String, String>& options) -> OrtStatus* {
+#ifdef HRT_ORT_DML
+  int device_id = 0;
+  for (const auto& [key, value] : options) {
+    const auto* end = value.data() + value.size();
+    if (key != "device_id" || std::from_chars(value.data(), end, device_id).ptr != end)
+      return api->CreateStatus(ORT_INVALID_ARGUMENT, ("bad provider option " + key + "=" + value).c_str());
+  }
+  const OrtDmlApi* dml = nullptr;
+  for (auto* status :
+       {api->GetExecutionProviderApi("DML", ORT_API_VERSION, reinterpret_cast<const void**>(&dml)),
+        api->DisableMemPattern(session_options), api->SetSessionExecutionMode(session_options, ORT_SEQUENTIAL)}) {
+    if (status != nullptr)
+      return status;
+  }
+  return dml->SessionOptionsAppendExecutionProvider_DML(session_options, device_id);
+#else
+  return api->CreateStatus(ORT_NOT_IMPLEMENTED, "built without dml_provider_factory.h");
 #endif
+}
 
 auto to_data_type(ONNXTensorElementDataType type) -> std::optional<core::DataType> {
   switch (type) {
@@ -123,6 +144,56 @@ auto OrtEngine::error(OrtStatus* status) const -> String {
   return message;
 }
 
+auto OrtEngine::available(const char* provider) const -> bool {
+  char** names = nullptr;
+  int count = 0;
+  if (auto failure = error(api_->GetAvailableProviders(&names, &count)); !failure.empty()) {
+    KZ_LOG_WARN("onnxruntime: {}", failure);
+    return false;
+  }
+  KZ_SCOPE_EXIT {
+    static_cast<void>(error(api_->ReleaseAvailableProviders(names, count)));
+  };
+  return std::any_of(names, names + count, [&](const char* name) -> bool { return std::strcmp(name, provider) == 0; });
+}
+
+auto OrtEngine::append_provider(OrtSessionOptions* session_options, const Pair<std::string_view, const char*>& provider,
+                                const Map<String, String>& options) const -> String {
+  Vector<const char*> keys, values;
+  for (const auto& [key, value] : options) {
+    keys.push_back(key.c_str());
+    values.push_back(value.c_str());
+  }
+  const auto& name = provider.first;
+  if (name == "cuda")
+    return error(append_with_options<OrtCUDAProviderOptionsV2>(
+        session_options, keys, values, api_->CreateCUDAProviderOptions, api_->UpdateCUDAProviderOptions,
+        api_->SessionOptionsAppendExecutionProvider_CUDA_V2, api_->ReleaseCUDAProviderOptions));
+  if (name == "tensorrt")
+    return error(append_with_options<OrtTensorRTProviderOptionsV2>(
+        session_options, keys, values, api_->CreateTensorRTProviderOptions, api_->UpdateTensorRTProviderOptions,
+        api_->SessionOptionsAppendExecutionProvider_TensorRT_V2, api_->ReleaseTensorRTProviderOptions));
+  if (name == "cann")
+    return error(append_with_options<OrtCANNProviderOptions>(
+        session_options, keys, values, api_->CreateCANNProviderOptions, api_->UpdateCANNProviderOptions,
+        api_->SessionOptionsAppendExecutionProvider_CANN, api_->ReleaseCANNProviderOptions));
+  if (name == "dnnl")
+    return error(append_with_options<OrtDnnlProviderOptions>(
+        session_options, keys, values, api_->CreateDnnlProviderOptions, api_->UpdateDnnlProviderOptions,
+        api_->SessionOptionsAppendExecutionProvider_Dnnl, api_->ReleaseDnnlProviderOptions));
+  if (name == "dml")
+    return error(append_dml(api_, session_options, options));
+  // ORT asks for the dedicated functions of providers that have them.
+  if (name == "openvino")
+    return error(api_->SessionOptionsAppendExecutionProvider_OpenVINO_V2(session_options, keys.data(), values.data(),
+                                                                         keys.size()));
+  if (name == "vitisai")
+    return error(
+        api_->SessionOptionsAppendExecutionProvider_VitisAI(session_options, keys.data(), values.data(), keys.size()));
+  return error(api_->SessionOptionsAppendExecutionProvider(session_options, provider.second, keys.data(), values.data(),
+                                                           keys.size()));
+}
+
 auto OrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json::Json& config) -> bool {
   if (api_ == nullptr) {
     KZ_LOG_ERROR("onnxruntime: runtime does not provide API version {}", ORT_API_VERSION);
@@ -149,19 +220,12 @@ auto OrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
   core::read(config, "provider_options", provider_options, "config", problems);
   core::read(config, "custom_op_libraries", custom_op_libraries, "config", problems);
   core::read(config, "input_shapes", input_shapes, "config", problems);
-  KZ_MAYBE_UNUSED std::uint32_t coreml = 0;
-  if (provider == "coreml") {
-#ifdef HRT_ORT_COREML
-    coreml = coreml_flags(provider_options, problems);
-#else
-    // A speed preference: packages that ask for CoreML still run elsewhere.
-    KZ_LOG_WARN("onnxruntime: CoreML needs an Apple build of ONNX Runtime; using the CPU provider");
-#endif
-  } else if (provider != "cpu") {
+  const auto entry = std::find_if(kProviders.begin(), kProviders.end(),
+                                  [&](const auto& item) -> bool { return item.first == provider; });
+  if (entry == kProviders.end())
     problems.push_back("config.execution_provider: unknown value \"" + provider + "\"");
-  } else if (!provider_options.empty()) {
+  else if (provider == "cpu" && !provider_options.empty())
     problems.emplace_back("config.provider_options: the CPU provider takes none");
-  }
   KZ_CHECK_MSG(problems.empty(), "onnxruntime: {}", core::join(problems));
   auto failure = error(api_->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "hybridrt", &env_));
   KZ_CHECK_MSG(failure.empty(), "onnxruntime: {}", failure);
@@ -185,12 +249,14 @@ auto OrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
       api_->ReleaseStatus(status);
     }
   }
-#ifdef HRT_ORT_COREML
-  if (provider == "coreml") {
-    failure = error(OrtSessionOptionsAppendExecutionProvider_CoreML(session_options, coreml));
-    KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: CoreML: {}", failure);
+  // A speed preference: a provider the runtime lacks or cannot start, such as CUDA without its
+  // libraries, leaves the session on the CPU provider.
+  if (provider != "cpu") {
+    if (!available(entry->second))
+      KZ_LOG_WARN("onnxruntime: runtime lacks {}; using the CPU provider", entry->second);
+    else if (failure = append_provider(session_options, *entry, provider_options); !failure.empty())
+      KZ_LOG_WARN("onnxruntime: {}: {}; using the CPU provider", entry->second, failure);
   }
-#endif
   // A model that does not load fails this backend, so the next one can be tried.
   failure =
       error(api_->CreateSessionFromArray(env_, param.data->data(), param.data->size(), session_options, &session_));
