@@ -318,10 +318,12 @@ def test_process_batch(manifest, batch):
         model.process_batch(images)
 
 
+@pytest.mark.parametrize("engine_type", ["ort", "trt"])
 @pytest.mark.parametrize("task", ["detect", "segment", "pose", "classify"])
 @pytest.mark.parametrize("batch", [1, 4, 8])
-@needs_ort
-def test_real_model_batches(monkeypatch, tmp_path, task, batch):
+def test_real_model_batches(monkeypatch, tmp_path, task, batch, engine_type):
+    if not hrt.engine_available(engine_type):
+        pytest.skip(f"{engine_type} is unavailable")
     cv2 = pytest.importorskip("cv2")
     monkeypatch.chdir(ROOT)
     name = f"yolov8n_{task}" + (f"_batch{batch}" if batch != 1 else "")
@@ -335,6 +337,12 @@ def test_real_model_batches(monkeypatch, tmp_path, task, batch):
     if not backends:
         pytest.skip("ONNX model unavailable")
     algo["config"]["engine"]["backends"] = backends
+    if engine_type == "trt":
+        plan = ROOT / "assets/test/trt" / Path(backends[0]["data"]).with_suffix(".engine").name
+        if not plan.is_file():
+            pytest.skip("TensorRT plan unavailable")
+        algo["config"]["engine"]["backends"] = [{"engine_type": "trt", "data": str(plan)}]
+        algo["config"]["preprocess"]["device"] = "cuda"
     config["algos"] = [algo]
     path = tmp_path / "batch.json"
     path.write_text(json.dumps(config))

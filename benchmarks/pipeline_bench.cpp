@@ -16,6 +16,12 @@
 
 namespace {
 
+// OpenCV changes process-wide TBB state; callers must not reconfigure it concurrently.
+auto configure_opencv() -> void {
+  static std::once_flag once;
+  std::call_once(once, []() -> void { cv::setNumThreads(1); });
+}
+
 #ifdef HRT_BENCH_ORT
 constexpr hrt::Array<const char*, 2> kProviders{"cpu", "coreml"};
 
@@ -28,7 +34,7 @@ const hrt::Vector<std::int64_t> kProviderArgs{0};
 
 // Latency of one call; args: task, provider (0 ORT CPU, 1 ORT CoreML).
 auto BM_Task(benchmark::State& state) -> void {
-  cv::setNumThreads(1);
+  configure_opencv();
   const auto task = static_cast<std::size_t>(state.range(0));
   const auto provider = static_cast<std::size_t>(state.range(1));
   state.SetLabel(hrt::String(hrt::bench::kTasks.at(task)) + "/" + kProviders.at(provider));
@@ -56,6 +62,7 @@ auto BM_Task(benchmark::State& state) -> void {
 // (items_per_second = calls per second); args: preprocess, engine and
 // postprocess stage counts.
 auto BM_Pooled(benchmark::State& state) -> void {
+  configure_opencv();
   using Model = hrt::model::ImageModel<hrt::postprocess::DetectResultMap>;
   static std::mutex mutex;
   static hrt::Map<hrt::Array<std::int64_t, 3>, hrt::UniquePtr<Model>> models;
@@ -86,7 +93,7 @@ auto BM_Pooled(benchmark::State& state) -> void {
 // Counter
 // "lines" is the number of recognized text lines per call.
 auto BM_Ocr(benchmark::State& state) -> void {
-  cv::setNumThreads(1);
+  configure_opencv();
   const auto recognizer = static_cast<std::size_t>(state.range(0));
   const auto provider = static_cast<hrt::bench::Provider>(state.range(1));
   constexpr hrt::Array<const char*, 2> kRecognizers{"tiny", "tiny_batch8"};
@@ -206,7 +213,7 @@ auto coco_frames() -> const hrt::Vector<cv::Mat>& {
 // batch. Each call passes `batch` images, and every caller cycles through the same 32 COCO images from its own
 // offset. Items are images.
 auto BM_Batch(benchmark::State& state) -> void {
-  cv::setNumThreads(1);
+  configure_opencv();
   const auto task = static_cast<std::size_t>(state.range(0));
   const auto pipeline = state.range(1);
   const auto batch = state.range(2);

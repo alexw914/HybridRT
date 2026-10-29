@@ -10,22 +10,22 @@ Setup is excluded; timed work includes synchronization. Blank/`—` cells are un
 Models, hashes and validation: [template reference](template/README.md#test-models).
 Raw results: local `assets/test/benchmark_results/`. Optimization history: [perf.md](perf.md).
 
-| Item | M5 Pro | RTX 3060 | RK3588 |
-| --- | --- | --- | --- |
-| Device | MacBook Pro | Desktop PC | Radxa Rock 5B+ |
-| CPU | Apple M5 Pro, 15 cores | AMD Ryzen 5 5600X, 6 cores / 12 threads | RK3588, 4x Cortex-A76 + 4x Cortex-A55 |
-| Memory | 24 GB | 32 GB | 8 GB |
-| Accelerator | M5 Pro GPU / ANE (Metal, CoreML) | RTX 3060 12 GB | RK3588 NPU, RGA |
-| OS | macOS 27.0.1 | Windows host, WSL2 Ubuntu 24.04.3, kernel 6.18.40.1 | Debian 12 aarch64 |
-| Build host | native | native | cross-build on the RTX 3060 WSL2 host |
-| Compiler | Apple Clang 21.0.0 | GCC 13.3.0, nvcc 13.0.88 | Arm GNU Toolchain 12.2.rel1 `aarch64-none-linux-gnu-g++` 12.2.1 |
-| CMake | 4.4.3 | CMake 3.28.3, Ninja 1.11.1 | CMake 3.28.3, Ninja 1.11.1 |
-| Build type | Release `-O3` | Release `-O3 -DNDEBUG` | Release `-O3 -DNDEBUG` |
-| OpenCV | 4.10.0 | 4.6.0 (Ubuntu package) | 4.6.0 (cross-built) |
-| Inference SDK | ONNX Runtime 1.31.0 | ONNX Runtime 1.31.0, TensorRT 10.14.1.48 | rknpu2 / librknnrt 2.3.2 |
-| Device SDK | Metal | driver 591.74, CUDA 13.0.96 | librga 1.10.1 |
-| Affinity | none | none | A76 cores 4-7 |
-| Pipeline | CPU / Metal → ORT CoreML | CUDA → TensorRT | RGA → RKNN |
+| Item | M5 Pro | RTX 3060 | RK3588 | RTX 4090 |
+| --- | --- | --- | --- | --- |
+| Device | MacBook Pro | Desktop PC | Radxa Rock 5B+ | Cloud VM |
+| CPU | Apple M5 Pro, 15 cores | AMD Ryzen 5 5600X, 6 cores / 12 threads | RK3588, 4x Cortex-A76 + 4x Cortex-A55 | Intel Xeon Gold 6462C, 16 cores / 32 threads exposed |
+| Memory | 24 GB | 32 GB | 8 GB | 247 GiB (OS reported) |
+| Accelerator | M5 Pro GPU / ANE (Metal, CoreML) | RTX 3060 12 GB | RK3588 NPU, RGA | RTX 4090; GPU 0 only, 49,140 MiB exposed |
+| OS | macOS 27.0.1 | Windows host, WSL2 Ubuntu 24.04.3, kernel 6.18.40.1 | Debian 12 aarch64 | Ubuntu 22.04.4 x86_64 container, host kernel 3.10.0-1160.119.1.el7 |
+| Build host | native | native | cross-build on the RTX 3060 WSL2 host | native |
+| Compiler | Apple Clang 21.0.0 | GCC 13.3.0, nvcc 13.0.88 | Arm GNU Toolchain 12.2.rel1 `aarch64-none-linux-gnu-g++` 12.2.1 | GCC 11.4.0, nvcc 12.4.131 |
+| CMake | 4.4.3 | CMake 3.28.3, Ninja 1.11.1 | CMake 3.28.3, Ninja 1.11.1 | CMake 4.4.4, Ninja 1.10.1 |
+| Build type | Release `-O3` | Release `-O3 -DNDEBUG` | Release `-O3 -DNDEBUG` | Release `-O3 -DNDEBUG` |
+| OpenCV | 4.10.0 | 4.6.0 (Ubuntu package) | 4.6.0 (cross-built) | 4.5.4 (Ubuntu package) |
+| Inference SDK | ONNX Runtime 1.31.0 | ONNX Runtime 1.31.0, TensorRT 10.14.1.48 | rknpu2 / librknnrt 2.3.2 | ONNX Runtime 1.23.2, TensorRT 10.16.1.11 |
+| Device SDK | Metal | driver 591.74, CUDA 13.0.96 | librga 1.10.1 | driver 550.54.14, CUDA 12.4 |
+| Affinity | none | none | A76 cores 4-7 | none; `CUDA_VISIBLE_DEVICES=0` |
+| Pipeline | CPU / Metal → ORT CoreML | CUDA → TensorRT | RGA → RKNN | CUDA → TensorRT |
 
 ## Preprocessing
 
@@ -159,6 +159,18 @@ RK3588 CPU, RKNN FP16 B1 versus native INT8 B1/B4/B8 (whole-batch ms):
   inputs/outputs; unsupported nodes run on CPU. TensorRT: FP32 `--noTF32`. RKNN: FP16.
 - M5 Pro measured 2026-10-25: 24 cases × 3 repetitions. Raw results:
   `m5_pipeline.json`, `m5_pipeline.log`. DVPP → CANN is unmeasured.
+- RTX 4090 measured 2026-10-29 on GPU 0, current source at `789694e` with the
+  TensorRT batch-binding tests and the OpenCV benchmark setup fix added.
+  OpenCV thread configuration runs once before concurrent callers, avoiding a
+  TBB setup race; timed pipeline work is unchanged. All 12 plans were built with
+  TensorRT 10.16.1.11, `--noTF32`, default FP32 precision, no FP16/INT8 flags.
+  Host BGR images are uploaded for CUDA preprocessing; TensorRT consumes CUDA
+  buffers directly. CPU postprocessing, output transfers and synchronization are
+  included. Google Benchmark 1.9.5 sums wall time across the 8 callers for
+  calibration, so this run uses `--benchmark_min_time=4s` and
+  `--benchmark_min_warmup_time=1.6` to retain ≥0.5 s measured wall time and
+  ≥0.2 s warm-up per repetition, with 3 repetitions. Raw results:
+  `gpu4090_pipeline.json`, `gpu4090_pipeline.log`.
 
 | Platform | Path | Model | B1 (images/s) | B4 (images/s) | B8 (images/s) |
 | --- | --- | --- | ---: | ---: | ---: |
@@ -174,6 +186,10 @@ RK3588 CPU, RKNN FP16 B1 versus native INT8 B1/B4/B8 (whole-batch ms):
 | RTX 3060 | CUDA → TensorRT | `yolov8n_segment` | 361.8 | 497.1 | 621.1 |
 | RTX 3060 | CUDA → TensorRT | `yolov8n_pose` | 399.7 | 654.7 | 853.1 |
 | RTX 3060 | CUDA → TensorRT | `yolov8n_classify` | 1109.0 | 1364.9 | 1419.8 |
+| RTX 4090 | CUDA → TensorRT | `yolov8n_detect` | 1509.8 | 2744.8 | 2798.9 |
+| RTX 4090 | CUDA → TensorRT | `yolov8n_segment` | 1231.0 | 2089.5 | 2063.2 |
+| RTX 4090 | CUDA → TensorRT | `yolov8n_pose` | 1432.4 | 2639.6 | 2672.4 |
+| RTX 4090 | CUDA → TensorRT | `yolov8n_classify` | 2986.8 | 6339.5 | 5743.0 |
 | RK3588 | RGA → RKNN | `yolov8n_detect` | 65.3 | 62.6 | 61.4 |
 | RK3588 | RGA → RKNN | `yolov8n_segment` | 52.9 | 51.6 | 50.2 |
 | RK3588 | RGA → RKNN | `yolov8n_pose` | 55.3 | 54.7 | 57.7 |
@@ -192,6 +208,13 @@ Batch validation:
 - M5 Pro ORT CPU: detect/pose/classify passed. Segment B4/B8 differed from B1 by one
   mask pixel on two COCO128 samples (minimum IoU 0.9999793); strict equality failed.
   CoreML batch-result equivalence is unchecked.
-- TensorRT: batch checks passed on the measured fixtures.
+- TensorRT: batch checks passed on the measured fixtures. On RTX 4090, the
+  current CPU/CUDA-preprocess TensorRT B1-vs-B4/B8 checks passed; Python/C API
+  additionally passed single-image, full-batch and split-batch calls for all four
+  tasks at B1/B4/B8. Python: 43 passed, 2 CoreML cases skipped; Rust passed.
+  CUDA scratch-lifetime concurrency test passed 20 consecutive runs.
+  Full functional CTest: 217 passed, 8 platform skips, 1 existing OCR assertion
+  failure (`RecognizesLinesInBatchesLikeOneByOne`: expected >8 lines, got 8).
+  Logs: `gpu4090_ctest_final.log`, `gpu4090_cuda_repeat20.log`.
 - RKNN: strict batch equality failed; throughput does not establish B1 equivalence.
   The board service was stopped during measurement and restored afterward.
