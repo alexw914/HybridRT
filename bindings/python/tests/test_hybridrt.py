@@ -292,3 +292,75 @@ def test_example_prints_results(manifest, tmp_path):
     assert "yolov8n_classify (CLASSIFY) on bus.jpg: 1 results" in run.stdout
     assert "yolov8n_detect: skipped" in run.stdout
     assert "ocr: skipped" in run.stdout
+
+
+@needs_ort
+@pytest.mark.parametrize("batch", [1, 4, 8])
+def test_process_batch(manifest, batch):
+    path = manifest({"classify": (CLASSIFY, "ort")})
+    (path.parent / "identity.onnx").write_bytes(identity_onnx((batch, 3, 2, 2)))
+    with hrt.Model(path) as model:
+        assert model.batch == batch
+        for count in (1, batch, batch + 1):
+            images = [np.full((8 + i, 8, 3), i * 20, np.uint8) for i in range(count)]
+            results = model.process_batch(images)
+            assert len(results) == count
+            for image, result in zip(images, results):
+                np.testing.assert_allclose(result.scores[0], model.process(image).scores[0])
+            cropped = model.process_batch(images, rois=[(1, 1, 4, 4)] * count)
+            for result, crop in zip(results, cropped):
+                np.testing.assert_allclose(result.scores[0], crop.scores[0])
+        with pytest.raises(ValueError):
+            model.process_batch([])
+        with pytest.raises(ValueError):
+            model.process_batch(images, rois=[])
+    with pytest.raises(ValueError):
+        model.process_batch(images)
+
+
+@pytest.mark.parametrize("task", ["detect", "segment", "pose", "classify"])
+@pytest.mark.parametrize("batch", [1, 4, 8])
+@needs_ort
+def test_real_model_batches(monkeypatch, tmp_path, task, batch):
+    cv2 = pytest.importorskip("cv2")
+    monkeypatch.chdir(ROOT)
+    name = f"yolov8n_{task}" + (f"_batch{batch}" if batch != 1 else "")
+    config = json.loads(TEMPLATE.read_text())
+    algos = [algo for algo in config["algos"] if algo["name"] == name]
+    if not algos or not BUS.is_file():
+        pytest.skip("model or image unavailable")
+    algo = algos[0]
+    backends = [b for b in algo["config"]["engine"]["backends"]
+                if b["engine_type"] == "ort" and Path(b["data"]).is_file()]
+    if not backends:
+        pytest.skip("ONNX model unavailable")
+    algo["config"]["engine"]["backends"] = backends
+    config["algos"] = [algo]
+    path = tmp_path / "batch.json"
+    path.write_text(json.dumps(config))
+    bus = cv2.imread(str(BUS))
+    images = [bus, cv2.flip(bus, 1)]
+
+    def compare(actual, expected):
+        if isinstance(actual, np.ndarray):
+            np.testing.assert_allclose(actual, expected, rtol=1e-4, atol=1e-4)
+        elif isinstance(actual, (list, tuple)):
+            assert len(actual) == len(expected)
+            for a, b in zip(actual, expected):
+                compare(a, b)
+        elif hasattr(actual, "__dataclass_fields__"):
+            for field in actual.__dataclass_fields__:
+                compare(getattr(actual, field), getattr(expected, field))
+        else:
+            assert actual == expected
+
+    with hrt.Model(path) as model:
+        assert model.batch == batch
+        expected = [model.process(image) for image in images]
+        for count in (1, batch, batch + 1):
+            outputs = model.process_batch([images[i % 2] for i in range(count)])
+            assert len(outputs) == count
+            for i, output in enumerate(outputs):
+                compare(output, expected[i % 2])
+    # Returned arrays, including masks, own their data after native results die.
+    compare(outputs[0], expected[0])

@@ -54,7 +54,11 @@ fn value_info(name: &str, dims: &[u64]) -> Vec<u8> {
 
 /// y = Identity(x) over float {1, 3, 2, 2}, opset 13, as tests/engine/onnx_model.hpp writes it.
 pub fn identity_onnx() -> Vec<u8> {
-    let dims = [1, 3, 2, 2];
+    identity_onnx_batch(1)
+}
+
+pub fn identity_onnx_batch(batch: u64) -> Vec<u8> {
+    let dims = [batch, 3, 2, 2];
     let node = [bytes(1, b"x"), bytes(2, b"y"), bytes(4, b"Identity")].concat();
     let graph = [
         bytes(1, &node),

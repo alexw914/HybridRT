@@ -529,25 +529,47 @@ auto hrt_result_data(const HrtResult* result) -> const HrtResultData* {
   return result != nullptr ? &result->data : nullptr;
 }
 
+auto hrt_model_batch(const HrtModel* model) -> std::size_t {
+  return model != nullptr ? std::visit([](const auto& value) -> std::size_t { return value->batch(); }, model->model)
+                          : 0;
+}
+
 auto hrt_model_process(HrtModel* model, const HrtImage* image, const HrtRect* roi, HrtResult* result) -> HrtStatus {
+  return hrt_model_process_batch(model, image, roi, 1, &result);
+}
+
+auto hrt_model_process_batch(HrtModel* model, const HrtImage* images, const HrtRect* rois, std::size_t count,
+                             HrtResult* const* results) -> HrtStatus {
   begin();
-  if (model == nullptr || image == nullptr || result == nullptr)
-    return fail(HRT_STATUS_INVALID_ARGUMENT, "hrt_model_process: null argument");
-  if (image->data == nullptr || image->width <= 0 || image->height <= 0 || image->format <= HRT_IMAGE_FORMAT_UNKNOWN ||
-      image->format > HRT_IMAGE_FORMAT_GRAY)
-    return fail(HRT_STATUS_INVALID_ARGUMENT, "hrt_model_process: invalid image");
-  const auto src = core::Image::wrap(core::MemoryType::Cpu, const_cast<void*>(image->data),
-                                     static_cast<core::ImageFormat>(image->format), {image->width, image->height},
-                                     core::DataType::Uint8, image->row_pitch);
-  if (!src)
-    return fail_logged(HRT_STATUS_INVALID_ARGUMENT, "hrt_model_process: cannot wrap the image");
-  const auto rect = roi != nullptr ? core::Rect{roi->x, roi->y, roi->width, roi->height} : core::Rect{};
+  if (model == nullptr || images == nullptr || results == nullptr || count == 0)
+    return fail(HRT_STATUS_INVALID_ARGUMENT, "hrt_model_process_batch: null argument or empty batch");
+  hrt::Set<HrtResult*> unique;
+  hrt::Vector<core::Image> srcs;
+  hrt::Vector<core::Rect> rects;
+  srcs.reserve(count);
+  rects.reserve(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    if (results[i] == nullptr || !unique.insert(results[i]).second)
+      return fail(HRT_STATUS_INVALID_ARGUMENT, "hrt_model_process_batch: null or repeated result");
+    const auto& image = images[i];
+    if (image.data == nullptr || image.width <= 0 || image.height <= 0 || image.format <= HRT_IMAGE_FORMAT_UNKNOWN ||
+        image.format > HRT_IMAGE_FORMAT_GRAY)
+      return fail(HRT_STATUS_INVALID_ARGUMENT, "hrt_model_process_batch: invalid image");
+    auto src = core::Image::wrap(core::MemoryType::Cpu, const_cast<void*>(image.data),
+                                 static_cast<core::ImageFormat>(image.format), {image.width, image.height},
+                                 core::DataType::Uint8, image.row_pitch);
+    if (!src)
+      return fail_logged(HRT_STATUS_INVALID_ARGUMENT, "hrt_model_process_batch: cannot wrap the image");
+    srcs.push_back(std::move(*src));
+    rects.push_back(rois != nullptr ? core::Rect{rois[i].x, rois[i].y, rois[i].width, rois[i].height} : core::Rect{});
+  }
   return std::visit(
       [&](auto& image_model) -> HrtStatus {
-        auto output = image_model->process_sync(*src, rect);
-        if (!output)
+        auto output = image_model->process_sync(srcs, rects);
+        if (!output || output->size() != count)
           return fail_logged(HRT_STATUS_PROCESS_FAILED, "processing of algo " + model->algo + " failed");
-        assign(*result, model->task, std::move(*output));
+        for (std::size_t i = 0; i < count; ++i)
+          assign(*results[i], model->task, std::move((*output)[i]));
         return HRT_STATUS_OK;
       },
       model->model);

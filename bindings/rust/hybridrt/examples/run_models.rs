@@ -85,9 +85,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         let image = Image::new(&rgb, ImageFormat::InterRgb, width, height)?;
         let model = Model::new(&package, Some(algo), ModelOptions::default())?;
-        let results = model.run(&image, None)?;
+        let batch = model.run_batch(std::slice::from_ref(&image), None)?;
+        let results = &batch[0];
         println!("{algo} ({:?}) on {name}: {} results", model.task(), results.len());
-        print_results(model.task(), &results);
+        print_results(model.task(), results);
     }
 
     let (detection, recognition, name) = OCR;

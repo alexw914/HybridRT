@@ -62,6 +62,16 @@ Real-model tests load only available entries from the reference template: detect
 pose and classification on `bus.jpg`, and rotated boxes on `airport.jpg` in `assets/test/images/`.
 See [test model sources and exports](../../assets/template/README.md#test-models).
 
+## Batch inference
+
+`model.batch()` reports the static engine batch size.
+`model.run_batch(&images, None)` returns an owned `Vec<Results>` in input order,
+including for a single image. `model.process_batch(&images, rois, &mut results)`
+reuses one result per image. Input and result slices must have the same positive
+length; `rois` is `None` or one rectangle per image. Calls group images by engine
+batch size and do not decode unused samples of the last group. The existing
+single-image API and separate OCR API remain available.
+
 ## OCR
 
 ```rust

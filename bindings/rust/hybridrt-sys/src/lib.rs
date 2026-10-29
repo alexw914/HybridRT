@@ -209,6 +209,14 @@ extern "C" {
         model: *mut *mut HrtModel,
     ) -> HrtStatus;
     pub fn hrt_model_destroy(model: *mut HrtModel);
+    pub fn hrt_model_batch(model: *const HrtModel) -> usize;
+    pub fn hrt_model_process_batch(
+        model: *mut HrtModel,
+        images: *const HrtImage,
+        rois: *const HrtRect,
+        count: usize,
+        results: *const *mut HrtResult,
+    ) -> HrtStatus;
     pub fn hrt_model_task(model: *const HrtModel) -> HrtTask;
     pub fn hrt_model_algo_name(model: *const HrtModel) -> *const c_char;
 

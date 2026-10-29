@@ -7,6 +7,9 @@
 #ifndef HRT_CAPI_HRT_H
 #define HRT_CAPI_HRT_H
 
+// C99 declarations require leading return types, including when included from C++.
+// NOLINTBEGIN(modernize-use-trailing-return-type)
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -235,8 +238,22 @@ HRT_API const HrtResultData* hrt_result_data(const HrtResult* result);
 // preprocess resize_type is pad_outside. Reusing `result` keeps its storage.
 HRT_API HrtStatus hrt_model_process(HrtModel* model, const HrtImage* image, const HrtRect* roi, HrtResult* result);
 
+// Static engine batch size; null returns zero.
+HRT_API size_t hrt_model_batch(const HrtModel* model);
+
+// Runs any positive count, including one, in groups of up to hrt_model_batch().
+// images and results contain count entries; rois is null or contains count entries.
+// Results must be distinct, valid handles. Output order matches input order.
+// Unused samples in a partial engine batch are not decoded. Inputs remain alive
+// until this synchronous call returns. Failure leaves existing results unchanged.
+// Thread-safe for distinct results, as with hrt_model_process.
+HRT_API HrtStatus hrt_model_process_batch(HrtModel* model, const HrtImage* images, const HrtRect* rois, size_t count,
+                                          HrtResult* const* results);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
+// NOLINTEND(modernize-use-trailing-return-type)
 
 #endif // HRT_CAPI_HRT_H

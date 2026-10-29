@@ -590,6 +590,39 @@ impl Model {
         check(unsafe { sys::hrt_model_process(self.raw.as_ptr(), &raw, roi, results.raw.as_ptr()) })
     }
 
+    /// The static engine batch size.
+    pub fn batch(&self) -> usize {
+        // SAFETY: the model remains valid throughout the call.
+        unsafe { sys::hrt_model_batch(self.raw.as_ptr()) }
+    }
+
+    /// Runs a nonempty image slice, including one image, in engine-sized groups.
+    /// Results are ordered like images; partial batches are supported.
+    pub fn process_batch(&self, images: &[Image<'_>], rois: Option<&[Rect]>, results: &mut [Results]) -> Result<()> {
+        if images.is_empty() || images.len() != results.len() || rois.is_some_and(|rects| rects.len() != images.len()) {
+            return Err(Error::new(Status::InvalidArgument, "invalid batch or ROI count"));
+        }
+        let images: Vec<_> = images.iter().map(|image| image.to_raw()).collect();
+        let handles: Vec<_> = results.iter_mut().map(|result| result.raw.as_ptr()).collect();
+        // SAFETY: slices have matching lengths; images borrow their pixels and
+        // each owned result is exclusively borrowed for the synchronous call.
+        check(unsafe {
+            sys::hrt_model_process_batch(
+                self.raw.as_ptr(),
+                images.as_ptr(),
+                rois.map_or(ptr::null(), |rects| rects.as_ptr()),
+                images.len(),
+                handles.as_ptr(),
+            )
+        })
+    }
+
+    pub fn run_batch(&self, images: &[Image<'_>], rois: Option<&[Rect]>) -> Result<Vec<Results>> {
+        let mut results = (0..images.len()).map(|_| Results::new()).collect::<Result<Vec<_>>>()?;
+        self.process_batch(images, rois, &mut results)?;
+        Ok(results)
+    }
+
     pub fn run(&self, image: &Image<'_>, roi: Option<Rect>) -> Result<Results> {
         let mut results = Results::new()?;
         self.process(image, roi, &mut results)?;

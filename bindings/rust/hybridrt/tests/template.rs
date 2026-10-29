@@ -47,7 +47,9 @@ fn runs_template_models_when_available() {
             return None;
         }
         let model = Model::new(&package, Some(algo), ModelOptions::default()).unwrap();
-        Some((model.task(), model.run(input, None).unwrap()))
+        let mut batch = model.run_batch(std::slice::from_ref(input), None).unwrap();
+        assert_eq!(batch.len(), 1);
+        Some((model.task(), batch.remove(0)))
     };
 
     if let Some((task, results)) = run("yolov8n_detect", "GeneralDetect.onnx", &image) {

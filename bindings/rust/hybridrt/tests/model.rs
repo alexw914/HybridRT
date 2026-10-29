@@ -201,3 +201,48 @@ fn runs_calls_from_threads() {
         }
     });
 }
+
+#[test]
+fn runs_batches_and_reuses_results() {
+    if !engine_available("ort") {
+        return;
+    }
+    for batch in [1, 4, 8] {
+        let path = manifest(&format!("batch{batch}"), &[("classify", CLASSIFY, "ort")]);
+        std::fs::write(
+            path.parent().unwrap().join("identity.onnx"),
+            common::identity_onnx_batch(batch),
+        )
+        .unwrap();
+        let model = Model::new(&Package::load(path).unwrap(), None, ModelOptions::default()).unwrap();
+        assert_eq!(model.batch(), batch as usize);
+        let pixels: Vec<_> = (0..9u8).map(|i| vec![i * 20; 8 * 8 * 3]).collect();
+        let images: Vec<_> = pixels
+            .iter()
+            .map(|p| Image::new(p, ImageFormat::InterBgr, 8, 8).unwrap())
+            .collect();
+        for count in [1, batch as usize, batch as usize + 1] {
+            let mut results = model.run_batch(&images[..count], None).unwrap();
+            for (i, result) in results.iter().enumerate() {
+                assert_scores(result.scores(0).unwrap(), &[i as f32 * 20.0 / 255.0; 12]);
+            }
+            let rois = vec![
+                Rect {
+                    x: 1,
+                    y: 1,
+                    width: 4,
+                    height: 4
+                };
+                count
+            ];
+            model
+                .process_batch(&images[..count], Some(&rois), &mut results)
+                .unwrap();
+            for (i, result) in results.iter().enumerate() {
+                assert_scores(result.scores(0).unwrap(), &[i as f32 * 20.0 / 255.0; 12]);
+            }
+            assert!(model.process_batch(&images[..count], Some(&[]), &mut results).is_err());
+        }
+        assert!(model.run_batch(&[], None).is_err());
+    }
+}

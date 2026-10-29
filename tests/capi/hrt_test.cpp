@@ -368,3 +368,57 @@ TEST(HrtTest, RunsPackedOcrModelWhenAvailable) {
   GTEST_SKIP() << "Needs ONNX Runtime and OpenCV imgcodecs";
 #endif
 }
+
+TEST(HrtTest, RunsSingleAndPartialBatches) {
+  if (!hrt_engine_available("ort"))
+    GTEST_SKIP() << "ORT unavailable";
+  EXPECT_EQ(hrt_model_batch(nullptr), 0U);
+  for (const auto batch : {1, 4, 8}) {
+    auto algo = identity_algo("batch", classify_config());
+    algo.engines[0].data =
+        std::make_shared<const hrt::hrtc::Bytes>(hrt::test::unary_model("Identity", {batch, 3, 2, 2}));
+    auto* package = load_package({algo});
+    HrtModel* model = nullptr;
+    ASSERT_EQ(hrt_model_create(package, nullptr, nullptr, &model), HRT_STATUS_OK) << hrt_last_error();
+    hrt_package_destroy(package);
+    EXPECT_EQ(hrt_model_batch(model), static_cast<std::size_t>(batch));
+    hrt::Vector<hrt::Vector<std::uint8_t>> pixels(9);
+    hrt::Vector<HrtImage> images;
+    hrt::Vector<HrtResult*> results(9, nullptr);
+    for (std::size_t i = 0; i < results.size(); ++i) {
+      pixels[i].assign(8 * 8 * 3, static_cast<std::uint8_t>(i * 20));
+      images.push_back({pixels[i].data(), HRT_IMAGE_FORMAT_INTER_BGR, 8, 8, 0});
+      ASSERT_EQ(hrt_result_create(&results[i]), HRT_STATUS_OK);
+    }
+    for (const auto count : {1U, 4U, 5U, 8U, 9U}) {
+      ASSERT_EQ(hrt_model_process_batch(model, images.data(), nullptr, count, results.data()), HRT_STATUS_OK)
+          << hrt_last_error();
+      for (std::size_t i = 0; i < count; ++i) {
+        const auto* data = hrt_result_data(results[i]);
+        ASSERT_EQ(data->count, 1U);
+        ASSERT_EQ(data->score_offsets[1], 12U);
+        for (std::size_t j = 0; j < 12; ++j)
+          EXPECT_NEAR(data->scores[j], static_cast<float>(i * 20) / 255.0F, 1e-6F);
+      }
+    }
+    EXPECT_EQ(hrt_model_process_batch(model, images.data(), nullptr, 0, results.data()), HRT_STATUS_INVALID_ARGUMENT);
+    const hrt::Array<HrtResult*, 2> duplicate{results[0], results[0]};
+    EXPECT_EQ(hrt_model_process_batch(model, images.data(), nullptr, 2, duplicate.data()), HRT_STATUS_INVALID_ARGUMENT);
+    EXPECT_EQ(hrt_model_process_batch(nullptr, images.data(), nullptr, 1, results.data()), HRT_STATUS_INVALID_ARGUMENT);
+    EXPECT_EQ(hrt_model_process_batch(model, nullptr, nullptr, 1, results.data()), HRT_STATUS_INVALID_ARGUMENT);
+    EXPECT_EQ(hrt_model_process_batch(model, images.data(), nullptr, 1, nullptr), HRT_STATUS_INVALID_ARGUMENT);
+    const hrt::Array<HrtResult*, 1> missing{nullptr};
+    EXPECT_EQ(hrt_model_process_batch(model, images.data(), nullptr, 1, missing.data()), HRT_STATUS_INVALID_ARGUMENT);
+    hrt::Array<HrtRect, 2> rois{{{1, 1, 4, 4}, {1, 1, 4, 4}}};
+    EXPECT_EQ(hrt_model_process_batch(model, images.data(), rois.data(), 2, results.data()), HRT_STATUS_OK);
+    rois[1] = {7, 7, 4, 4};
+    EXPECT_EQ(hrt_model_process_batch(model, images.data(), rois.data(), 2, results.data()), HRT_STATUS_PROCESS_FAILED);
+    EXPECT_NEAR(hrt_result_data(results[1])->scores[0], 20.0F / 255.0F, 1e-6F);
+    images[1].data = nullptr;
+    EXPECT_EQ(hrt_model_process_batch(model, images.data(), nullptr, 2, results.data()), HRT_STATUS_INVALID_ARGUMENT);
+    EXPECT_NEAR(hrt_result_data(results[1])->scores[0], 20.0F / 255.0F, 1e-6F);
+    for (auto* result : results)
+      hrt_result_destroy(result);
+    hrt_model_destroy(model);
+  }
+}

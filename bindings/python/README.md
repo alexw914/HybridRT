@@ -66,6 +66,16 @@ Real-model tests use available entries from the reference template, so missing u
 prevent loading. Detection, segmentation, pose and classification use `assets/test/images/bus.jpg`;
 rotated boxes use `airport.jpg`. See [test model sources and exports](../../assets/template/README.md#test-models).
 
+## Batch inference
+
+`model.batch` reports the static engine batch size. Use
+`results = model.process_batch([image1, image2], rois=None)` to process any
+positive number of images, including one. `rois` is omitted or contains one
+`(x, y, width, height)` rectangle per image; `format` applies to every image.
+Results are owned copies in input order. Images are grouped by the engine batch
+size; unused samples in the last group are not decoded. `process` remains the
+single-image API. OCR keeps its separate single-image API.
+
 ## OCR
 
 `OcrModel` selects detection and recognition algos from one JSON/.hrtc package:

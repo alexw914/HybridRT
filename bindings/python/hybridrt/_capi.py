@@ -150,6 +150,8 @@ def _load():
         "hrt_model_options_default": (HrtModelOptions, []),
         "hrt_model_create": (_c_int, [handle, ctypes.c_char_p, ctypes.POINTER(HrtModelOptions), out_handle]),
         "hrt_model_destroy": (None, [handle]),
+        "hrt_model_batch": (_c_size, [handle]),
+        "hrt_model_process_batch": (_c_int, [handle, ctypes.POINTER(HrtImage), ctypes.POINTER(HrtRect), _c_size, out_handle]),
         "hrt_model_task": (_c_int, [handle]),
         "hrt_model_algo_name": (ctypes.c_char_p, [handle]),
         "hrt_result_create": (_c_int, [out_handle]),

@@ -382,6 +382,43 @@ class Model:
         finally:
             lib.hrt_result_destroy(result)
 
+    @property
+    def batch(self):
+        """The model's static engine batch size."""
+        if not self._handle:
+            raise ValueError("the model is closed")
+        return lib.hrt_model_batch(self._handle)
+
+    def process_batch(self, images, format="inter_bgr", rois=None):
+        """Runs a nonempty image sequence, including one image; returns a list
+        in input order. rois is None or one rectangle per image. Inputs are
+        grouped by the engine batch size, and partial batches are supported."""
+        if not self._handle:
+            raise ValueError("the model is closed")
+        converted = [_image(image, format) for image in images]
+        count = len(converted)
+        if count == 0:
+            raise ValueError("expected at least one image")
+        rects = None
+        if rois is not None:
+            rois = list(rois)
+            if len(rois) != count:
+                raise ValueError("expected one ROI per image")
+            rects = (_capi.HrtRect * count)(*[_capi.HrtRect(*roi) for roi in rois])
+        natives = (_capi.HrtImage * count)(*[native for native, _ in converted])
+        handles = []
+        try:
+            for _ in range(count):
+                handle = ctypes.c_void_p()
+                _check(lib.hrt_result_create(ctypes.byref(handle)))
+                handles.append(handle)
+            results = (ctypes.c_void_p * count)(*[handle.value for handle in handles])
+            _check(lib.hrt_model_process_batch(self._handle, natives, rects, count, results))
+            return [_convert(lib.hrt_result_data(handle).contents) for handle in handles]
+        finally:
+            for handle in handles:
+                lib.hrt_result_destroy(handle)
+
     __call__ = process
 
     def close(self):

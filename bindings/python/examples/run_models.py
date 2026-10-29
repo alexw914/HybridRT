@@ -51,7 +51,7 @@ def main():
                 print(f"{algo}: skipped, needs the algo and {name}")
                 continue
             with package.model(algo) as model:
-                result = model(image)
+                result = model.process_batch([image])[0]
             print(f"{algo} ({model.task.name}) on {name}: {len(result)} results")
             print_result(result)
 
