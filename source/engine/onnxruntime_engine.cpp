@@ -85,45 +85,28 @@ auto append_dml(const OrtApi* api, KZ_MAYBE_UNUSED OrtSessionOptions* session_op
 #endif
 }
 
-auto to_data_type(ONNXTensorElementDataType type) -> std::optional<core::DataType> {
-  switch (type) {
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:
-    return core::DataType::Float32;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16:
-    return core::DataType::Float16;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64:
-    return core::DataType::Int64;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32:
-    return core::DataType::Int32;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8:
-    return core::DataType::Int8;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8:
-    return core::DataType::Uint8;
-  case ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL:
-    return core::DataType::Bool;
-  default:
-    return std::nullopt;
+constexpr Array<Pair<ONNXTensorElementDataType, core::DataType>, 7> kDataTypes{{
+    {ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, core::DataType::Float32},
+    {ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16, core::DataType::Float16},
+    {ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, core::DataType::Int64},
+    {ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32, core::DataType::Int32},
+    {ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8, core::DataType::Int8},
+    {ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8, core::DataType::Uint8},
+    {ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL, core::DataType::Bool},
+}};
+
+auto data_type(ONNXTensorElementDataType type) -> std::optional<core::DataType> {
+  for (const auto& [ort, native] : kDataTypes) {
+    if (ort == type)
+      return native;
   }
+  return std::nullopt;
 }
 
-auto to_ort_type(core::DataType type) -> ONNXTensorElementDataType {
-  switch (type) {
-  case core::DataType::Float32:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
-  case core::DataType::Float16:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16;
-  case core::DataType::Int64:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64;
-  case core::DataType::Int32:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32;
-  case core::DataType::Int8:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8;
-  case core::DataType::Uint8:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8;
-  case core::DataType::Bool:
-    return ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL;
-  case core::DataType::Unknown:
-    break;
+auto ort_type(core::DataType type) -> ONNXTensorElementDataType {
+  for (const auto& [ort, native] : kDataTypes) {
+    if (native == type)
+      return ort;
   }
   return ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED;
 }
@@ -203,8 +186,7 @@ auto OrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
     KZ_LOG_ERROR("onnxruntime: engine data (the .onnx model) is empty");
     return false;
   }
-  int intra_threads = 0;
-  int inter_threads = 0;
+  int intra_threads = 0, inter_threads = 0;
   String provider = "cpu";
   Map<String, String> provider_options;
   Vector<String> custom_op_libraries;
@@ -293,7 +275,7 @@ auto OrtEngine::resolve_outputs() -> bool {
   for (std::size_t i = 0; i < inputs.size(); ++i) {
     const auto& proto = input_protos_[i];
     failure = error(api_->CreateTensorAsOrtValue(allocator, proto.shape.data(), proto.shape.size(),
-                                                 to_ort_type(proto.data_type), &inputs[i]));
+                                                 ort_type(proto.data_type), &inputs[i]));
     KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
     void* data = nullptr;
     failure = error(api_->GetTensorMutableData(inputs[i], &data));
@@ -363,11 +345,11 @@ auto OrtEngine::read_io(bool input) -> bool {
     core::Shape shape(rank);
     ok(api_->GetDimensions(tensor_info, shape.data(), rank));
 
-    auto data_type = to_data_type(element_type);
+    auto type = data_type(element_type);
     // ponytail: dynamic dims are fixed once at load; varying them per run needs rebinding resized buffers.
-    KZ_CHECK_RETURN(data_type.has_value(), false, "onnxruntime: tensor {} has an unsupported type", names[index]);
+    KZ_CHECK_RETURN(type.has_value(), false, "onnxruntime: tensor {} has an unsupported type", names[index]);
     out_names.push_back(names[index]);
-    out_protos.push_back({core::MemoryType::Cpu, *data_type, shape, {}});
+    out_protos.push_back({core::MemoryType::Cpu, *type, shape, {}});
   }
   return true;
 }
@@ -385,7 +367,7 @@ auto OrtEngine::bind(const core::Buffers& buffers, bool input) -> bool {
     OrtValue* value = nullptr;
     const auto& shape = protos[i].shape;
     auto failure = error(api_->CreateTensorWithDataAsOrtValue(memory_info_, data, buffers[i]->bytes(), shape.data(),
-                                                              shape.size(), to_ort_type(protos[i].data_type), &value));
+                                                              shape.size(), ort_type(protos[i].data_type), &value));
     KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
     values.push_back(value);
     failure = error(input ? api_->BindInput(binding_, names[i].c_str(), value)
