@@ -41,7 +41,7 @@ auto round4(float value) -> double {
 }
 
 // Every task fills the same fields; unused ones stay empty.
-auto make_result(const hrt::postprocess::ObjectBox& box) -> Json {
+auto create_result(const hrt::postprocess::ObjectBox& box) -> Json {
   return {{"class_id", box.type},
           {"score", round4(box.score)},
           {"x", round4(box.rect.x)},
@@ -76,7 +76,7 @@ auto to_json(const hrt::postprocess::DetectResultMap& result, const hrt::core::R
   Json results = Json::array();
   for (const auto& [cls, boxes] : result)
     for (const auto& box : boxes)
-      results.push_back(make_result(box));
+      results.push_back(create_result(box));
   return results;
 }
 
@@ -86,11 +86,11 @@ auto to_json(const hrt::postprocess::RotatedResultMap& result, const hrt::core::
   for (const auto& [cls, boxes] : result) {
     for (const auto& box : boxes) {
       const auto& rect = box.rect;
-      auto item = make_result({{rect.center.x - (rect.size.width / 2.0F), rect.center.y - (rect.size.height / 2.0F),
-                                rect.size.width, rect.size.height},
-                               box.score,
-                               box.type,
-                               box.track_id});
+      auto item = create_result({{rect.center.x - (rect.size.width / 2.0F), rect.center.y - (rect.size.height / 2.0F),
+                                  rect.size.width, rect.size.height},
+                                 box.score,
+                                 box.type,
+                                 box.track_id});
       item["angle"] = round4(rect.angle);
       results.push_back(std::move(item));
     }
@@ -121,7 +121,7 @@ auto to_json(const hrt::postprocess::ClassifyResult& result, const hrt::core::Re
     }
     cls.push_back({{"output", output}, {"topk", std::move(topk)}, {"scores", std::move(all)}});
   }
-  auto item = make_result(box);
+  auto item = create_result(box);
   item["cls"] = std::move(cls);
   return Json::array({std::move(item)});
 }
@@ -129,7 +129,7 @@ auto to_json(const hrt::postprocess::ClassifyResult& result, const hrt::core::Re
 // One result over `region` with class_id -1; "embedding" holds the vector at
 // 6 decimals, as embeddings are compared by small differences.
 auto to_json(const hrt::postprocess::EmbeddingResult& result, const hrt::core::Rect& region) -> Json {
-  auto item = make_result({hrt::core::Rect2f(region), 0.0F, -1, -1});
+  auto item = create_result({hrt::core::Rect2f(region), 0.0F, -1, -1});
   Json values = Json::array();
   for (const auto value : result)
     values.push_back(std::round(static_cast<double>(value) * 1e6) / 1e6);
@@ -141,7 +141,7 @@ auto to_json(const hrt::postprocess::KeypointResultMap& result, const hrt::core:
   Json results = Json::array();
   for (const auto& [cls, objects] : result) {
     for (const auto& object : objects) {
-      auto item = make_result(object.box);
+      auto item = create_result(object.box);
       for (const auto& point : object.keypoints)
         item["keypoints"].push_back(
             {round4(point.point.x), round4(point.point.y), round4(point.score), static_cast<int>(point.visible)});
@@ -155,7 +155,7 @@ auto to_json(const hrt::postprocess::SegmentResultMap& result, const hrt::core::
   Json results = Json::array();
   for (const auto& [cls, objects] : result) {
     for (const auto& object : objects) {
-      auto item = make_result(object.box);
+      auto item = create_result(object.box);
       item["mask"] = to_json(object.mask);
       results.push_back(std::move(item));
     }

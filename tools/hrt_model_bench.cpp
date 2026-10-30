@@ -21,7 +21,7 @@
 namespace {
 
 // Float32 inputs get uniform [0, 1) values, other types zeros.
-auto make_input(const hrt::core::BufferProto& proto, std::mt19937& random) -> hrt::SharedPtr<hrt::core::Buffer> {
+auto create_input(const hrt::core::BufferProto& proto, std::mt19937& random) -> hrt::SharedPtr<hrt::core::Buffer> {
   hrt::core::Buffer host(hrt::core::MemoryType::Cpu, proto.data_type, proto.shape);
   auto* data = host.valid() ? host.memory()->mutable_cpu() : nullptr;
   if (data == nullptr)
@@ -60,7 +60,7 @@ auto bench(const hrt::hrtc::AlgoParam& algo, const hrt::hrtc::EngineParam& param
   hrt::core::Buffers inputs;
   hrt::core::Buffers outputs;
   for (const auto& proto : engine->input_protos())
-    inputs.push_back(make_input(proto, random));
+    inputs.push_back(create_input(proto, random));
   for (const auto& proto : engine->output_protos())
     outputs.push_back(std::make_shared<hrt::core::Buffer>(proto));
   const auto allocated = [](const hrt::core::Buffers& buffers) -> bool {
