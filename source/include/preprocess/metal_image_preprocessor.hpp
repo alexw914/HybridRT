@@ -22,6 +22,10 @@ public:
   auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
              const ImagePreprocessorParam& param, core::Stream* stream) -> bool override;
 
+  auto fused_batch(std::span<core::Image* const> dsts, std::span<const ImageTransform> transforms,
+                   std::span<const core::Image* const> srcs, const ImagePreprocessorParam& param, core::Stream* stream)
+      -> bool override;
+
   KZ_NODISCARD auto type() const -> ImagePreprocessorType override;
 
   KZ_NODISCARD auto memory_type() const -> core::MemoryType override;

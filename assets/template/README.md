@@ -61,6 +61,7 @@ RGB/BGR FP32 or uint8 as CHW (`planar_rgb`/`planar_bgr`) or HWC
 (`inter_rgb`/`inter_bgr`). Uint8 output requires identity or disabled normalization. Source
 and destination rows may be padded; HWC pixels remain packed RGB/BGR triplets. Linear,
 nearest and cubic sampling use the fused Metal kernel; unsupported formats fall back to CPU.
+A supported Metal batch encodes each sample in one command buffer and waits once for the batch.
 Output layout must match the model input. ORT currently reports NCHW to `ImageModel`; NHWC ORT models
 can be fed through the individual preprocessing and engine APIs, as tested below.
 

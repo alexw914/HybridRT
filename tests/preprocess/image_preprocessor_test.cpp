@@ -936,6 +936,49 @@ TEST(ImagePreprocessorTest, DvppMatchesCpuForCropsAndResizes) {
 }
 
 #ifdef __APPLE__
+TEST(ImagePreprocessorTest, MetalBatchMatchesSingleCalls) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto batch = ImagePreprocessor::create(ImagePreprocessorType::Metal);
+  auto single = ImagePreprocessor::create(ImagePreprocessorType::Metal);
+  if (!batch || !single)
+    GTEST_SKIP() << "Metal GPU unavailable";
+  hrt::Vector<hrt::Vector<std::uint8_t>> data(8);
+  hrt::Vector<Image> sources, actual, expected;
+  hrt::Vector<Rect> rects;
+  for (std::size_t i = 0; i < data.size(); ++i) {
+    const Size size{40 + static_cast<int>(i) * 2, 30 + static_cast<int>(i) * 2};
+    const auto format = i % 3 == 0 ? ImageFormat::InterBgr : i % 3 == 1 ? ImageFormat::Nv12 : ImageFormat::Nv21;
+    data[i].resize(static_cast<std::size_t>(size.width * size.height * 3));
+    for (std::size_t j = 0; j < data[i].size(); ++j)
+      data[i][j] = static_cast<std::uint8_t>((j * 17 + i * 31) % 256);
+    auto src = Image::wrap(MemoryType::Cpu, data[i].data(), format, size);
+    ASSERT_TRUE(src);
+    sources.push_back(*src);
+    rects.push_back({1, 1, size.width - 2, size.height - 2});
+    actual.emplace_back(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, Size{32, 24});
+    expected.emplace_back(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, Size{32, 24});
+  }
+  ImagePreprocessorParam param;
+  param.resize_type = ResizeType::LetterBox;
+  param.std = {255, 255, 255};
+  for (const auto count : {8U, 4U, 1U, 8U}) {
+    for (const auto interpolation : {InterpolationMode::Nearest, InterpolationMode::Linear, InterpolationMode::Cubic}) {
+      param.interpolation_mode = interpolation;
+      const auto transforms = batch->process(std::span{actual}.first(count), std::span{sources}.first(count),
+                                             std::span{rects}.first(count), param);
+      ASSERT_TRUE(transforms);
+      for (std::size_t i = 0; i < count; ++i) {
+        const auto transform = single->process(expected[i], sources[i], rects[i], param);
+        ASSERT_TRUE(transform);
+        EXPECT_EQ((*transforms)[i].src_roi, transform->src_roi);
+        EXPECT_EQ((*transforms)[i].dst_roi, transform->dst_roi);
+        EXPECT_EQ(std::memcmp(actual[i].memory()->cpu(), expected[i].memory()->cpu(), actual[i].buffer()->bytes()), 0);
+      }
+    }
+  }
+}
+
 TEST(ImagePreprocessorTest, MetalConvertsYuvInputs) {
   using namespace hrt::core;
   using namespace hrt::preprocess;

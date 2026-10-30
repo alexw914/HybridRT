@@ -308,11 +308,13 @@ auto BM_Batch(benchmark::State& state) -> void {
   using namespace hrt::preprocess;
   const auto batch = static_cast<std::size_t>(state.range(0));
   const auto mode = state.range(1);
-  constexpr const char* kLabels[] = {"cpu_1_thread",   "cpu_4_threads",    "cuda_host_source", "cuda_device_source",
-                                     "cuda_host_nv12", "cuda_device_nv12", "rga_host_source",  "rga_dma_source"};
+  constexpr const char* kLabels[] = {"cpu_1_thread",       "cpu_4_threads",  "cuda_host_source",
+                                     "cuda_device_source", "cuda_host_nv12", "cuda_device_nv12",
+                                     "rga_host_source",    "rga_dma_source", "metal_host_source"};
   state.SetLabel(kLabels[mode]);
   const auto cuda = mode >= 2 && mode <= 5;
-  const auto rga = mode >= 6;
+  const auto rga = mode == 6 || mode == 7;
+  const auto metal = mode == 8;
   cv::setNumThreads(mode == 1 ? 4 : 1);
   auto context = Context::create(cuda ? DeviceType::Cuda : DeviceType::Cpu);
   if (context == nullptr) {
@@ -321,9 +323,10 @@ auto BM_Batch(benchmark::State& state) -> void {
   }
   context->set_current();
   auto stream = context->create_stream();
-  auto processor = ImagePreprocessor::create(cuda  ? ImagePreprocessorType::Cuda
-                                             : rga ? ImagePreprocessorType::Rga
-                                                   : ImagePreprocessorType::Cpu);
+  auto processor = ImagePreprocessor::create(cuda    ? ImagePreprocessorType::Cuda
+                                             : rga   ? ImagePreprocessorType::Rga
+                                             : metal ? ImagePreprocessorType::Metal
+                                                     : ImagePreprocessorType::Cpu);
   if (processor == nullptr) {
     state.SkipWithMessage("The preprocessor is not available in this build");
     return;
@@ -465,4 +468,10 @@ BENCHMARK(BM_Resolution)
     ->MeasureProcessCPUTime();
 BENCHMARK(BM_CudaResolution)->Apply(cuda_cases)->Unit(benchmark::kMillisecond)->UseRealTime();
 BENCHMARK(BM_RgaResolution)->Apply(rga_cases)->Unit(benchmark::kMillisecond)->UseRealTime();
-BENCHMARK(BM_Batch)->ArgsProduct({{1, 4}, {0, 1, 2, 3, 4, 5, 6, 7}})->Unit(benchmark::kMillisecond)->UseRealTime();
+BENCHMARK(BM_Batch)
+    ->ArgsProduct({{1, 4}, {0, 1, 2, 3, 4, 5, 6, 7}})
+    ->Args({1, 8})
+    ->Args({4, 8})
+    ->Args({8, 8})
+    ->Unit(benchmark::kMillisecond)
+    ->UseRealTime();

@@ -4,6 +4,30 @@ Before/after optimization records, newest first. Current benchmark results and r
 
 Each entry states the cause/change, measurement conditions, data, and validation or limits. Values are historical for that source revision; later entries may supersede them. Missing historical settings are marked rather than inferred.
 
+
+## 2026-10-30: submit Metal preprocessing batches together
+
+Each fused Metal sample previously submitted a command buffer and waited before the next sample.
+Encode the batch into one command buffer, then wait once; each sample retains its own buffers and dispatch.
+
+Mac mini Apple M4, 24 GB, macOS 27.2, Apple Clang 21, Release, OpenCV 5.0, Metal,
+1920 x 1080 BGR host images to 640 x 640 planar RGB FP32 letterbox, one caller and OpenCV
+single-threaded. Google Benchmark BM_Batch, 20 warmup calls plus >=0.2 s warmup, three
+alternating runs per version, >=0.5 s each; median wall time in ms per batch. CPU affinity
+was unavailable. Baseline 665d135, current working tree.
+
+| Batch | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| 1 | 0.608 | 0.687 | +12.9% |
+| 4 | 2.572 | 1.385 | -46.1% |
+| 8 | 5.629 | 2.613 | -53.6% |
+
+Batch 1 measurements varied substantially (before 0.564–0.796 ms, after 0.600–0.687 ms),
+so the difference is inconclusive. Batch 4 and 8 gain from fewer submissions and waits;
+individual kernel dispatches and shared-memory traffic remain. Metal mixed-format batches
+match single calls, and NV12/NV21 YOLOv8n detection with ORT CPU matches CPU preprocessing
+for single, full and partial batches. Other platforms and backends were not measured.
+
 ## 2026-10-26: check CUDA linear interpolation first
 
 The CUDA preprocessing kernel previously checked Cubic and Nearest before reaching

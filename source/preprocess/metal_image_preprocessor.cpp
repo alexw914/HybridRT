@@ -120,76 +120,89 @@ auto MetalImagePreprocessor::supports_fused(const core::Image& dst, const core::
 
 auto MetalImagePreprocessor::fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
                                    const ImagePreprocessorParam& param, core::Stream* stream) -> bool {
+  core::Image* output = &dst;
+  const core::Image* input = &src;
+  return fused_batch({&output, 1}, {&transform, 1}, {&input, 1}, param, stream);
+}
+
+auto MetalImagePreprocessor::fused_batch(std::span<core::Image* const> dsts, std::span<const ImageTransform> transforms,
+                                         std::span<const core::Image* const> srcs, const ImagePreprocessorParam& param,
+                                         core::Stream* stream) -> bool {
   @autoreleasepool {
-    const auto& from = transform.src_roi;
-    const auto& to = transform.dst_roi;
-    KZ_CHECK_RETURN(!from.empty() && !to.empty(), false, "metal: empty resize region");
-    KZ_CHECK_RETURN(from == core::intersect(from, src.rect()) && to == core::intersect(to, dst.rect()), false,
-                    "metal: resize region is outside its image");
-    const auto* input = static_cast<const std::byte*>(src.memory()->cpu(stream));
-    auto* output = dst.memory()->mutable_cpu(stream);
-    KZ_CHECK_RETURN(input != nullptr && output != nullptr, false, "metal: host buffers are unavailable");
-    const auto src_stride = src.stride()[1];
-    const bool yuv = src.format() == core::ImageFormat::Nv12 || src.format() == core::ImageFormat::Nv21;
-    const auto* src_origin =
-        yuv ? input : input + static_cast<std::size_t>(from.y) * src_stride + static_cast<std::size_t>(from.x) * 3;
-    const auto src_extent =
-        yuv ? src_stride * static_cast<std::size_t>(src.size().height + src.size().height / 2)
-            : static_cast<std::size_t>(from.height - 1) * src_stride + static_cast<std::size_t>(from.width) * 3;
-    const auto planar = dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::PlanarBgr;
-    const auto dst_row = dst.stride()[planar ? 2 : 1];
-    const auto dst_plane = planar ? dst.stride()[1] : 0;
-    const auto element_size = dst.data_type() == core::DataType::Float32 ? sizeof(float) : 1;
-    const auto dst_extent = 2 * dst_plane + static_cast<std::size_t>(dst.size().height - 1) * dst_row +
-                            static_cast<std::size_t>(dst.size().width) * element_size * (planar ? 1 : 3);
-    const auto capacity = std::min(static_cast<std::size_t>([state_->device maxBufferLength]),
-                                   static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()));
-    KZ_CHECK_RETURN(src_extent <= capacity && dst_extent <= capacity, false,
-                    "metal: image exceeds device buffer or kernel indexing limits");
-    NSUInteger src_offset = 0;
-    NSUInteger dst_offset = 0;
-    id<MTLBuffer> src_buffer = wrap_host(state_->device, src_origin, src_extent, src_offset);
-    id<MTLBuffer> dst_buffer = wrap_host(state_->device, output, dst_extent, dst_offset);
-    KZ_CHECK_RETURN(src_buffer != nil && dst_buffer != nil, false, "metal: cannot wrap host image memory");
-    Params params{};
-    params.src_row = static_cast<std::uint32_t>(src_stride);
-    params.dst_row = static_cast<std::uint32_t>(dst_row / element_size);
-    params.dst_plane = static_cast<std::uint32_t>(dst_plane / element_size);
-    params.sw = static_cast<std::uint32_t>(from.width);
-    params.sh = static_cast<std::uint32_t>(from.height);
-    params.dw = static_cast<std::uint32_t>(dst.size().width);
-    params.dh = static_cast<std::uint32_t>(dst.size().height);
-    params.rw = static_cast<std::uint32_t>(to.width);
-    params.rh = static_cast<std::uint32_t>(to.height);
-    params.left = static_cast<std::uint32_t>(to.x);
-    params.top = static_cast<std::uint32_t>(to.y);
-    params.source = yuv ? (src.format() == core::ImageFormat::Nv12 ? 1U : 2U) : 0U;
-    params.origin_x = yuv ? static_cast<std::uint32_t>(from.x) : 0;
-    params.origin_y = yuv ? static_cast<std::uint32_t>(from.y) : 0;
-    params.chroma = yuv ? static_cast<std::uint32_t>(src_stride * static_cast<std::size_t>(src.size().height)) : 0;
-    params.float_output = dst.data_type() == core::DataType::Float32;
-    params.swap = (src.format() == core::ImageFormat::InterRgb) !=
-                  (dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::InterRgb);
-    params.interpolation = param.interpolation_mode == InterpolationMode::Nearest ? 1U
-                           : param.interpolation_mode == InterpolationMode::Cubic ? 2U
-                                                                                  : 0U;
-    params.normalization = param.normalize_type == NormalizeType::Full  ? 1U
-                           : param.normalize_type == NormalizeType::Roi ? 2U
-                                                                        : 0U;
-    params.mean = param.mean;
-    for (std::size_t c = 0; c < 3; ++c) {
-      // The kernel swaps the fill as a source pixel; default_color is in input channel order.
-      params.fill[c] = std::clamp(std::nearbyint(param.default_color[params.swap != 0U ? 2 - c : c]), 0.0F, 255.0F);
-      params.scale[c] = 1.0F / param.std[c];
-    }
     id<MTLCommandBuffer> command = [state_->queue commandBuffer];
     id<MTLComputeCommandEncoder> encoder = [command computeCommandEncoder];
     KZ_CHECK_RETURN(command != nil && encoder != nil, false, "metal: command allocation failed");
     [encoder setComputePipelineState:state_->pipeline];
-    [encoder setBuffer:src_buffer offset:src_offset atIndex:0];
-    [encoder setBuffer:dst_buffer offset:dst_offset atIndex:1];
-    [encoder setBytes:&params length:sizeof(params) atIndex:2];
-    [encoder dispatchThreads:MTLSizeMake(params.dw, params.dh, 1) threadsPerThreadgroup:MTLSizeMake(16, 16, 1)];
+    for (std::size_t i = 0; i < dsts.size(); ++i) {
+      auto& dst = *dsts[i];
+      const auto& src = *srcs[i];
+      const auto& transform = transforms[i];
+      const auto& from = transform.src_roi;
+      const auto& to = transform.dst_roi;
+      KZ_CHECK_RETURN(!from.empty() && !to.empty(), false, "metal: empty resize region");
+      KZ_CHECK_RETURN(from == core::intersect(from, src.rect()) && to == core::intersect(to, dst.rect()), false,
+                      "metal: resize region is outside its image");
+      const auto* input = static_cast<const std::byte*>(src.memory()->cpu(stream));
+      auto* output = dst.memory()->mutable_cpu(stream);
+      KZ_CHECK_RETURN(input != nullptr && output != nullptr, false, "metal: host buffers are unavailable");
+      const auto src_stride = src.stride()[1];
+      const bool yuv = src.format() == core::ImageFormat::Nv12 || src.format() == core::ImageFormat::Nv21;
+      const auto* src_origin =
+          yuv ? input : input + static_cast<std::size_t>(from.y) * src_stride + static_cast<std::size_t>(from.x) * 3;
+      const auto src_extent =
+          yuv ? src_stride * static_cast<std::size_t>(src.size().height + src.size().height / 2)
+              : static_cast<std::size_t>(from.height - 1) * src_stride + static_cast<std::size_t>(from.width) * 3;
+      const auto planar = dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::PlanarBgr;
+      const auto dst_row = dst.stride()[planar ? 2 : 1];
+      const auto dst_plane = planar ? dst.stride()[1] : 0;
+      const auto element_size = dst.data_type() == core::DataType::Float32 ? sizeof(float) : 1;
+      const auto dst_extent = 2 * dst_plane + static_cast<std::size_t>(dst.size().height - 1) * dst_row +
+                              static_cast<std::size_t>(dst.size().width) * element_size * (planar ? 1 : 3);
+      const auto capacity = std::min(static_cast<std::size_t>([state_->device maxBufferLength]),
+                                     static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()));
+      KZ_CHECK_RETURN(src_extent <= capacity && dst_extent <= capacity, false,
+                      "metal: image exceeds device buffer or kernel indexing limits");
+      NSUInteger src_offset = 0;
+      NSUInteger dst_offset = 0;
+      id<MTLBuffer> src_buffer = wrap_host(state_->device, src_origin, src_extent, src_offset);
+      id<MTLBuffer> dst_buffer = wrap_host(state_->device, output, dst_extent, dst_offset);
+      KZ_CHECK_RETURN(src_buffer != nil && dst_buffer != nil, false, "metal: cannot wrap host image memory");
+      Params params{};
+      params.src_row = static_cast<std::uint32_t>(src_stride);
+      params.dst_row = static_cast<std::uint32_t>(dst_row / element_size);
+      params.dst_plane = static_cast<std::uint32_t>(dst_plane / element_size);
+      params.sw = static_cast<std::uint32_t>(from.width);
+      params.sh = static_cast<std::uint32_t>(from.height);
+      params.dw = static_cast<std::uint32_t>(dst.size().width);
+      params.dh = static_cast<std::uint32_t>(dst.size().height);
+      params.rw = static_cast<std::uint32_t>(to.width);
+      params.rh = static_cast<std::uint32_t>(to.height);
+      params.left = static_cast<std::uint32_t>(to.x);
+      params.top = static_cast<std::uint32_t>(to.y);
+      params.source = yuv ? (src.format() == core::ImageFormat::Nv12 ? 1U : 2U) : 0U;
+      params.origin_x = yuv ? static_cast<std::uint32_t>(from.x) : 0;
+      params.origin_y = yuv ? static_cast<std::uint32_t>(from.y) : 0;
+      params.chroma = yuv ? static_cast<std::uint32_t>(src_stride * static_cast<std::size_t>(src.size().height)) : 0;
+      params.float_output = dst.data_type() == core::DataType::Float32;
+      params.swap = (src.format() == core::ImageFormat::InterRgb) !=
+                    (dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::InterRgb);
+      params.interpolation = param.interpolation_mode == InterpolationMode::Nearest ? 1U
+                             : param.interpolation_mode == InterpolationMode::Cubic ? 2U
+                                                                                    : 0U;
+      params.normalization = param.normalize_type == NormalizeType::Full  ? 1U
+                             : param.normalize_type == NormalizeType::Roi ? 2U
+                                                                          : 0U;
+      params.mean = param.mean;
+      for (std::size_t c = 0; c < 3; ++c) {
+        // The kernel swaps the fill as a source pixel; default_color is in input channel order.
+        params.fill[c] = std::clamp(std::nearbyint(param.default_color[params.swap != 0U ? 2 - c : c]), 0.0F, 255.0F);
+        params.scale[c] = 1.0F / param.std[c];
+      }
+      [encoder setBuffer:src_buffer offset:src_offset atIndex:0];
+      [encoder setBuffer:dst_buffer offset:dst_offset atIndex:1];
+      [encoder setBytes:&params length:sizeof(params) atIndex:2];
+      [encoder dispatchThreads:MTLSizeMake(params.dw, params.dh, 1) threadsPerThreadgroup:MTLSizeMake(16, 16, 1)];
+    }
     [encoder endEncoding];
     [command commit];
     // The wrapped host images must not be released or reused before the GPU is done with them.

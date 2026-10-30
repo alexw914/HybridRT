@@ -26,6 +26,7 @@
 
 #if defined(HRT_ORT_MODEL_TEST) || defined(HRT_RKNN_MODEL_TEST)
 #include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
 #endif
 
 #ifdef HRT_TEST_ORT
@@ -84,6 +85,89 @@ TEST_F(ImageModelTest, RunsPreprocessInferenceAndPostprocess) {
   EXPECT_FLOAT_EQ((*result)[0][4], 20.0F / 255.0F);
   EXPECT_FLOAT_EQ((*result)[0][11], 10.0F / 255.0F);
 }
+
+#if defined(__APPLE__) && defined(HRT_ORT_MODEL_TEST)
+TEST_F(ImageModelTest, MetalYuvDetectionMatchesCpu) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto probe = ImagePreprocessor::create(ImagePreprocessorType::Metal);
+  if (!probe)
+    GTEST_SKIP() << "Metal GPU unavailable";
+  auto algo = hrt::test::template_algo("yolov8n_detect");
+  const auto image = cv::imread((hrt::test::source_root() / "assets/test/images/bus.jpg").string());
+  if (algo.is_null() || !std::filesystem::exists(hrt::test::template_model(algo)) || image.empty())
+    GTEST_SKIP() << "Detection model or image unavailable";
+  cv::Mat bgr = image(cv::Rect{0, 0, image.cols & ~1, image.rows & ~1});
+  cv::Mat planar;
+  cv::cvtColor(bgr, planar, cv::COLOR_BGR2YUV_I420);
+  const auto area = static_cast<std::size_t>(bgr.cols * bgr.rows);
+  const auto* yuv = planar.ptr<std::uint8_t>();
+  auto cpu_algo = algo;
+  cpu_algo["config"]["preprocess"]["device"] = "cpu";
+  algo["config"]["preprocess"]["device"] = "metal";
+  using Model = hrt::model::ImageModel<hrt::postprocess::DetectResultMap>;
+  auto cpu = Model::create(cpu_algo, cpu_);
+  auto metal = Model::create(algo, cpu_);
+  ASSERT_TRUE(cpu && metal);
+  auto batch_algo = hrt::test::template_algo("yolov8n_detect_batch4");
+  const bool has_batch = batch_algo.is_object() && std::filesystem::exists(hrt::test::template_model(batch_algo));
+  hrt::UniquePtr<Model> batch_cpu, batch_metal;
+  if (has_batch) {
+    auto reference_algo = batch_algo;
+    reference_algo["config"]["preprocess"]["device"] = "cpu";
+    batch_algo["config"]["preprocess"]["device"] = "metal";
+    batch_cpu = Model::create(reference_algo, cpu_);
+    batch_metal = Model::create(batch_algo, cpu_);
+  }
+  for (const auto format : {ImageFormat::Nv12, ImageFormat::Nv21}) {
+    SCOPED_TRACE(static_cast<int>(format));
+    hrt::Vector<std::uint8_t> bytes(area * 3 / 2);
+    std::copy_n(yuv, area, bytes.data());
+    for (std::size_t i = 0; i < area / 4; ++i) {
+      bytes[area + i * 2] = yuv[area + i + (format == ImageFormat::Nv21 ? area / 4 : 0)];
+      bytes[area + i * 2 + 1] = yuv[area + i + (format == ImageFormat::Nv12 ? area / 4 : 0)];
+    }
+    auto source = Image::wrap(MemoryType::Cpu, bytes.data(), format, {bgr.cols, bgr.rows});
+    ASSERT_TRUE(source);
+    Image target(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {640, 640});
+    ASSERT_TRUE(probe->supports(ImageOperation::Fused, target, *source));
+    const auto expected = cpu->process_sync(*source);
+    const auto actual = metal->process_sync(*source);
+    ASSERT_TRUE(expected && actual);
+    ASSERT_FALSE(expected->empty());
+    ASSERT_EQ(expected->size(), actual->size());
+    for (const auto& [type, boxes] : *expected) {
+      const auto found = actual->find(type);
+      ASSERT_NE(found, actual->end());
+      ASSERT_EQ(boxes.size(), found->second.size());
+      for (std::size_t i = 0; i < boxes.size(); ++i) {
+        EXPECT_GT(hrt::core::iou(boxes[i].rect, found->second[i].rect), 0.95F);
+        EXPECT_NEAR(boxes[i].score, found->second[i].score, 0.02F);
+      }
+    }
+    if (has_batch) {
+      const hrt::Vector<Image> frames(5, *source);
+      const auto reference = batch_cpu->process_sync(frames);
+      const auto results = batch_metal->process_sync(frames);
+      ASSERT_TRUE(reference && results);
+      ASSERT_EQ(results->size(), frames.size());
+      ASSERT_EQ(reference->size(), results->size());
+      for (std::size_t n = 0; n < results->size(); ++n) {
+        ASSERT_EQ((*reference)[n].size(), (*results)[n].size());
+        for (const auto& [type, boxes] : (*reference)[n]) {
+          const auto found = (*results)[n].find(type);
+          ASSERT_NE(found, (*results)[n].end());
+          ASSERT_EQ(boxes.size(), found->second.size());
+          for (std::size_t i = 0; i < boxes.size(); ++i) {
+            EXPECT_GT(hrt::core::iou(boxes[i].rect, found->second[i].rect), 0.95F);
+            EXPECT_NEAR(boxes[i].score, found->second[i].score, 0.02F);
+          }
+        }
+      }
+    }
+  }
+}
+#endif
 
 TEST_F(ImageModelTest, CreatesFromAlgoJson) {
   const auto dir = std::filesystem::temp_directory_path() / "hybridrt_image_model_json";
