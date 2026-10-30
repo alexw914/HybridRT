@@ -936,28 +936,79 @@ TEST(ImagePreprocessorTest, DvppMatchesCpuForCropsAndResizes) {
 }
 
 #ifdef __APPLE__
-TEST(ImagePreprocessorTest, MetalFallsBackForNv12Input) {
+TEST(ImagePreprocessorTest, MetalConvertsYuvInputs) {
   using namespace hrt::core;
   using namespace hrt::preprocess;
   auto metal = ImagePreprocessor::create(ImagePreprocessorType::Metal);
   if (!metal)
     GTEST_SKIP() << "Metal GPU unavailable";
-  hrt::Array<std::uint8_t, 24> pixels{};
-  std::fill_n(pixels.begin(), 16, std::uint8_t{80});
-  std::fill(pixels.begin() + 16, pixels.end(), std::uint8_t{128});
-  auto source = Image::wrap(MemoryType::Cpu, pixels.data(), ImageFormat::Nv12, {4, 4});
-  ASSERT_TRUE(source);
-  Image expected(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {4, 4});
-  Image actual(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {4, 4});
-  ImagePreprocessorParam param;
-  param.std = {255, 255, 255};
+  // BT.601 limited-range black, white, red and blue, one chroma sample per 2x2 block.
+  const hrt::Array<std::uint8_t, 16> luma{16, 16, 235, 235, 16, 16, 235, 235, 81, 81, 41, 41, 81, 81, 41, 41};
+  const hrt::Array<std::uint8_t, 8> chroma{128, 128, 128, 128, 90, 240, 240, 110};
+  const hrt::Array<hrt::Array<int, 3>, 4> rgb{{{0, 0, 0}, {255, 255, 255}, {255, 0, 0}, {0, 0, 255}}};
+  for (const auto source_format : {ImageFormat::Nv12, ImageFormat::Nv21}) {
+    hrt::Array<std::uint8_t, 24> bytes{};
+    std::copy(luma.begin(), luma.end(), bytes.begin());
+    for (std::size_t i = 0; i < chroma.size(); i += 2) {
+      bytes[16 + i] = chroma[i + (source_format == ImageFormat::Nv21 ? 1 : 0)];
+      bytes[17 + i] = chroma[i + (source_format == ImageFormat::Nv21 ? 0 : 1)];
+    }
+    auto source = Image::wrap(MemoryType::Cpu, bytes.data(), source_format, {4, 4});
+    ASSERT_TRUE(source);
+    for (const auto format :
+         {ImageFormat::PlanarRgb, ImageFormat::PlanarBgr, ImageFormat::InterRgb, ImageFormat::InterBgr}) {
+      Image actual(MemoryType::Cpu, format, DataType::Float32, {4, 4});
+      ImagePreprocessorParam param;
+      param.dst_image_format = format;
+      param.normalize_type = NormalizeType::None;
+      param.interpolation_mode = InterpolationMode::Nearest;
+      ASSERT_TRUE(metal->supports(ImageOperation::Fused, actual, *source));
+      ASSERT_TRUE(metal->process(actual, *source, {}, param));
+      const bool bgr = format == ImageFormat::PlanarBgr || format == ImageFormat::InterBgr;
+      for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x)
+          for (int c = 0; c < 3; ++c) {
+            const auto block = static_cast<std::size_t>((y / 2) * 2 + x / 2);
+            const auto channel = static_cast<std::size_t>(bgr ? 2 - c : c);
+            EXPECT_NEAR(value_at(actual, c, x, y), rgb[block][channel], 2.0F);
+          }
+    }
+  }
   auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
-  ASSERT_TRUE(cpu->process(expected, *source, {}, param));
-  ASSERT_TRUE(metal->process(actual, *source, {}, param));
-  for (int c = 0; c < 3; ++c)
-    for (int y = 0; y < 4; ++y)
-      for (int x = 0; x < 4; ++x)
-        EXPECT_FLOAT_EQ(planar_at(actual, c, x, y), planar_at(expected, c, x, y));
+  for (const auto format : {ImageFormat::Nv12, ImageFormat::Nv21}) {
+    hrt::Array<std::uint8_t, 96> pixels{};
+    for (std::size_t i = 0; i < 64; ++i)
+      pixels[i] = static_cast<std::uint8_t>(16 + (i * 31) % 220);
+    for (std::size_t i = 64; i < pixels.size(); ++i)
+      pixels[i] = static_cast<std::uint8_t>(64 + (i * 17) % 128);
+    auto source = Image::wrap(MemoryType::Cpu, pixels.data(), format, {8, 8});
+    ASSERT_TRUE(source);
+    for (const auto type : {DataType::Float32, DataType::Uint8}) {
+      for (const auto interpolation :
+           {InterpolationMode::Nearest, InterpolationMode::Linear, InterpolationMode::Cubic}) {
+        Image expected(MemoryType::Cpu, ImageFormat::PlanarRgb, type, {7, 7});
+        Image actual(MemoryType::Cpu, ImageFormat::PlanarRgb, type, {7, 7});
+        ImagePreprocessorParam param;
+        param.interpolation_mode = interpolation;
+        param.normalize_type = NormalizeType::None;
+        ASSERT_TRUE(metal->supports(ImageOperation::Fused, actual, *source));
+        ASSERT_TRUE(cpu->process(expected, *source, {1, 1, 6, 6}, param));
+        ASSERT_TRUE(metal->process(actual, *source, {1, 1, 6, 6}, param));
+        for (int c = 0; c < 3; ++c)
+          for (int y = 0; y < 7; ++y)
+            for (int x = 0; x < 7; ++x) {
+              if (type == DataType::Float32)
+                EXPECT_NEAR(planar_at(actual, c, x, y), planar_at(expected, c, x, y), 1.01F);
+              else {
+                const auto index = static_cast<std::size_t>(c * 49 + y * 7 + x);
+                const auto* a = static_cast<const std::uint8_t*>(actual.memory()->cpu());
+                const auto* e = static_cast<const std::uint8_t*>(expected.memory()->cpu());
+                EXPECT_LE(std::abs(int(a[index]) - int(e[index])), 1);
+              }
+            }
+      }
+    }
+  }
 }
 
 TEST(ImagePreprocessorTest, MetalMatchesCpuAcrossGeometryStridesAndFrameChanges) {
@@ -1022,7 +1073,7 @@ TEST(ImagePreprocessorTest, MetalMatchesCpuAcrossGeometryStridesAndFrameChanges)
                   const bool inside = x >= roi.x && x < roi.x + roi.width && y >= roi.y && y < roi.y + roi.height;
                   const bool normalized =
                       normalization == NormalizeType::Full || (normalization == NormalizeType::Roi && inside);
-                  const auto tolerance = interpolation == InterpolationMode::Linear
+                  const auto tolerance = interpolation != InterpolationMode::Nearest
                                              ? 1.01F / (normalized ? param.std[static_cast<std::size_t>(c)] : 1.0F)
                                              : 1.0e-6F;
                   EXPECT_NEAR(value_at(actual, c, x, y), value_at(expected, c, x, y), tolerance);

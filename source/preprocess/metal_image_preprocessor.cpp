@@ -23,7 +23,7 @@ namespace {
 struct Params {
   std::uint32_t sw, sh, dw, dh, rw, rh, left, top;
   std::uint32_t src_row, dst_row, dst_plane;
-  std::uint32_t swap, nearest, normalization;
+  std::uint32_t swap, interpolation, normalization, source, origin_x, origin_y, chroma, float_output;
   Array<float, 3> fill, mean, scale;
 };
 
@@ -102,16 +102,20 @@ auto MetalImagePreprocessor::supports(ImageOperation op, const core::Image& dst,
   const auto planar = dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::PlanarBgr;
   return op == ImageOperation::Fused && state_->unified && accepts(src.memory()->memory_type()) &&
          accepts(dst.memory()->memory_type()) && src.data_type() == core::DataType::Uint8 &&
-         dst.data_type() == core::DataType::Float32 &&
-         (src.format() == core::ImageFormat::InterRgb || src.format() == core::ImageFormat::InterBgr) &&
+         (dst.data_type() == core::DataType::Float32 || dst.data_type() == core::DataType::Uint8) &&
+         (src.format() == core::ImageFormat::InterRgb || src.format() == core::ImageFormat::InterBgr ||
+          src.format() == core::ImageFormat::Nv12 || src.format() == core::ImageFormat::Nv21) &&
          (planar || dst.format() == core::ImageFormat::InterRgb || dst.format() == core::ImageFormat::InterBgr) &&
-         (planar || dst.stride()[2] == 3 * sizeof(float)) && dst.stride()[1] % sizeof(float) == 0 &&
-         dst.stride()[2] % sizeof(float) == 0;
+         (planar || dst.stride()[2] == 3 * (dst.data_type() == core::DataType::Float32 ? sizeof(float) : 1)) &&
+         (dst.data_type() != core::DataType::Float32 ||
+          (dst.stride()[1] % sizeof(float) == 0 && dst.stride()[2] % sizeof(float) == 0));
 }
 
 auto MetalImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
                                             const ImagePreprocessorParam& param) const -> bool {
-  return supports(ImageOperation::Fused, dst, src) && param.interpolation_mode != InterpolationMode::Cubic;
+  return supports(ImageOperation::Fused, dst, src) &&
+         (dst.data_type() == core::DataType::Float32 || param.normalize_type == NormalizeType::None ||
+          (param.mean == Array<float, 3>{0, 0, 0} && param.std == Array<float, 3>{1, 1, 1}));
 }
 
 auto MetalImagePreprocessor::fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
@@ -126,15 +130,18 @@ auto MetalImagePreprocessor::fused(core::Image& dst, const ImageTransform& trans
     auto* output = dst.memory()->mutable_cpu(stream);
     KZ_CHECK_RETURN(input != nullptr && output != nullptr, false, "metal: host buffers are unavailable");
     const auto src_stride = src.stride()[1];
+    const bool yuv = src.format() == core::ImageFormat::Nv12 || src.format() == core::ImageFormat::Nv21;
     const auto* src_origin =
-        input + static_cast<std::size_t>(from.y) * src_stride + static_cast<std::size_t>(from.x) * 3;
+        yuv ? input : input + static_cast<std::size_t>(from.y) * src_stride + static_cast<std::size_t>(from.x) * 3;
     const auto src_extent =
-        static_cast<std::size_t>(from.height - 1) * src_stride + static_cast<std::size_t>(from.width) * 3;
+        yuv ? src_stride * static_cast<std::size_t>(src.size().height + src.size().height / 2)
+            : static_cast<std::size_t>(from.height - 1) * src_stride + static_cast<std::size_t>(from.width) * 3;
     const auto planar = dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::PlanarBgr;
     const auto dst_row = dst.stride()[planar ? 2 : 1];
     const auto dst_plane = planar ? dst.stride()[1] : 0;
+    const auto element_size = dst.data_type() == core::DataType::Float32 ? sizeof(float) : 1;
     const auto dst_extent = 2 * dst_plane + static_cast<std::size_t>(dst.size().height - 1) * dst_row +
-                            static_cast<std::size_t>(dst.size().width) * sizeof(float) * (planar ? 1 : 3);
+                            static_cast<std::size_t>(dst.size().width) * element_size * (planar ? 1 : 3);
     const auto capacity = std::min(static_cast<std::size_t>([state_->device maxBufferLength]),
                                    static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()));
     KZ_CHECK_RETURN(src_extent <= capacity && dst_extent <= capacity, false,
@@ -146,8 +153,8 @@ auto MetalImagePreprocessor::fused(core::Image& dst, const ImageTransform& trans
     KZ_CHECK_RETURN(src_buffer != nil && dst_buffer != nil, false, "metal: cannot wrap host image memory");
     Params params{};
     params.src_row = static_cast<std::uint32_t>(src_stride);
-    params.dst_row = static_cast<std::uint32_t>(dst_row / sizeof(float));
-    params.dst_plane = static_cast<std::uint32_t>(dst_plane / sizeof(float));
+    params.dst_row = static_cast<std::uint32_t>(dst_row / element_size);
+    params.dst_plane = static_cast<std::uint32_t>(dst_plane / element_size);
     params.sw = static_cast<std::uint32_t>(from.width);
     params.sh = static_cast<std::uint32_t>(from.height);
     params.dw = static_cast<std::uint32_t>(dst.size().width);
@@ -156,9 +163,16 @@ auto MetalImagePreprocessor::fused(core::Image& dst, const ImageTransform& trans
     params.rh = static_cast<std::uint32_t>(to.height);
     params.left = static_cast<std::uint32_t>(to.x);
     params.top = static_cast<std::uint32_t>(to.y);
+    params.source = yuv ? (src.format() == core::ImageFormat::Nv12 ? 1U : 2U) : 0U;
+    params.origin_x = yuv ? static_cast<std::uint32_t>(from.x) : 0;
+    params.origin_y = yuv ? static_cast<std::uint32_t>(from.y) : 0;
+    params.chroma = yuv ? static_cast<std::uint32_t>(src_stride * static_cast<std::size_t>(src.size().height)) : 0;
+    params.float_output = dst.data_type() == core::DataType::Float32;
     params.swap = (src.format() == core::ImageFormat::InterRgb) !=
                   (dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::InterRgb);
-    params.nearest = param.interpolation_mode == InterpolationMode::Nearest;
+    params.interpolation = param.interpolation_mode == InterpolationMode::Nearest ? 1U
+                           : param.interpolation_mode == InterpolationMode::Cubic ? 2U
+                                                                                  : 0U;
     params.normalization = param.normalize_type == NormalizeType::Full  ? 1U
                            : param.normalize_type == NormalizeType::Roi ? 2U
                                                                         : 0U;

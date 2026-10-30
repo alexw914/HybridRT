@@ -56,11 +56,12 @@ differences. Other conversions (gray inputs or sources, RGBA or float sources) r
 A static batch whose samples all fuse runs as one kernel launch (up to 16 samples per kernel);
 on the CPU the samples of a batch run on OpenCV's threads.
 
-Metal accepts HWC RGB/BGR uint8 sources on unified-memory Macs and writes RGB/BGR FP32
-as CHW (`planar_rgb`/`planar_bgr`) or HWC (`inter_rgb`/`inter_bgr`). Source and destination
-rows may be padded; HWC pixels remain packed RGB/BGR triplets. Linear and nearest sampling
-use the fused Metal kernel; cubic and unsupported formats fall back to CPU. Output layout
-must match the model input. ORT currently reports NCHW to `ImageModel`; NHWC ORT models
+Metal accepts HWC RGB/BGR and NV12/NV21 uint8 sources on unified-memory Macs and writes
+RGB/BGR FP32 or uint8 as CHW (`planar_rgb`/`planar_bgr`) or HWC
+(`inter_rgb`/`inter_bgr`). Uint8 output requires identity or disabled normalization. Source
+and destination rows may be padded; HWC pixels remain packed RGB/BGR triplets. Linear,
+nearest and cubic sampling use the fused Metal kernel; unsupported formats fall back to CPU.
+Output layout must match the model input. ORT currently reports NCHW to `ImageModel`; NHWC ORT models
 can be fed through the individual preprocessing and engine APIs, as tested below.
 
 Host frames for CUDA preprocessing are uploaded first, which usually costs more than the kernel
