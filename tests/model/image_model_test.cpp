@@ -273,6 +273,11 @@ TEST_F(ImageModelTest, ChecksConfigWithoutThrowing) {
   EXPECT_EQ(check_algo_config(classify_algo(R"({"resize_typ": "normal"})")).size(), 1U);
   EXPECT_EQ(check_algo_config(classify_algo(R"({"resize_type": "stretch"})")).size(), 1U);
   EXPECT_EQ(check_algo_config(classify_algo(R"({"mean": [0, 0]})")).size(), 1U);
+  EXPECT_TRUE(check_algo_config(classify_algo(R"({"pad_value": 114})")).empty());
+  EXPECT_TRUE(check_algo_config(classify_algo(R"({"pad_value": [11, 22, 33]})")).empty());
+  EXPECT_EQ(check_algo_config(classify_algo(R"({"pad_value": [1, 2]})")).size(), 1U);
+  EXPECT_EQ(check_algo_config(classify_algo(R"({"pad_value": "114"})")).size(), 1U);
+  EXPECT_EQ(check_algo_config(classify_algo(R"({"default_color": [0, 0, 0]})")).size(), 1U);
   EXPECT_EQ(check_algo_config(classify_algo("{}", "Mystery")).size(), 1U);
   // Stage counts are ImageModelOptions and engine settings each engine's
   // config, so neither belongs in the algo config.
@@ -334,7 +339,7 @@ auto crop_algo(int width, int height, std::string_view resize_type, float pad_sc
                                              {"pad_scale", pad_scale},
                                              {"resize_short_size", resize_short_size},
                                              {"dst_image_format", "planar_bgr"},
-                                             {"default_color", {7, 7, 7}}};
+                                             {"pad_value", 7}};
   const auto config = kitzoo::json::Json{{"preprocess", preprocess}, {"postprocess", {{"type", "GeneralClassify"}}}};
   return {.name = "crop",
           .engines = {{.engine_type = "ort",

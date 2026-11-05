@@ -196,7 +196,7 @@ TEST(ImagePreprocessorTest, LetterBoxesBgrIntoNormalizedPlanarRgb) {
   hrt::preprocess::ImagePreprocessorParam param;
   param.resize_type = hrt::preprocess::ResizeType::LetterBox;
   param.std = {255.0F, 255.0F, 255.0F};
-  param.default_color = {114.0F, 114.0F, 114.0F};
+  param.pad_value = {114.0F, 114.0F, 114.0F};
   auto preprocessor = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Cpu);
 
   auto transform = preprocessor->process(dst, src.image, {}, param);
@@ -218,7 +218,7 @@ TEST(ImagePreprocessorTest, FallsBackToCpuWithoutStepOverrides) {
   hrt::preprocess::ImagePreprocessorParam param;
   param.resize_type = hrt::preprocess::ResizeType::LetterBox;
   param.std = {255.0F, 255.0F, 255.0F};
-  param.default_color = {114.0F, 114.0F, 114.0F};
+  param.pad_value = {114.0F, 114.0F, 114.0F};
   UnsupportedPreprocessor processor;
 
   const auto transform = processor.process(dst, src.image, {}, param);
@@ -242,7 +242,7 @@ TEST(ImagePreprocessorTest, NormalizesOnlyTheRoiWhenAsked) {
   param.normalize_type = hrt::preprocess::NormalizeType::Roi;
   param.mean = {10.0F, 10.0F, 10.0F};
   param.std = {2.0F, 2.0F, 2.0F};
-  param.default_color = {1.0F, 2.0F, 3.0F};
+  param.pad_value = {1.0F, 2.0F, 3.0F};
   auto preprocessor = hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Cpu);
 
   ASSERT_TRUE(preprocessor->process(dst, src.image, {}, param));
@@ -280,7 +280,7 @@ TEST(ImagePreprocessorTest, ConvertsAndNormalizesAllByteValuesWithChannelOrderAn
           param.normalize_type = mode;
           param.mean = identity ? hrt::Array<float, 3>{0, 0, 0} : hrt::Array<float, 3>{10, 20, 30};
           param.std = identity ? hrt::Array<float, 3>{1, 1, 1} : hrt::Array<float, 3>{2, 3, 4};
-          param.default_color = {11, 22, 33};
+          param.pad_value = {11, 22, 33};
           ASSERT_TRUE(processor->process(dst, *source, {}, param));
           const auto swap = (source_format == ImageFormat::InterRgb) != (target_format == ImageFormat::PlanarRgb);
           for (int c = 0; c < 3; ++c) {
@@ -289,7 +289,7 @@ TEST(ImagePreprocessorTest, ConvertsAndNormalizesAllByteValuesWithChannelOrderAn
             for (int y = 0; y < 8; ++y) {
               const auto padding = y < 2 || y >= 6;
               for (int x = 0; x < 256; ++x) {
-                float expected = padding ? param.default_color[channel]
+                float expected = padding ? param.pad_value[channel]
                                          : src.pixels[static_cast<std::size_t>((y - 2) * 784 + x * 3 + input_channel)];
                 if (mode == NormalizeType::Full || (mode == NormalizeType::Roi && !padding))
                   expected = (expected - param.mean[channel]) / param.std[channel];
@@ -379,7 +379,7 @@ TEST(ImagePreprocessorTest, CudaBatchMatchesSingleCalls) {
   param.resize_type = ResizeType::LetterBox;
   param.mean = {2, 4, 6};
   param.std = {2, 4, 8};
-  param.default_color = {114, 20, 250};
+  param.pad_value = {114, 20, 250};
   for (const bool device_target : {true, false}) {
     SCOPED_TRACE(device_target);
     const auto memory = device_target ? MemoryType::Cuda : MemoryType::Cpu;
@@ -454,7 +454,7 @@ TEST(ImagePreprocessorTest, CudaLeavesUnfusedConversionsToTheCpu) {
       param.dst_image_format = item.format;
       param.mean = {2, 4, 6};
       param.std = {2, 4, 8};
-      param.default_color = {114, 20, 250};
+      param.pad_value = {114, 20, 250};
       Image device(MemoryType::Cuda, item.source->format(), item.source->data_type(), item.source->size());
       ASSERT_TRUE(Buffer::copy(*device.buffer(), *item.source->buffer(), CopyPolicy::AutoDstStride, stream.get()));
       const auto& source = device_source ? device : *item.source;
@@ -515,7 +515,7 @@ TEST(ImagePreprocessorTest, ProcessesABatchLikeSingleCalls) {
   param.resize_type = ResizeType::LetterBox;
   param.mean = {1, 2, 3};
   param.std = {2, 4, 8};
-  param.default_color = {114, 114, 114};
+  param.pad_value = {114, 114, 114};
   auto make = []() -> hrt::Vector<Image> {
     hrt::Vector<Image> images;
     for (int i = 0; i < 4; ++i)
@@ -635,7 +635,7 @@ TEST(ImagePreprocessorTest, CudaFusedKernelMatchesCpu) {
                   param.dst_image_format = format;
                   param.mean = {3, 6, 9};
                   param.std = {2, 4, 8};
-                  param.default_color = {114.4F, 20, 250};
+                  param.pad_value = {114.4F, 20, 250};
                   Image expected(MemoryType::Cpu, format, type, size);
                   Image device(MemoryType::Cuda, format, type, size);
                   Image actual(MemoryType::Cpu, format, type, size);
@@ -693,7 +693,7 @@ TEST(ImagePreprocessorTest, RgaBatchMatchesSingleCalls) {
   ImagePreprocessorParam param;
   param.resize_type = ResizeType::LetterBox;
   param.dst_image_format = ImageFormat::InterRgb;
-  param.default_color = {114, 20, 250};
+  param.pad_value = {114, 20, 250};
   for (const bool tiny : {false, true}) {
     for (const auto memory : {MemoryType::DmaBuffer, MemoryType::Cpu}) {
       SCOPED_TRACE(testing::Message() << "tiny " << tiny << " memory " << static_cast<int>(memory));
@@ -746,7 +746,7 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForAlignedAndUnalignedRowStrides) {
     ImagePreprocessorParam param;
     param.resize_type = ResizeType::LetterBox;
     param.dst_image_format = ImageFormat::InterRgb;
-    param.default_color = {114, 114, 114};
+    param.pad_value = {114, 114, 114};
     Image expected(MemoryType::Cpu, ImageFormat::InterRgb, DataType::Uint8, {128, 128});
     Image actual(MemoryType::DmaBuffer, ImageFormat::InterRgb, DataType::Uint8, {128, 128});
     ASSERT_TRUE(actual.valid());
@@ -811,7 +811,7 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForCroppedSources) {
           ImagePreprocessorParam param;
           param.resize_type = resize;
           param.dst_image_format = format;
-          param.default_color = {114, 114, 114};
+          param.pad_value = {114, 114, 114};
           param.pad_scale = 1.2F;
           const auto type = format == ImageFormat::InterRgb ? DataType::Uint8 : DataType::Float32;
           Image expected(MemoryType::Cpu, format, type, {128, 96});
@@ -902,7 +902,7 @@ TEST(ImagePreprocessorTest, DvppMatchesCpuForCropsAndResizes) {
       ImagePreprocessorParam param;
       param.dst_image_format = ImageFormat::InterRgb;
       param.normalize_type = NormalizeType::None;
-      param.default_color = {114, 114, 114};
+      param.pad_value = {114, 114, 114};
       Image expected(MemoryType::Cpu, ImageFormat::InterRgb, DataType::Uint8, size);
       Image actual(MemoryType::Cpu, ImageFormat::InterRgb, DataType::Uint8, size);
       const auto reference = cpu->process(expected, src.image, crop, param);
@@ -1100,7 +1100,7 @@ TEST(ImagePreprocessorTest, MetalMatchesCpuAcrossGeometryStridesAndFrameChanges)
             param.normalize_type = normalization;
             param.mean = {1, 2, 3};
             param.std = {255, 127, 63};
-            param.default_color = {11, 22, 33};
+            param.pad_value = {11, 22, 33};
             ASSERT_TRUE(metal->supports(ImageOperation::Fused, actual, *source));
             const Rect crop{1, 1, size.width - 2, size.height - 2};
             const auto reference = cpu->process(expected, *source, crop, param);

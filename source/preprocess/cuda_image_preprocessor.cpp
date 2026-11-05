@@ -113,7 +113,7 @@ auto create_preprocess_param(const core::Image& dst, const ImageTransform& trans
     const auto c = static_cast<std::size_t>(i);
     const auto alpha = normalize ? 1.0 / static_cast<double>(param.std[c]) : 1.0;
     const auto beta = normalize ? -static_cast<double>(param.mean[c]) * alpha : 0.0;
-    const auto pad = std::clamp(std::nearbyint(static_cast<double>(param.default_color[c])), 0.0, 255.0);
+    const auto pad = std::clamp(std::nearbyint(static_cast<double>(param.pad_value[c])), 0.0, 255.0);
     preprocess_param.channel[c] = swap ? 2 - i : i;
     preprocess_param.alpha[c] = static_cast<float>(alpha);
     preprocess_param.beta[c] = static_cast<float>(beta);

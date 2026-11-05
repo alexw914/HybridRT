@@ -87,13 +87,13 @@ struct ImagePreprocessorParam {
   NormalizeType normalize_type = NormalizeType::Full;
   Array<float, 3> mean{0.0F, 0.0F, 0.0F};
   Array<float, 3> std{1.0F, 1.0F, 1.0F};
-  Array<float, 3> default_color{0.0F, 0.0F, 0.0F};
+  Array<float, 3> pad_value{0.0F, 0.0F, 0.0F};
   int resize_short_size = -1;
   float pad_scale = 1.0F;
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ImagePreprocessorParam, device, interpolation_mode, resize_type,
-                                                dst_image_format, normalize_type, mean, std, default_color,
+                                                dst_image_format, normalize_type, mean, std, pad_value,
                                                 resize_short_size, pad_scale)
 
 // Where the source region landed in the network input.

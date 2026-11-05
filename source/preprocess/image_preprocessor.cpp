@@ -520,7 +520,7 @@ auto ImagePreprocessor::run(core::Image& dst, const core::Image& src, const Imag
   const auto& [to_convert, to_fill, to_resize, to_cast, to_normalize] = steps;
   if (converted != nullptr && !to_convert->convert(*converted, src, stream))
     return false;
-  if (pad && !to_fill->fill(*resized, resized->rect(), ordered_color(param.default_color, *resized, dst), stream))
+  if (pad && !to_fill->fill(*resized, resized->rect(), ordered_color(param.pad_value, *resized, dst), stream))
     return false;
   if (!to_resize->resize(*resized, transform.dst_roi, *source, transform.src_roi, param.interpolation_mode, stream))
     return false;

@@ -212,7 +212,7 @@ auto BM_Resolution(benchmark::State& state) -> void {
   ImagePreprocessorParam param;
   param.resize_type = ResizeType::LetterBox;
   param.std = {255, 255, 255};
-  param.default_color = {114, 114, 114};
+  param.pad_value = {114, 114, 114};
   if (!source || !target.valid()) {
     state.SkipWithError("Cannot allocate preprocessing buffers");
     return;
@@ -276,7 +276,7 @@ auto BM_CudaResolution(benchmark::State& state) -> void {
   ImagePreprocessorParam param;
   param.resize_type = ResizeType::LetterBox;
   param.std = {255, 255, 255};
-  param.default_color = {114, 114, 114};
+  param.pad_value = {114, 114, 114};
   const auto& source = mode == 1 ? device : *host;
   const Rect crop = mode == 3 ? Rect{source_size.width / 2 - 240, source_size.height / 2 - 480, 480, 960} : Rect{};
   auto step = [&]() -> bool {
@@ -365,7 +365,7 @@ auto BM_Batch(benchmark::State& state) -> void {
   param.resize_type = ResizeType::LetterBox;
   param.dst_image_format = rga ? ImageFormat::InterRgb : ImageFormat::PlanarRgb;
   param.std = rga ? hrt::Array<float, 3>{1, 1, 1} : hrt::Array<float, 3>{255, 255, 255};
-  param.default_color = {114, 114, 114};
+  param.pad_value = {114, 114, 114};
   auto step = [&]() -> bool {
     const auto ok = processor->process(targets, sources, {}, param, stream.get()).has_value();
     stream->synchronize();
@@ -430,7 +430,7 @@ auto BM_RgaResolution(benchmark::State& state) -> void {
   param.dst_image_format = ImageFormat::InterRgb;
   param.resize_type = ResizeType::LetterBox;
   param.normalize_type = NormalizeType::None;
-  param.default_color = {114, 114, 114};
+  param.pad_value = {114, 114, 114};
   const auto& source = resident ? device : *host;
   // RGA operators use IM_SYNC; the returned dma-buffer is ready for its consumer.
   for (int i = 0; i < 20; ++i) {

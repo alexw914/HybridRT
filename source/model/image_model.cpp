@@ -36,6 +36,13 @@ auto read_config(const hrtc::AlgoParam& algo) -> kitzoo::json::Reader {
   return kitzoo::json::Reader{algo.config};
 }
 
+auto preprocess_config(kitzoo::json::Json section) -> kitzoo::json::Json {
+  const auto value = section.find("pad_value");
+  if (value != section.end() && value->is_number())
+    *value = kitzoo::json::Json::array({*value, *value, *value});
+  return section;
+}
+
 // nullptr when the backend is not compiled in or the model does not load.
 auto load_engine(const hrtc::EngineParam& param) -> UniquePtr<engine::Engine> {
   auto engine = engine::Engine::create(engine::engine_type_from(param.engine_type));
@@ -66,7 +73,7 @@ auto device_type(preprocess::ImagePreprocessorType type) -> core::DeviceType {
 // Device the configured preprocessor needs; `algo` passed check().
 auto preprocess_device(const hrtc::AlgoParam& algo) -> core::DeviceType {
   const auto reader = read_config(algo);
-  const auto section = reader.raw().value("preprocess", kitzoo::json::Json::object());
+  const auto section = preprocess_config(reader.raw().value("preprocess", kitzoo::json::Json::object()));
   return device_type(section.get<preprocess::ImagePreprocessorParam>().device);
 }
 
@@ -117,7 +124,7 @@ auto check(const hrtc::AlgoParam& algo, bool builtin_postprocess) -> core::Probl
   core::check_json(config, {{"preprocess", empty}, {"postprocess", empty}}, "config", {}, problems);
   if (!problems.empty())
     return problems;
-  const auto preprocess = config.value("preprocess", empty);
+  const auto preprocess = preprocess_config(config.value("preprocess", empty));
   const auto postprocess = config.value("postprocess", empty);
   core::check_param<preprocess::ImagePreprocessorParam>(preprocess, "preprocess", {}, problems);
   const auto type = postprocess.find("type");
@@ -268,8 +275,8 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
                                const PostprocessorFactory& factory, UniquePtr<engine::Engine> first,
                                const hrtc::EngineParam& chosen) -> void {
   context_->set_current();
-  preprocessor_param_ =
-      config.value("preprocess", kitzoo::json::Json::object()).get<preprocess::ImagePreprocessorParam>();
+  preprocessor_param_ = preprocess_config(config.value("preprocess", kitzoo::json::Json::object()))
+                            .get<preprocess::ImagePreprocessorParam>();
   const auto preprocess_num = options_.preprocess;
   const auto engine_num = options_.engine;
   const auto postprocess_num = options_.postprocess;

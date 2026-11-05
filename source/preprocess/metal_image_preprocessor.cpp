@@ -194,8 +194,8 @@ auto MetalImagePreprocessor::fused_batch(std::span<core::Image* const> dsts, std
                                                                           : 0U;
       params.mean = param.mean;
       for (std::size_t c = 0; c < 3; ++c) {
-        // The kernel swaps the fill as a source pixel; default_color is in input channel order.
-        params.fill[c] = std::clamp(std::nearbyint(param.default_color[params.swap != 0U ? 2 - c : c]), 0.0F, 255.0F);
+        // The kernel swaps the fill as a source pixel; pad_value is in input channel order.
+        params.fill[c] = std::clamp(std::nearbyint(param.pad_value[params.swap != 0U ? 2 - c : c]), 0.0F, 255.0F);
         params.scale[c] = 1.0F / param.std[c];
       }
       [encoder setBuffer:src_buffer offset:src_offset atIndex:0];

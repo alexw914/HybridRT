@@ -14,7 +14,7 @@
           "normalize_type": "full",
           "mean": [0, 0, 0],
           "std": [255, 255, 255],
-          "default_color": [114, 114, 114],
+          "pad_value": 114,
           "resize_short_size": -1,
           "pad_scale": 1.0
         },
@@ -30,7 +30,7 @@
     {
       "name": "yolo26n_detect_raw",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/Yolo26Detect.onnx"}]},
         "postprocess": {"type": "Yolo26Detect", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
@@ -38,7 +38,7 @@
     {
       "name": "yolov5_detect",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/YoloV5Detect.onnx"}]},
         "postprocess": {
           "type": "YoloV5Detect",
@@ -67,7 +67,7 @@
     {
       "name": "yolo26n_e2e_detect",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/E2EDetect.onnx"}]},
         "postprocess": {"type": "E2EDetect", "class_num": 80, "confidence_threshold": [0.25]}
       }
@@ -75,7 +75,7 @@
     {
       "name": "yolov8n_detect",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralDetect.onnx"}]},
         "postprocess": {"type": "GeneralDetect", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
@@ -83,7 +83,7 @@
     {
       "name": "yolo26n_e2e_obb",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/E2ERotated.onnx"}]},
         "postprocess": {"type": "E2ERotated", "class_num": 15, "confidence_threshold": [0.25]}
       }
@@ -91,7 +91,7 @@
     {
       "name": "yolov8n_obb_raw",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/YoloV8Rotated.onnx"}]},
         "postprocess": {
           "type": "YoloV8Rotated",
@@ -104,7 +104,7 @@
     {
       "name": "yolo26n_obb_raw",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/Yolo26Rotated.onnx"}]},
         "postprocess": {"type": "Yolo26Rotated", "class_num": 15, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
@@ -112,7 +112,7 @@
     {
       "name": "yolov5_rotated",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/YoloV5Rotated.onnx"}]},
         "postprocess": {
           "type": "YoloV5Rotated",
@@ -130,7 +130,7 @@
     {
       "name": "yolov8n_obb",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralRotated.onnx"}]},
         "postprocess": {"type": "GeneralRotated", "class_num": 15, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
@@ -154,7 +154,7 @@
     {
       "name": "yolov8n_pose",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralYoloPose.onnx"}]},
         "postprocess": {
           "type": "GeneralYoloPose",
@@ -168,7 +168,7 @@
     {
       "name": "yolov8n_face",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/YoloV8Keypoint.onnx"}]},
         "postprocess": {
           "type": "YoloV8Keypoint",
@@ -184,7 +184,7 @@
     {
       "name": "yolo26n_pose_raw",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/Yolo26Keypoint.onnx"}]},
         "postprocess": {
           "type": "Yolo26Keypoint",
@@ -198,7 +198,7 @@
     {
       "name": "yolo26n_e2e_pose",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/E2EKeypoint.onnx"}]},
         "postprocess": {
           "type": "E2EKeypoint",
@@ -211,7 +211,7 @@
     {
       "name": "rtmo_s_pose",
       "config": {
-        "preprocess": {"resize_type": "keep_ratio", "dst_image_format": "planar_bgr", "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "keep_ratio", "dst_image_format": "planar_bgr", "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/RtmoKeypoint.onnx"}]},
         "postprocess": {"type": "RtmoKeypoint", "confidence_threshold": [0.15], "iou_threshold": [0.65], "keypoint_threshold": 0.3}
       }
@@ -232,7 +232,7 @@
     {
       "name": "yolov8n_segment",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralYoloSegment.onnx"}]},
         "postprocess": {
           "type": "GeneralYoloSegment",
@@ -246,7 +246,7 @@
     {
       "name": "yolov8n_segment_raw",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/YoloV8Segment.onnx"}]},
         "postprocess": {
           "type": "YoloV8Segment",
@@ -260,7 +260,7 @@
     {
       "name": "yolo26n_segment_raw",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/Yolo26Segment.onnx"}]},
         "postprocess": {"type": "Yolo26Segment", "class_num": 80, "mask_threshold": 0.5, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
@@ -268,7 +268,7 @@
     {
       "name": "yolo26n_e2e_segment",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/E2ESegment.onnx"}]},
         "postprocess": {"type": "E2ESegment", "class_num": 80, "mask_threshold": 0.5, "confidence_threshold": [0.25]}
       }
@@ -276,7 +276,7 @@
     {
       "name": "yolo26n_semantic",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/SemanticSegment.onnx"}]},
         "postprocess": {"type": "SemanticSegment"}
       }
@@ -292,7 +292,7 @@
     {
       "name": "ppocrv6_tiny_rec",
       "config": {
-        "preprocess": {"dst_image_format": "planar_bgr", "resize_type": "text_line", "mean": [127.5, 127.5, 127.5], "std": [127.5, 127.5, 127.5], "default_color": [0, 0, 0], "normalize_type": "roi"},
+        "preprocess": {"dst_image_format": "planar_bgr", "resize_type": "text_line", "mean": [127.5, 127.5, 127.5], "std": [127.5, 127.5, 127.5], "pad_value": 0, "normalize_type": "roi"},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/OcrRecognition.onnx"}]},
         "postprocess": {"type": "Ocr", "stage": "recognition", "decoder": "ctc", "dictionary": "assets/test/weights/ocr/PP-OCRv6_tiny_rec/characters.txt", "append_space": true}
       }
@@ -300,7 +300,7 @@
     {
       "name": "ppocrv6_tiny_rec_batch8",
       "config": {
-        "preprocess": {"dst_image_format": "planar_bgr", "resize_type": "text_line", "mean": [127.5, 127.5, 127.5], "std": [127.5, 127.5, 127.5], "default_color": [0, 0, 0], "normalize_type": "roi"},
+        "preprocess": {"dst_image_format": "planar_bgr", "resize_type": "text_line", "mean": [127.5, 127.5, 127.5], "std": [127.5, 127.5, 127.5], "pad_value": 0, "normalize_type": "roi"},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/OcrRecognitionBatch8.onnx"}]},
         "postprocess": {"type": "Ocr", "stage": "recognition", "decoder": "ctc", "dictionary": "assets/test/weights/ocr/PP-OCRv6_tiny_rec/characters.txt", "append_space": true}
       }
@@ -316,7 +316,7 @@
     {
       "name": "yolov8n_detect_batch4",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralDetectBatch4.onnx"}]},
         "postprocess": {"type": "GeneralDetect", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
@@ -324,7 +324,7 @@
     {
       "name": "yolov8n_pose_batch4",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralYoloPoseBatch4.onnx"}]},
         "postprocess": {
           "type": "GeneralYoloPose",
@@ -338,7 +338,7 @@
     {
       "name": "yolov8n_segment_batch4",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralYoloSegmentBatch4.onnx"}]},
         "postprocess": {
           "type": "GeneralYoloSegment",
@@ -360,7 +360,7 @@
     {
       "name": "yolov8n_detect_batch8",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralDetectBatch8.onnx"}]},
         "postprocess": {"type": "GeneralDetect", "class_num": 80, "confidence_threshold": [0.25], "iou_threshold": [0.45]}
       }
@@ -368,7 +368,7 @@
     {
       "name": "yolov8n_pose_batch8",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralYoloPoseBatch8.onnx"}]},
         "postprocess": {
           "type": "GeneralYoloPose",
@@ -382,7 +382,7 @@
     {
       "name": "yolov8n_segment_batch8",
       "config": {
-        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "default_color": [114, 114, 114]},
+        "preprocess": {"resize_type": "letter_box", "std": [255, 255, 255], "pad_value": 114},
         "engine": {"backends": [{"engine_type": "ort", "data": "assets/test/onnx/GeneralYoloSegmentBatch8.onnx"}]},
         "postprocess": {
           "type": "GeneralYoloSegment",

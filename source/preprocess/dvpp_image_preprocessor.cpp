@@ -138,7 +138,7 @@ auto DvppImagePreprocessor::fused(core::Image& dst, const ImageTransform& transf
   region.dest_left_offset = static_cast<hi_u32>(to.x);
   region.border_type = HI_BORDER_CONSTANT;
   for (std::size_t i = 0; i < 3; ++i)
-    region.scalar_value.val[i] = static_cast<double>(param.default_color[i]);
+    region.scalar_value.val[i] = static_cast<double>(param.pad_value[i]);
   region.scalar_value.val[3] = 0.0;
   hi_u32 task = 0;
   auto status = hi_mpi_vpc_crop_resize_make_border(channel_, &source, &region, 1, &task, 0);
