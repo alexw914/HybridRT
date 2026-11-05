@@ -121,6 +121,12 @@ if(HRT_USE_ORT)
     target_compile_definitions(hybridrt PRIVATE HRT_USE_ORT)
 endif()
 
+if(HRT_USE_OPENVINO)
+    target_sources(hybridrt PRIVATE engine/openvino_engine.cpp)
+    target_link_libraries(hybridrt PRIVATE openvino::runtime::c)
+    target_compile_definitions(hybridrt PRIVATE HRT_USE_OPENVINO)
+endif()
+
 if(HRT_USE_CUDA)
     # Portable device code unless the caller picks architectures (e.g. native).
     if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)

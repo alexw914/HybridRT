@@ -13,6 +13,9 @@
 #ifdef HRT_USE_ORT
 #include "include/engine/onnxruntime_engine.hpp"
 #endif
+#ifdef HRT_USE_OPENVINO
+#include "include/engine/openvino_engine.hpp"
+#endif
 #ifdef HRT_USE_NCNN
 #include "include/engine/ncnn_engine.hpp"
 #endif
@@ -53,10 +56,11 @@ auto bind_buffers(core::Buffers& bound, const core::Buffers& buffers, const Vect
 } // namespace
 
 auto engine_type_from(std::string_view name) -> EngineType {
-  static constexpr Array<Pair<std::string_view, EngineType>, 6> kNames{{
+  static constexpr Array<Pair<std::string_view, EngineType>, 7> kNames{{
       {"ncnn", EngineType::Ncnn},
       {"mnn", EngineType::Mnn},
       {"ort", EngineType::Ort},
+      {"openvino", EngineType::OpenVino},
       {"rknn", EngineType::Rknn},
       {"cann", EngineType::Cann},
       {"trt", EngineType::TensorRt},
@@ -84,6 +88,10 @@ auto Engine::create(EngineType type) -> UniquePtr<Engine> {
 #ifdef HRT_USE_ORT
   case EngineType::Ort:
     return std::make_unique<OrtEngine>();
+#endif
+#ifdef HRT_USE_OPENVINO
+  case EngineType::OpenVino:
+    return std::make_unique<OpenVinoEngine>();
 #endif
 #ifdef HRT_USE_NCNN
   case EngineType::Ncnn:

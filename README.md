@@ -122,7 +122,8 @@ Enable one or more backends by providing their SDK paths at CMake configuration 
 
 | Backend | Engine name | Model format | CMake settings | Minimum version | Tested version |
 | --- | --- | --- | --- | --- | --- |
-| [ONNX Runtime](https://github.com/microsoft/onnxruntime) | ort | ONNX | `-DORT_ROOT=<sdk>` | 1.20+ | 1.31.0 |
+| [ONNX Runtime](https://github.com/microsoft/onnxruntime) | ort | ONNX | `-DORT_ROOT=<sdk>` | 1.20+ | 1.30.1 |
+| [OpenVINO](https://github.com/openvinotoolkit/openvino) | openvino | IR (XML + BIN) | `-DOpenVINO_ROOT=<sdk>` | 2026.4.1 | 2026.4.1 |
 | [TensorRT](https://github.com/NVIDIA/TensorRT) | trt | TensorRT engine | `-DTensorRT_ROOT=<sdk>`; CUDA Toolkit with nvcc required (`CMAKE_CUDA_ARCHITECTURES` defaults to `all-major`) | 8.5+ | 10.16.1 |
 | [MNN](https://github.com/alibaba/MNN) | mnn | MNN | `-DMNN_ROOT=<sdk>` | Not pinned | 3.0.0 |
 | [ncnn](https://github.com/Tencent/ncnn) | ncnn | ncnn param + bin | `-Dncnn_ROOT=<sdk>` | Not pinned | 1.0.20261007 |

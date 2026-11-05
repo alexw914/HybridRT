@@ -27,6 +27,7 @@ enum class EngineType {
   Rknn,
   Cann,
   TensorRt,
+  OpenVino,
 };
 
 auto engine_type_from(std::string_view name) -> EngineType;

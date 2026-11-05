@@ -19,9 +19,9 @@ manifest with `hrt-compress -c -j assets/template/hrtc_template.json`.
 | `algos[].name` | Unique, non-empty. |
 | `algos[].config` | Object with `preprocess`, `engine` and `postprocess`, a path to such a JSON file (absolute or relative to the working directory), or `"string:<json>"`. |
 | `engine.backends[]` | Engines of the algo, tried in order: the first whose device is available and whose model loads is used. |
-| `backends[].engine_type` | `ort`, `ncnn`, `mnn`, `trt`, `rknn`, `cann`. |
+| `backends[].engine_type` | `ort`, `openvino`, `ncnn`, `mnn`, `trt`, `rknn`, `cann`. |
 | `backends[].config` | Optional object of that engine's settings, below. |
-| `backends[].proto`, `.data` | Model files: an absolute path or one relative to the working directory, `"string:<text>"` or a JSON object stored as text. ncnn uses `proto` for the `.param` text and `data` for the `.bin`; the other engines use `data` only. |
+| `backends[].proto`, `.data` | Model files: an absolute path or one relative to the working directory, `"string:<text>"` or a JSON object stored as text. ncnn uses `proto` for the `.param` text and `data` for the `.bin`; OpenVINO uses `proto` for IR XML and `data` for the weights BIN; the other engines use `data` only. |
 
 The algo config only describes the model. How many calls each stage serves at once is not
 part of the manifest: pass `ImageModelOptions{preprocess, engine, postprocess}` (default 1, at
@@ -93,10 +93,11 @@ input size.
 
 `hrtc_device_config.json` shows `config` objects for ORT, TensorRT, MNN, ncnn, RKNN and CANN
 in one example algo. The ORT entry points to the existing fixed ONNX model; native backend
-paths are conversion examples, not additional bundled models. To run that file, keep the
-backend you need and provide its converted model files. Copy its `config` into a model
-manifest when overriding engine defaults. The two files are independent manifest examples;
-there is no automatic merge or extra runtime configuration file.
+paths are conversion examples, not additional bundled models. OpenVINO has no example here
+because no IR model is bundled; set `proto` to the XML path and `data` to its matching BIN path.
+To run that file, keep the backend you need and provide its converted model files. Copy its
+`config` into a model manifest when overriding engine defaults. The two files are independent
+manifest examples; there is no automatic merge or extra runtime configuration file.
 
 ORT uses explicit single-thread settings in the device example; MNN and ncnn show four
 threads. `input_shapes`, custom operator/plugin libraries and OpenCL cache settings can be
@@ -110,11 +111,14 @@ normalization). Model conversion and preprocessing must match the selected backe
 | Engine | Keys (all optional) |
 | --- | --- |
 | `ort` | `intra_op_num_threads`, `inter_op_num_threads` (0: ONNX Runtime's default); `execution_provider`: `cpu`, `coreml`, `cuda`, `tensorrt`, `openvino`, `dml`, `qnn`, `xnnpack`, `cann`, `dnnl`, `webgpu`, `vitisai` (falls back to the CPU with a warning when the ONNX Runtime package lacks it or it fails to start, including on options it rejects); `provider_options`: string keys and values passed to the provider unchanged, as named in its ONNX Runtime documentation (e.g. CoreML `ModelFormat` `NeuralNetwork`/`MLProgram`, `MLComputeUnits`; CUDA `device_id`; OpenVINO `device_type`; QNN `backend_type`; DirectML only `device_id`); `custom_op_libraries`: paths; `input_shapes` |
+| `openvino` | `num_threads` (0: OpenVINO default; positive values limit CPU inference threads); reads IR XML/BIN from `proto`/`data`, uses an FP32 inference precision hint, and runs on CPU; fixed tensor shapes and NCHW layout |
 | `ncnn` | `num_threads` (4) |
 | `mnn` | `forward_type`: `cpu`, `opencl`, `metal`, `vulkan`, `cuda`, `nn`, `auto`; `num_thread` (4); `cache_file`, `cache_dir`: OpenCL tuning cache |
 | `trt` | `plugin_libraries`: paths, loaded before the engine is deserialized; `input_shapes` (within optimization profile 0) |
 | `rknn` | `image_input` (true: uint8 inputs); `core_mask`: `RKNN_NPU_CORE_AUTO`, `RKNN_NPU_CORE_0`, `RKNN_NPU_CORE_1`, `RKNN_NPU_CORE_2`, `RKNN_NPU_CORE_0_1`, `RKNN_NPU_CORE_0_1_2`; `custom_op_libraries`: paths |
 | `cann` | none |
+
+On Linux, source `<OpenVINO_ROOT>/setupvars.sh` before running applications so the OpenVINO runtime and CPU plugin libraries are available.
 
 `input_shapes` maps model input names to shapes, e.g. `{"images": [1, 3, 640, 640]}`, and fixes
 dynamic dims once at load. An input without an entry only gets a dynamic leading batch dim, set to 1;

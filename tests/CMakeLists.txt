@@ -141,6 +141,10 @@ if(HRT_USE_MNN)
         $<TARGET_PROPERTY:MNN,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
 
+if(HRT_USE_OPENVINO)
+    hybridrt_add_unit_test(openvino_engine SOURCES engine/openvino_engine_test.cpp DEPENDS hrt::hybridrt)
+endif()
+
 if(HRT_USE_ORT OR HRT_USE_TENSORRT OR HRT_USE_RKNN)
     hybridrt_add_unit_test(image_model SOURCES model/image_model_test.cpp DEPENDS hrt::hybridrt kitzoo::log)
     if(HRT_USE_ORT)

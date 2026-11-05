@@ -24,8 +24,8 @@ namespace hrt::hrtc {
 using Bytes = Vector<std::uint8_t>;
 
 // One backend build of an algorithm. Model files are shared, null when absent,
-// and read by the engine selected by engine_type (e.g. ncnn param in proto,
-// weights in data).
+// and read by the engine selected by engine_type (e.g. ncnn param or OpenVINO
+// IR XML in proto, weights in data).
 struct EngineParam {
   String engine_type;
   // JSON settings of this engine; empty means none.

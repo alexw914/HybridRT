@@ -14,6 +14,11 @@ if(ORT_ROOT)
     set(HRT_USE_ORT ON)
 endif()
 
+if(OpenVINO_ROOT)
+    include(${_module_dir}/OpenVINO.cmake)
+    set(HRT_USE_OPENVINO ON)
+endif()
+
 if(ncnn_ROOT)
     include(${_module_dir}/ncnn.cmake)
     set(HRT_USE_NCNN ON)
