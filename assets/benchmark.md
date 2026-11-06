@@ -35,9 +35,9 @@ Raw results: local `assets/test/benchmark_results/`. Optimization history: [perf
   memory; CUDA host includes upload, CUDA device starts resident. Output remains on-device.
 - RGA outputs RGB uint8 dma-buffer without normalization; its workload differs from FP32.
   Timing includes padding, resize/channel swap, cache synchronization and completion;
-  host includes staging, resident dma-buffer excludes initial upload. RGA timings are pending:
-  RGB888 requires 16-pixel row alignment and compatible below-4-GB allocations. CPU fallback
-  timings are excluded.
+  host includes staging, resident dma-buffer excludes initial upload. RGB888 requires
+  16-pixel row alignment and compatible below-4-GB allocations; CPU fallback timings
+  are excluded.
 
 ```sh
 hybridrt_bench_preprocess --benchmark_filter='^BM_(Resolution|CudaResolution)/[0-9]+/[0-9]+/(640/640|1280/1280)/(0|1)/'
@@ -56,10 +56,10 @@ hybridrt_bench_preprocess --benchmark_filter='^BM_RgaResolution/'
 | RTX 3060 | CUDA host | 1280 × 1280 | 0.690 | 1.029 | 2.163 |
 | RTX 3060 | CUDA device | 640 × 640 | 0.086 | 0.086 | 0.095 |
 | RTX 3060 | CUDA device | 1280 × 1280 | 0.149 | 0.153 | 0.168 |
-| RK3588 | RGA host | 640 × 640 | — | — | — |
-| RK3588 | RGA host | 1280 × 1280 | — | — | — |
-| RK3588 | RGA dma | 640 × 640 | — | — | — |
-| RK3588 | RGA dma | 1280 × 1280 | — | — | — |
+| RK3588 | RGA host | 640 × 640 | 2.937 | 4.774 | 10.537 |
+| RK3588 | RGA host | 1280 × 1280 | 3.992 | 6.267 | 11.554 |
+| RK3588 | RGA dma | 640 × 640 | 2.286 | 3.577 | 7.616 |
+| RK3588 | RGA dma | 1280 × 1280 | 3.306 | 5.012 | 8.596 |
 
 ## Postprocessing
 
@@ -190,10 +190,10 @@ RK3588 CPU, RKNN FP16 B1 versus native INT8 B1/B4/B8 (whole-batch ms):
 | RTX 4090 | CUDA → TensorRT | `yolov8n_segment` | 1231.0 | 2089.5 | 2063.2 |
 | RTX 4090 | CUDA → TensorRT | `yolov8n_pose` | 1432.4 | 2639.6 | 2672.4 |
 | RTX 4090 | CUDA → TensorRT | `yolov8n_classify` | 2986.8 | 6339.5 | 5743.0 |
-| RK3588 | RGA → RKNN | `yolov8n_detect` | 65.3 | 62.6 | 61.4 |
-| RK3588 | RGA → RKNN | `yolov8n_segment` | 52.9 | 51.6 | 50.2 |
-| RK3588 | RGA → RKNN | `yolov8n_pose` | 55.3 | 54.7 | 57.7 |
-| RK3588 | RGA → RKNN | `yolov8n_classify` | 114.3 | 115.7 | 116.0 |
+| RK3588 | RGA → RKNN | `yolov8n_detect` | 42.6 | 61.8 | 61.6 |
+| RK3588 | RGA → RKNN | `yolov8n_segment` | 35.9 | 50.1 | 48.3 |
+| RK3588 | RGA → RKNN | `yolov8n_pose` | 41.0 | 57.5 | 56.5 |
+| RK3588 | RGA → RKNN | `yolov8n_classify` | 73.3 | 83.5 | 115.6 |
 
 M5 Pro batch scaling: an engine-only `hrt-model-bench` check of `yolov8n_detect`
 (30 warm-ups, 200 runs, mean; generated inputs, no preprocessing/postprocessing) measured
