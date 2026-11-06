@@ -10,22 +10,22 @@ Setup is excluded; timed work includes synchronization. Blank/`—` cells are un
 Models, hashes and validation: [template reference](template/README.md#test-models).
 Raw results: local `assets/test/benchmark_results/`. Optimization history: [perf.md](perf.md).
 
-| Item | M5 Pro | RTX 3060 | RK3588 | RTX 4090 |
-| --- | --- | --- | --- | --- |
-| Device | MacBook Pro | Desktop PC | Radxa Rock 5B+ | Cloud VM |
-| CPU | Apple M5 Pro, 15 cores | AMD Ryzen 5 5600X, 6 cores / 12 threads | RK3588, 4x Cortex-A76 + 4x Cortex-A55 | Intel Xeon Gold 6462C, 16 cores / 32 threads exposed |
-| Memory | 24 GB | 32 GB | 8 GB | 247 GiB (OS reported) |
-| Accelerator | M5 Pro GPU / ANE (Metal, CoreML) | RTX 3060 12 GB | RK3588 NPU, RGA | RTX 4090; GPU 0 only, 49,140 MiB exposed |
-| OS | macOS 27.0.1 | Windows host, WSL2 Ubuntu 24.04.3, kernel 6.18.40.1 | Debian 12 aarch64 | Ubuntu 22.04.4 x86_64 container, host kernel 3.10.0-1160.119.1.el7 |
-| Build host | native | native | cross-build on the RTX 3060 WSL2 host | native |
-| Compiler | Apple Clang 21.0.0 | GCC 13.3.0, nvcc 13.0.88 | Arm GNU Toolchain 12.2.rel1 `aarch64-none-linux-gnu-g++` 12.2.1 | GCC 11.4.0, nvcc 12.4.131 |
-| CMake | 4.4.3 | CMake 3.28.3, Ninja 1.11.1 | CMake 3.28.3, Ninja 1.11.1 | CMake 4.4.4, Ninja 1.10.1 |
-| Build type | Release `-O3` | Release `-O3 -DNDEBUG` | Release `-O3 -DNDEBUG` | Release `-O3 -DNDEBUG` |
-| OpenCV | 4.10.0 | 4.6.0 (Ubuntu package) | 4.6.0 (cross-built) | 4.5.4 (Ubuntu package) |
-| Inference SDK | ONNX Runtime 1.31.0 | ONNX Runtime 1.31.0, TensorRT 10.14.1.48 | rknpu2 / librknnrt 2.3.2 | ONNX Runtime 1.23.2, TensorRT 10.16.1.11 |
-| Device SDK | Metal | driver 591.74, CUDA 13.0.96 | librga 1.10.1 | driver 550.54.14, CUDA 12.4 |
-| Affinity | none | none | A76 cores 4-7 | none; `CUDA_VISIBLE_DEVICES=0` |
-| Pipeline | CPU / Metal → ORT CoreML | CUDA → TensorRT | RGA → RKNN | CUDA → TensorRT |
+| Item | M5 Pro | RTX 3060 | RK3588 | RTX 4090 | PPU ZW810E |
+| --- | --- | --- | --- | --- | --- |
+| Device | MacBook Pro | Desktop PC | Radxa Rock 5B+ | Cloud VM | PPU server |
+| CPU | Apple M5 Pro, 15 cores | AMD Ryzen 5 5600X, 6 cores / 12 threads | RK3588, 4x Cortex-A76 + 4x Cortex-A55 | Intel Xeon Gold 6462C, 16 cores / 32 threads exposed | Intel Xeon, 44 cores exposed |
+| Memory | 24 GB | 32 GB | 8 GB | 247 GiB (OS reported) | 450 GiB (OS reported) |
+| Accelerator | M5 Pro GPU / ANE (Metal, CoreML) | RTX 3060 12 GB | RK3588 NPU, RGA | RTX 4090; GPU 0 only, 49,140 MiB exposed | 4 × PPU-ZW810E, 97,920 MiB each |
+| OS | macOS 27.0.1 | Windows host, WSL2 Ubuntu 24.04.3, kernel 6.18.40.1 | Debian 12 aarch64 | Ubuntu 22.04.4 x86_64 container, host kernel 3.10.0-1160.119.1.el7 | Ubuntu 22.04.5, kernel 5.10.134-013.7.2.kangaroo.al8.x86_64 |
+| Build host | native | native | cross-build on the RTX 3060 WSL2 host | native | native |
+| Compiler | Apple Clang 21.0.0 | GCC 13.3.0, nvcc 13.0.88 | Arm GNU Toolchain 12.2.rel1 `aarch64-none-linux-gnu-g++` 12.2.1 | GCC 11.4.0, nvcc 12.4.131 | GCC 11.4.0 |
+| CMake | 4.4.3 | CMake 3.28.3, Ninja 1.11.1 | CMake 3.28.3, Ninja 1.11.1 | CMake 4.4.4, Ninja 1.10.1 | CMake 3.31.12 |
+| Build type | Release `-O3` | Release `-O3 -DNDEBUG` | Release `-O3 -DNDEBUG` | Release `-O3 -DNDEBUG` | Release `-O3 -DNDEBUG` |
+| OpenCV | 4.10.0 | 4.6.0 (Ubuntu package) | 4.6.0 (cross-built) | 4.5.4 (Ubuntu package) | 4.10.0 |
+| Inference SDK | ONNX Runtime 1.31.0 | ONNX Runtime 1.31.0, TensorRT 10.14.1.48 | rknpu2 / librknnrt 2.3.2 | ONNX Runtime 1.23.2, TensorRT 10.16.1.11 | ONNX Runtime 1.20.1 (CUDA EP) |
+| Device SDK | Metal | driver 591.74, CUDA 13.0.96 | librga 1.10.1 | driver 550.54.14, CUDA 12.4 | CUDA Toolkit 12.3.0, PPU driver 1.4.1-816bc0, SDK 2.1.0-a5f865 |
+| Affinity | none | none | A76 cores 4-7 | none; `CUDA_VISIBLE_DEVICES=0` | none; GPU 0 |
+| Pipeline | CPU / Metal → ORT CoreML | CUDA → TensorRT | RGA → RKNN | CUDA → TensorRT | CUDA → ORT CUDA (YOLOv8n) |
 
 ## Preprocessing
 
@@ -39,6 +39,11 @@ Raw results: local `assets/test/benchmark_results/`. Optimization history: [perf
   RGB888 requires 16-pixel row alignment and compatible below-4-GB allocations. CPU fallback
   timings are excluded.
 
+PPU ZW810E preprocessing was measured 2026-11-06 on GPU 0. Other jobs held about
+7.4–9.5 GiB per device during system checks; sampled utilization was 0%, so this was
+a shared device rather than an isolated benchmark. Raw results: `ppu810e_preprocess.json`
+in the local results directory.
+
 ```sh
 hybridrt_bench_preprocess --benchmark_filter='^BM_(Resolution|CudaResolution)/[0-9]+/[0-9]+/(640/640|1280/1280)/(0|1)/'
 hybridrt_bench_preprocess --benchmark_filter='^BM_RgaResolution/'
@@ -50,12 +55,14 @@ hybridrt_bench_preprocess --benchmark_filter='^BM_RgaResolution/'
 | M5 Pro | CPU | 1280 × 1280 | 1.871 | 1.424 | 2.253 |
 | M5 Pro | Metal | 640 × 640 | 0.223 | 0.248 | 0.464 |
 | M5 Pro | Metal | 1280 × 1280 | 0.455 | 0.480 | 0.722 |
-| RTX 3060 | CPU | 640 × 640 | 0.635 | 0.665 | 0.618 |
-| RTX 3060 | CPU | 1280 × 1280 | 2.395 | 1.760 | 3.038 |
 | RTX 3060 | CUDA host | 640 × 640 | 0.601 | 0.967 | 2.122 |
 | RTX 3060 | CUDA host | 1280 × 1280 | 0.690 | 1.029 | 2.163 |
 | RTX 3060 | CUDA device | 640 × 640 | 0.086 | 0.086 | 0.095 |
 | RTX 3060 | CUDA device | 1280 × 1280 | 0.149 | 0.153 | 0.168 |
+| PPU ZW810E | CUDA host | 640 × 640 | 0.484 | 0.824 | 1.801 |
+| PPU ZW810E | CUDA host | 1280 × 1280 | 0.494 | 0.833 | 1.817 |
+| PPU ZW810E | CUDA device | 640 × 640 | 0.017 | 0.017 | 0.017 |
+| PPU ZW810E | CUDA device | 1280 × 1280 | 0.030 | 0.030 | 0.030 |
 | RK3588 | RGA host | 640 × 640 | — | — | — |
 | RK3588 | RGA host | 1280 × 1280 | — | — | — |
 | RK3588 | RGA dma | 640 × 640 | — | — | — |
@@ -157,6 +164,22 @@ RK3588 CPU, RKNN FP16 B1 versus native INT8 B1/B4/B8 (whole-batch ms):
   with 5 untimed calls. Run `hybridrt_bench_pipeline --benchmark_filter='^BM_Batch/'`.
 - CoreML: default `NeuralNetwork`, compute units `ALL`, default ORT threads, FP32 ONNX
   inputs/outputs; unsupported nodes run on CPU. TensorRT: FP32 `--noTF32`. RKNN: FP16.
+- PPU ZW810E: an engine-only `hrt-model-bench` check of `YoloV8Detect.onnx` with
+  ONNX Runtime 1.20.1 CUDA EP measured 2.914 ms mean / 2.898 ms p50 (343.1 runs/s);
+  ORT CPU measured 77.607 ms mean / 77.466 ms p50 (12.9 runs/s). Each used 30 warm-ups
+  and 200 timed runs. Inputs were generated by the tool; preprocessing and postprocessing
+  are excluded. This validates model execution, not the full batch pipeline. Full detection
+  pipeline measurements are reported below. Logs: `ppu810e_ort_cuda_engine.log` and
+  `ppu810e_ort_cpu_engine.log` in the local results directory.
+- PPU ZW810E pipeline uses the same four YOLOv8n tasks and 640×640 static B1/B4/B8
+  template exports as the other platforms, with CUDA preprocessing → ORT CUDA.
+  Full `ImageModel::process_sync` includes CPU postprocessing. Eight callers share one
+  model, pools 3/2/3, cycling the first 32 sorted COCO128 images. Five untimed calls per
+  caller; 3 repetitions with 4 s minimum time and 1.6 s warm-up. Detect, segment and
+  classify B4/B8 medians are reported below. All four B1 models and pose B4/B8 aborted
+  with exit 134 before producing benchmark timings, so those cells are unmeasured.
+  Raw successful results: `ppu810e_cuda_ort_pipeline.json` and `.log` in the local
+  results directory.
 - M5 Pro measured 2026-10-25: 24 cases × 3 repetitions. Raw results:
   `m5_pipeline.json`, `m5_pipeline.log`. DVPP → CANN is unmeasured.
 - RTX 4090 measured 2026-10-29 on GPU 0, current source at `789694e` with the
@@ -194,6 +217,10 @@ RK3588 CPU, RKNN FP16 B1 versus native INT8 B1/B4/B8 (whole-batch ms):
 | RK3588 | RGA → RKNN | `yolov8n_segment` | 52.9 | 51.6 | 50.2 |
 | RK3588 | RGA → RKNN | `yolov8n_pose` | 55.3 | 54.7 | 57.7 |
 | RK3588 | RGA → RKNN | `yolov8n_classify` | 114.3 | 115.7 | 116.0 |
+| PPU ZW810E | CUDA → ORT CUDA | `yolov8n_detect` | — | 649.0 | 650.5 |
+| PPU ZW810E | CUDA → ORT CUDA | `yolov8n_segment` | — | 483.5 | 481.6 |
+| PPU ZW810E | CUDA → ORT CUDA | `yolov8n_pose` | — | — | — |
+| PPU ZW810E | CUDA → ORT CUDA | `yolov8n_classify` | — | 1290.1 | 1147.0 |
 
 M5 Pro batch scaling: an engine-only `hrt-model-bench` check of `yolov8n_detect`
 (30 warm-ups, 200 runs, mean; generated inputs, no preprocessing/postprocessing) measured

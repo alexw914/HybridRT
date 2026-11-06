@@ -13,7 +13,7 @@
 
 namespace hrt::engine {
 
-// C API (no exceptions); host buffers are bound once through an IoBinding.
+// C API (no exceptions); host buffers are wrapped as OrtValues for Run.
 // Config (all optional):
 //   "intra_op_num_threads", "inter_op_num_threads": 0 keeps the default
 //   "execution_provider": "cpu" (default) | "coreml" | "cuda" | "tensorrt" |
@@ -53,7 +53,7 @@ private:
 
   auto resolve_outputs() -> bool;
 
-  auto bind(const core::Buffers& buffers, bool input) -> bool;
+  auto create_values(const core::Buffers& buffers, bool input) -> bool;
 
   auto release_values(Vector<OrtValue*>& values) -> void;
 
@@ -66,9 +66,10 @@ private:
   OrtEnv* env_ = nullptr;
   OrtSession* session_ = nullptr;
   OrtMemoryInfo* memory_info_ = nullptr;
-  OrtIoBinding* binding_ = nullptr;
   Vector<OrtValue*> input_values_;
   Vector<OrtValue*> output_values_;
+  Vector<const char*> input_name_ptrs_;
+  Vector<const char*> output_name_ptrs_;
 };
 
 } // namespace hrt::engine

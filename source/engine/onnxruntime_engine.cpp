@@ -245,12 +245,15 @@ auto OrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
   KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
   failure = error(api_->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info_));
   KZ_CHECK_MSG(failure.empty(), "onnxruntime: {}", failure);
-  failure = error(api_->CreateIoBinding(session_, &binding_));
-  KZ_CHECK_MSG(failure.empty(), "onnxruntime: {}", failure);
-
   proto_ = {DataLayout::Nchw, DataLayout::Nchw};
   if (!read_io(true) || !read_io(false))
     return false;
+  input_name_ptrs_.reserve(input_names_.size());
+  output_name_ptrs_.reserve(output_names_.size());
+  for (const auto& name : input_names_)
+    input_name_ptrs_.push_back(name.c_str());
+  for (const auto& name : output_names_)
+    output_name_ptrs_.push_back(name.c_str());
   core::fix_shapes(input_shapes, input_names_, input_protos_, "config.input_shapes", problems);
   KZ_CHECK_MSG(problems.empty(), "onnxruntime: {}", core::join(problems));
   const auto dynamic = [](const core::BufferProto& proto) -> bool { return core::is_dynamic(proto.shape); };
@@ -354,11 +357,9 @@ auto OrtEngine::read_io(bool input) -> bool {
   return true;
 }
 
-auto OrtEngine::bind(const core::Buffers& buffers, bool input) -> bool {
+auto OrtEngine::create_values(const core::Buffers& buffers, bool input) -> bool {
   auto& values = input ? input_values_ : output_values_;
   const auto& protos = input ? input_protos_ : output_protos_;
-  const auto& names = input ? input_names_ : output_names_;
-  input ? api_->ClearBoundInputs(binding_) : api_->ClearBoundOutputs(binding_);
   release_values(values);
   for (std::size_t i = 0; i < buffers.size(); ++i) {
     auto* data = buffers[i]->memory()->mutable_cpu();
@@ -370,23 +371,22 @@ auto OrtEngine::bind(const core::Buffers& buffers, bool input) -> bool {
                                                               shape.size(), ort_type(protos[i].data_type), &value));
     KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
     values.push_back(value);
-    failure = error(input ? api_->BindInput(binding_, names[i].c_str(), value)
-                          : api_->BindOutput(binding_, names[i].c_str(), value));
-    KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
   }
   return true;
 }
 
 auto OrtEngine::set_inputs(const core::Buffers& inputs) -> bool {
-  return Engine::set_inputs(inputs) && bind(inputs_, true);
+  return Engine::set_inputs(inputs) && create_values(inputs_, true);
 }
 
 auto OrtEngine::set_outputs(const core::Buffers& outputs) -> bool {
-  return Engine::set_outputs(outputs) && bind(outputs_, false);
+  return Engine::set_outputs(outputs) && create_values(outputs_, false);
 }
 
 auto OrtEngine::inference(core::Stream* /*stream*/) -> bool {
-  const auto failure = error(api_->RunWithBinding(session_, nullptr, binding_));
+  const auto failure =
+      error(api_->Run(session_, nullptr, input_name_ptrs_.data(), input_values_.data(), input_values_.size(),
+                      output_name_ptrs_.data(), output_values_.size(), output_values_.data()));
   KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
   return true;
 }
@@ -400,9 +400,8 @@ auto OrtEngine::release_values(Vector<OrtValue*>& values) -> void {
 auto OrtEngine::do_release() -> void {
   release_values(input_values_);
   release_values(output_values_);
-  if (binding_ != nullptr)
-    api_->ReleaseIoBinding(binding_);
-  binding_ = nullptr;
+  input_name_ptrs_.clear();
+  output_name_ptrs_.clear();
   if (memory_info_ != nullptr)
     api_->ReleaseMemoryInfo(memory_info_);
   if (session_ != nullptr)

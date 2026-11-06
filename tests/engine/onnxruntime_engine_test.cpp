@@ -65,6 +65,10 @@ TEST(OnnxruntimeEngineTest, RunsReluModel) {
   expect_relu(hrt::test::template_config("ort"));
 }
 
+TEST(OnnxruntimeEngineTest, RunsReluWithCudaProvider) {
+  expect_relu(R"({"execution_provider": "cuda", "provider_options": {"device_id": "0"}})");
+}
+
 #ifdef __APPLE__
 TEST(OnnxruntimeEngineTest, RunsOnCoreml) {
   expect_relu(R"({"execution_provider": "coreml", "provider_options": {"ModelFormat": "MLProgram"}})");

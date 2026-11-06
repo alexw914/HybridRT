@@ -131,13 +131,19 @@ auto BM_Ocr(benchmark::State& state) -> void {
 
 #endif
 
-// Batch pipelines: 0 CPU preprocessing with ORT CoreML, 1 Metal with ORT CoreML, 2 CUDA with TensorRT, 3 RGA with
-// RKNN; each build registers the ones of its platform.
+// Batch pipelines: 0 CPU preprocessing with ORT CoreML, 1 Metal with ORT CoreML, 2 CUDA with TensorRT,
+// 3 RGA with RKNN, 4 CUDA preprocessing with ORT CUDA; each build registers its platform paths.
 #ifdef HRT_BENCH_RKNN
+const hrt::Vector<std::int64_t> kBatchTasks{0, 1, 2, 4};
 const hrt::Vector<std::int64_t> kBatchPipelines{3};
 #elif defined(__APPLE__)
+const hrt::Vector<std::int64_t> kBatchTasks{0, 1, 2, 4};
 const hrt::Vector<std::int64_t> kBatchPipelines{0, 1};
+#elif defined(HRT_BENCH_ORT) && defined(HRT_BENCH_CUDA) && !defined(HRT_BENCH_TENSORRT)
+const hrt::Vector<std::int64_t> kBatchTasks{0, 1, 2, 4};
+const hrt::Vector<std::int64_t> kBatchPipelines{4};
 #else
+const hrt::Vector<std::int64_t> kBatchTasks{0, 1, 2, 4};
 const hrt::Vector<std::int64_t> kBatchPipelines{2};
 #endif
 
@@ -152,7 +158,7 @@ auto batch_models() -> hrt::Map<hrt::Array<std::int64_t, 3>, hrt::UniquePtr<hrt:
 auto batch_entry(std::size_t task, std::int64_t pipeline, std::int64_t batch) -> kitzoo::json::Json {
   const auto name = hrt::String(hrt::bench::kAlgos.at(task)) + (batch == 1 ? "" : "_batch" + std::to_string(batch));
   auto entry = hrt::bench::template_entry(name, pipeline < 2 ? hrt::bench::Provider::CoreMl : hrt::bench::Provider::Cpu,
-                                          pipeline < 3);
+                                          pipeline != 3);
   if (!entry.is_object())
     return {};
   auto& preprocess = entry["config"]["preprocess"];
@@ -172,8 +178,13 @@ auto batch_entry(std::size_t task, std::int64_t pipeline, std::int64_t batch) ->
     path = std::filesystem::path("assets/test/rknn") / path.filename().replace_extension("rknn");
     entry["config"]["engine"]["backends"] = {
         {{"engine_type", "rknn"}, {"data", path.string()}, {"config", {{"image_input", true}}}}};
+  } else if (pipeline == 4) {
+    preprocess["device"] = "cuda";
+    auto& backend = entry["config"]["engine"]["backends"][0];
+    backend["config"]["execution_provider"] = "cuda";
+    backend["config"]["provider_options"]["device_id"] = "0";
   }
-  if (pipeline >= 2) {
+  if (pipeline == 2 || pipeline == 3) {
     // TensorRT plans load only on the TensorRT version and platform that built them.
     const auto context = pipeline == 2 ? hrt::core::Context::create(hrt::core::DeviceType::Cuda) : nullptr;
     if (pipeline == 2 && context == nullptr)
@@ -217,7 +228,8 @@ auto BM_Batch(benchmark::State& state) -> void {
   const auto task = static_cast<std::size_t>(state.range(0));
   const auto pipeline = state.range(1);
   const auto batch = state.range(2);
-  constexpr hrt::Array<const char*, 4> kPipelines{"cpu_coreml", "metal_coreml", "cuda_trt", "rga_rknn"};
+  constexpr hrt::Array<const char*, 5> kPipelines{"cpu_coreml", "metal_coreml", "cuda_trt", "rga_rknn",
+                                                  "cuda_ort_cuda"};
   state.SetLabel(hrt::String(hrt::bench::kTasks.at(task)) + "/" + kPipelines.at(static_cast<std::size_t>(pipeline)));
   hrt::bench::with_result(task, [&]<typename Result>() -> void {
     using Model = hrt::model::ImageModel<Result>;
@@ -302,7 +314,7 @@ BENCHMARK(BM_Batch)
       });
     })
     ->ArgNames({"task", "pipeline", "batch"})
-    ->ArgsProduct({{0, 1, 2, 4}, kBatchPipelines, {1, 4, 8}})
+    ->ArgsProduct({kBatchTasks, kBatchPipelines, {1, 4, 8}})
     ->Threads(8)
     ->Unit(benchmark::kMillisecond)
     ->UseRealTime();

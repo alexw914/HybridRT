@@ -30,6 +30,7 @@ Install the SDK for each inference backend you want to enable.
 | Platform | Build toolchain | Verification coverage |
 | --- | --- | --- |
 | Linux x86_64 | GCC 11.4 / 13.3; Clang 18.1.3 | CI with ONNX Runtime; additional NVIDIA CUDA / TensorRT validation |
+| Linux x86_64 / PPU ZW810E | GCC 11.4, CUDA Toolkit 12.3, CMake 3.31 | ONNX Runtime 1.20.1 CUDA EP, CUDA preprocessing and ReLU / YOLO model inference validated; performance data in [benchmark results](assets/benchmark.md) |
 | Windows x64 | MSVC 19.50 (19.44 for CUDA 12.x builds) | CI with ONNX Runtime and real-model validation; additional MNN, ncnn and TensorRT tests |
 | macOS arm64 | Apple Clang 21.0.0 | CI with ONNX Runtime; additional CoreML and MNN CPU validation |
 | Linux aarch64 / RK3588 | Arm GNU Toolchain 12.2 | RKNN / RGA, MNN and ncnn board validation |
