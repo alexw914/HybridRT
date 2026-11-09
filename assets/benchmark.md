@@ -55,6 +55,8 @@ hybridrt_bench_preprocess --benchmark_filter='^BM_RgaResolution/'
 | M5 Pro | CPU | 1280 × 1280 | 1.871 | 1.424 | 2.253 |
 | M5 Pro | Metal | 640 × 640 | 0.223 | 0.248 | 0.464 |
 | M5 Pro | Metal | 1280 × 1280 | 0.455 | 0.480 | 0.722 |
+| RTX 3060 | CPU | 640 × 640 | 0.635 | 0.665 | 0.618 |
+| RTX 3060 | CPU | 1280 × 1280 | 2.395 | 1.760 | 3.038 |
 | RTX 3060 | CUDA host | 640 × 640 | 0.601 | 0.967 | 2.122 |
 | RTX 3060 | CUDA host | 1280 × 1280 | 0.690 | 1.029 | 2.163 |
 | RTX 3060 | CUDA device | 640 × 640 | 0.086 | 0.086 | 0.095 |
@@ -63,10 +65,10 @@ hybridrt_bench_preprocess --benchmark_filter='^BM_RgaResolution/'
 | PPU ZW810E | CUDA host | 1280 × 1280 | 0.494 | 0.833 | 1.817 |
 | PPU ZW810E | CUDA device | 640 × 640 | 0.017 | 0.017 | 0.017 |
 | PPU ZW810E | CUDA device | 1280 × 1280 | 0.030 | 0.030 | 0.030 |
-| RK3588 | RGA host | 640 × 640 | — | — | — |
-| RK3588 | RGA host | 1280 × 1280 | — | — | — |
-| RK3588 | RGA dma | 640 × 640 | — | — | — |
-| RK3588 | RGA dma | 1280 × 1280 | — | — | — |
+| RK3588 | RGA host | 640 × 640 | 2.937 | 4.774 | 10.537 |
+| RK3588 | RGA host | 1280 × 1280 | 3.992 | 6.267 | 11.554 |
+| RK3588 | RGA dma | 640 × 640 | 2.286 | 3.577 | 7.616 |
+| RK3588 | RGA dma | 1280 × 1280 | 3.306 | 5.012 | 8.596 |
 
 ## Postprocessing
 
@@ -213,10 +215,10 @@ RK3588 CPU, RKNN FP16 B1 versus native INT8 B1/B4/B8 (whole-batch ms):
 | RTX 4090 | CUDA → TensorRT | `yolov8n_segment` | 1231.0 | 2089.5 | 2063.2 |
 | RTX 4090 | CUDA → TensorRT | `yolov8n_pose` | 1432.4 | 2639.6 | 2672.4 |
 | RTX 4090 | CUDA → TensorRT | `yolov8n_classify` | 2986.8 | 6339.5 | 5743.0 |
-| RK3588 | RGA → RKNN | `yolov8n_detect` | 65.3 | 62.6 | 61.4 |
-| RK3588 | RGA → RKNN | `yolov8n_segment` | 52.9 | 51.6 | 50.2 |
-| RK3588 | RGA → RKNN | `yolov8n_pose` | 55.3 | 54.7 | 57.7 |
-| RK3588 | RGA → RKNN | `yolov8n_classify` | 114.3 | 115.7 | 116.0 |
+| RK3588 | RGA → RKNN | `yolov8n_detect` | 42.6 | 61.8 | 61.6 |
+| RK3588 | RGA → RKNN | `yolov8n_segment` | 35.9 | 50.1 | 48.3 |
+| RK3588 | RGA → RKNN | `yolov8n_pose` | 41.0 | 57.5 | 56.5 |
+| RK3588 | RGA → RKNN | `yolov8n_classify` | 73.3 | 83.5 | 115.6 |
 | PPU ZW810E | CUDA → ORT CUDA | `yolov8n_detect` | — | 649.0 | 650.5 |
 | PPU ZW810E | CUDA → ORT CUDA | `yolov8n_segment` | — | 483.5 | 481.6 |
 | PPU ZW810E | CUDA → ORT CUDA | `yolov8n_pose` | — | — | — |
