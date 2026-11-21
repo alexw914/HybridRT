@@ -160,21 +160,17 @@ auto device_type(hrt::preprocess::ImagePreprocessorType type) -> core::DeviceTyp
   }
 }
 
-// Whether ImageModel::create finds an engine to load instead of aborting:
-// one compiled in whose device, shared with the preprocessor, is usable.
-// `algo` passed check_algo_config.
+// Whether ImageModel::create finds an engine to load: one compiled in whose
+// device, shared with the preprocessor, is usable. `algo` passed check_algo_config.
 auto check_engines(const hrt::hrtc::AlgoParam& algo) -> HrtStatus {
   const kitzoo::json::Reader reader{algo.config};
-  const auto preprocess = reader.raw()
-                              .value("preprocess", kitzoo::json::Json::object())
-                              .get<hrt::preprocess::ImagePreprocessorParam>()
-                              .device;
+  const auto section = reader.raw().value("preprocess", kitzoo::json::Json::object());
+  const auto preprocess = section.value("device", hrt::preprocess::ImagePreprocessorType::Auto);
   if (hrt::preprocess::ImagePreprocessor::create(preprocess) == nullptr)
     return fail(HRT_STATUS_UNAVAILABLE, "preprocess device of algo " + algo.name + " is not available in this build");
   const auto preprocess_device = device_type(preprocess);
   bool runnable = false;
   for (const auto& param : algo.engines) {
-    // Engine::initialize aborts on such a config.
     if (!param.config.empty()) {
       const kitzoo::json::Reader config{param.config};
       if (!config.is_parse_success() || !config.raw().is_object())
@@ -308,7 +304,10 @@ auto hrt_ocr_model_create(const HrtPackage* package, const char* detection, cons
     if (const auto status = check_engines(*algo); status != HRT_STATUS_OK)
       return status;
   }
-  *output = new HrtOcrModel{model::OcrModel::create(*det, *rec)};
+  auto created = model::OcrModel::create(*det, *rec);
+  if (created == nullptr)
+    return fail_logged(HRT_STATUS_INVALID_CONFIG, "failed to create OCR model");
+  *output = new HrtOcrModel{std::move(created)};
   return HRT_STATUS_OK;
 }
 
@@ -475,29 +474,36 @@ auto hrt_model_create(const HrtPackage* package, const char* algo, const HrtMode
   auto created = std::make_unique<HrtModel>();
   created->algo = param->name;
   created->task = static_cast<HrtTask>(*task);
-  const auto make = [&]<typename Result>() -> auto {
-    created->model = model::ImageModel<Result>::create(*param, image_options);
+  const auto make = [&]<typename Result>() -> bool {
+    auto instance = model::ImageModel<Result>::create(*param, image_options);
+    if (instance == nullptr)
+      return false;
+    created->model = std::move(instance);
+    return true;
   };
+  bool ok = false;
   switch (*task) {
   case model::Task::Detect:
-    make.operator()<postprocess::DetectResultMap>();
+    ok = make.operator()<postprocess::DetectResultMap>();
     break;
   case model::Task::Rotated:
-    make.operator()<postprocess::RotatedResultMap>();
+    ok = make.operator()<postprocess::RotatedResultMap>();
     break;
   case model::Task::Classify:
-    make.operator()<postprocess::ClassifyResult>();
+    ok = make.operator()<postprocess::ClassifyResult>();
     break;
   case model::Task::Keypoint:
-    make.operator()<postprocess::KeypointResultMap>();
+    ok = make.operator()<postprocess::KeypointResultMap>();
     break;
   case model::Task::Segment:
-    make.operator()<postprocess::SegmentResultMap>();
+    ok = make.operator()<postprocess::SegmentResultMap>();
     break;
   case model::Task::Embedding:
-    make.operator()<postprocess::EmbeddingResult>();
+    ok = make.operator()<postprocess::EmbeddingResult>();
     break;
   }
+  if (!ok)
+    return fail_logged(HRT_STATUS_INVALID_CONFIG, "failed to create model for algo " + param->name);
   *model = created.release();
   return HRT_STATUS_OK;
 }

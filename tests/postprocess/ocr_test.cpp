@@ -111,15 +111,15 @@ TEST(OcrTest, DecodesInt8MapsInPlace) {
 TEST(OcrTest, RejectsInvalidConfigAndDictionaryMismatch) {
   const auto output = proto(DataType::Float32, {1, 2, 4});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 48, 320})}, {output});
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::OcrResult>(
-                   "Ocr", {{"stage", "detection"}, {"unknown", true}}, engine),
-               "");
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::OcrResult>(
-                   "Ocr", {{"stage", "recognition"}, {"dictionary", "string:a\n"}}, engine),
-               "");
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::OcrResult>(
-                   "Ocr", {{"stage", "detection"}, {"threshold", 2}}, engine),
-               "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::OcrResult>(
+                "Ocr", {{"stage", "detection"}, {"unknown", true}}, engine),
+            nullptr);
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::OcrResult>(
+                "Ocr", {{"stage", "recognition"}, {"dictionary", "string:a\n"}}, engine),
+            nullptr);
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::OcrResult>(
+                "Ocr", {{"stage", "detection"}, {"threshold", 2}}, engine),
+            nullptr);
 }
 
 } // namespace

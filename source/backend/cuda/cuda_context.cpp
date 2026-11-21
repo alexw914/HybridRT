@@ -14,8 +14,8 @@ namespace hrt::backend {
 
 CudaStream::CudaStream() {
   cudaStream_t stream = nullptr;
-  KZ_CHECK_MSG(cudaStreamCreate(&stream) == cudaSuccess, "cuda: cudaStreamCreate failed: {}",
-               cudaGetErrorString(cudaGetLastError()));
+  KZ_CHECK_RETURN(cudaStreamCreate(&stream) == cudaSuccess, , "cuda: cudaStreamCreate failed: {}",
+                  cudaGetErrorString(cudaGetLastError()));
   handle_ = stream;
 }
 
@@ -45,7 +45,8 @@ auto CudaContext::set_current() -> void {
 
 auto CudaContext::create_stream() -> UniquePtr<core::Stream> {
   set_current();
-  return std::make_unique<CudaStream>();
+  auto stream = std::make_unique<CudaStream>();
+  return stream->handle() != nullptr ? std::move(stream) : nullptr;
 }
 
 } // namespace hrt::backend

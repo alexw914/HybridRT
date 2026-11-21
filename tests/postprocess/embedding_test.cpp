@@ -78,9 +78,9 @@ TEST(EmbeddingTest, DequantizesEveryInt8ValueLikeTheScalarFormula) {
 TEST(EmbeddingTest, NeedsOneOutput) {
   const auto output = proto(DataType::Float32, {1, 3});
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {output, output});
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::EmbeddingResult>(
-                   "Embedding", kitzoo::json::Json::object(), engine),
-               "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::EmbeddingResult>(
+                "Embedding", kitzoo::json::Json::object(), engine),
+            nullptr);
 }
 
 TEST(EmbeddingTest, TakesNoParameters) {

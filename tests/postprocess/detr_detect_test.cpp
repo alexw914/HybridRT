@@ -90,20 +90,19 @@ TEST(DetrDetectTest, ChecksConfigAndOutputContract) {
   for (const auto* text : {R"({"class_num":"two"})", R"({"class_num":-1})", R"({"class_num":2,"iou_threshold":[0.5]})",
                            R"({"class_num":2,"confidence_threshold":["high"]})"})
     EXPECT_FALSE(hrt::postprocess::check_postprocess_config("DetrDetect", Json::parse(text)).empty());
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {proto(DataType::Float32, {1, 2, 6})});
   for (const auto* text :
        {R"({"class_num":0})", R"({"class_num":3})", R"({"class_num":2,"confidence_threshold":[-0.1]})",
         R"({"class_num":2,"confidence_threshold":[0.1,0.2,0.3]})"})
-    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("DetrDetect",
-                                                                                           Json::parse(text), engine),
-                 "");
+    EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("DetrDetect", Json::parse(text),
+                                                                                        engine),
+              nullptr);
   for (const auto& output :
        {proto(DataType::Float32, {1, 6, 2}), proto(DataType::Float32, {1, 0, 6}), proto(DataType::Int32, {1, 2, 6})}) {
     FakeEngine invalid({proto(DataType::Float32, {1, 3, 40, 40})}, {output});
-    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
-                     "DetrDetect", Json::parse(R"({"class_num":2})"), invalid),
-                 "");
+    EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
+                  "DetrDetect", Json::parse(R"({"class_num":2})"), invalid),
+              nullptr);
   }
 }
 
@@ -166,17 +165,16 @@ TEST(DetrDetectTest, PacksStridedQueries) {
 TEST(DetrDetectTest, RejectsMismatchedSeparateQueriesAndRemovedOutputKeys) {
   for (const auto* text : {R"({"class_num":2,"score_activation":"auto"})", R"({"class_num":2,"output_format":"auto"})"})
     EXPECT_FALSE(hrt::postprocess::check_postprocess_config("DetrDetect", Json::parse(text)).empty());
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})},
                     {proto(DataType::Float32, {1, 2, 4}), proto(DataType::Float32, {1, 3, 2})});
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
-                   "DetrDetect", Json::parse(R"({"class_num":2,"output_format":"separate"})"), engine),
-               "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
+                "DetrDetect", Json::parse(R"({"class_num":2,"output_format":"separate"})"), engine),
+            nullptr);
   FakeEngine reversed({proto(DataType::Float32, {1, 3, 40, 40})},
                       {proto(DataType::Float32, {1, 2, 2}), proto(DataType::Float32, {1, 2, 4})});
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
-                   "DetrDetect", Json::parse(R"({"class_num":2,"output_format":"separate"})"), reversed),
-               "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
+                "DetrDetect", Json::parse(R"({"class_num":2,"output_format":"separate"})"), reversed),
+            nullptr);
   for (const auto* key : {"boxes_output", "scores_output"}) {
     auto removed = Json::parse(R"({"class_num":2,"output_format":"separate"})");
     removed[key] = 0;
@@ -188,9 +186,9 @@ TEST(DetrDetectTest, RejectsMismatchedSeparateQueriesAndRemovedOutputKeys) {
                            R"({"class_num":2,"output_format":"separate","scores_output":1})",
                            R"({"class_num":2,"output_format":"separate","background_class":3})",
                            R"({"class_num":2,"output_format":"separate","background_class":-2})"})
-    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("DetrDetect",
-                                                                                           Json::parse(text), valid),
-                 "");
+    EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("DetrDetect", Json::parse(text),
+                                                                                        valid),
+              nullptr);
 }
 
 #ifdef HRT_ORT_MODEL_TEST

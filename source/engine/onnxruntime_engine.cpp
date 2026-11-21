@@ -208,12 +208,12 @@ auto OrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
     problems.push_back("config.execution_provider: unknown value \"" + provider + "\"");
   else if (provider == "cpu" && !provider_options.empty())
     problems.emplace_back("config.provider_options: the CPU provider takes none");
-  KZ_CHECK_MSG(problems.empty(), "onnxruntime: {}", core::join(problems));
+  KZ_CHECK_RETURN(problems.empty(), false, "onnxruntime: {}", core::join(problems));
   auto failure = error(api_->CreateEnv(ORT_LOGGING_LEVEL_WARNING, "hybridrt", &env_));
-  KZ_CHECK_MSG(failure.empty(), "onnxruntime: {}", failure);
+  KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
   OrtSessionOptions* session_options = nullptr;
   failure = error(api_->CreateSessionOptions(&session_options));
-  KZ_CHECK_MSG(failure.empty(), "onnxruntime: {}", failure);
+  KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
   KZ_SCOPE_EXIT {
     api_->ReleaseSessionOptions(session_options);
   };
@@ -221,7 +221,7 @@ auto OrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
                        api_->SetIntraOpNumThreads(session_options, intra_threads),
                        api_->SetInterOpNumThreads(session_options, inter_threads)}) {
     failure = error(status);
-    KZ_CHECK_MSG(failure.empty(), "onnxruntime: {}", failure);
+    KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
   }
   for (const auto& library : custom_op_libraries) {
     // Optional: a model that needs the operators fails to load without them.
@@ -244,7 +244,7 @@ auto OrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
       error(api_->CreateSessionFromArray(env_, param.data->data(), param.data->size(), session_options, &session_));
   KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
   failure = error(api_->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &memory_info_));
-  KZ_CHECK_MSG(failure.empty(), "onnxruntime: {}", failure);
+  KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
   proto_ = {DataLayout::Nchw, DataLayout::Nchw};
   if (!read_io(true) || !read_io(false))
     return false;
@@ -255,7 +255,7 @@ auto OrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
   for (const auto& name : output_names_)
     output_name_ptrs_.push_back(name.c_str());
   core::fix_shapes(input_shapes, input_names_, input_protos_, "config.input_shapes", problems);
-  KZ_CHECK_MSG(problems.empty(), "onnxruntime: {}", core::join(problems));
+  KZ_CHECK_RETURN(problems.empty(), false, "onnxruntime: {}", core::join(problems));
   const auto dynamic = [](const core::BufferProto& proto) -> bool { return core::is_dynamic(proto.shape); };
   KZ_CHECK_RETURN(std::none_of(input_protos_.begin(), input_protos_.end(), dynamic), false,
                   "onnxruntime: dynamic input dims other than the batch need config.input_shapes");
@@ -308,19 +308,21 @@ auto OrtEngine::resolve_outputs() -> bool {
 auto OrtEngine::read_io(bool input) -> bool {
   OrtAllocator* allocator = nullptr;
   std::size_t count = 0;
-  // Queries on a loaded session only fail on internal errors.
-  const auto ok = [this](OrtStatus* status) -> void {
+  const auto ok = [this](OrtStatus* status) -> bool {
     const auto failure = error(status);
-    KZ_CHECK_MSG(failure.empty(), "onnxruntime: {}", failure);
+    KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
+    return true;
   };
-  ok(api_->GetAllocatorWithDefaultOptions(&allocator));
-  ok(input ? api_->SessionGetInputCount(session_, &count) : api_->SessionGetOutputCount(session_, &count));
+  if (!ok(api_->GetAllocatorWithDefaultOptions(&allocator)) ||
+      !ok(input ? api_->SessionGetInputCount(session_, &count) : api_->SessionGetOutputCount(session_, &count)))
+    return false;
 
   Vector<String> names(count);
   for (std::size_t i = 0; i < count; ++i) {
     char* name = nullptr;
-    ok(input ? api_->SessionGetInputName(session_, i, allocator, &name)
-             : api_->SessionGetOutputName(session_, i, allocator, &name));
+    if (!ok(input ? api_->SessionGetInputName(session_, i, allocator, &name)
+                  : api_->SessionGetOutputName(session_, i, allocator, &name)))
+      return false;
     names[i] = name;
     api_->ReleaseStatus(api_->AllocatorFree(allocator, name));
   }
@@ -332,8 +334,9 @@ auto OrtEngine::read_io(bool input) -> bool {
   auto& out_protos = input ? input_protos_ : output_protos_;
   for (auto index : order) {
     OrtTypeInfo* type_info = nullptr;
-    ok(input ? api_->SessionGetInputTypeInfo(session_, index, &type_info)
-             : api_->SessionGetOutputTypeInfo(session_, index, &type_info));
+    if (!ok(input ? api_->SessionGetInputTypeInfo(session_, index, &type_info)
+                  : api_->SessionGetOutputTypeInfo(session_, index, &type_info)))
+      return false;
     KZ_SCOPE_EXIT {
       api_->ReleaseTypeInfo(type_info);
     };
@@ -341,12 +344,15 @@ auto OrtEngine::read_io(bool input) -> bool {
     const OrtTensorTypeAndShapeInfo* tensor_info = nullptr;
     ONNXTensorElementDataType element_type = ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED;
     std::size_t rank = 0;
-    ok(api_->CastTypeInfoToTensorInfo(type_info, &tensor_info));
+    if (!ok(api_->CastTypeInfoToTensorInfo(type_info, &tensor_info)))
+      return false;
     KZ_CHECK_RETURN(tensor_info != nullptr, false, "onnxruntime: {} is not a tensor", names[index]);
-    ok(api_->GetTensorElementType(tensor_info, &element_type));
-    ok(api_->GetDimensionsCount(tensor_info, &rank));
+    if (!ok(api_->GetTensorElementType(tensor_info, &element_type)) ||
+        !ok(api_->GetDimensionsCount(tensor_info, &rank)))
+      return false;
     core::Shape shape(rank);
-    ok(api_->GetDimensions(tensor_info, shape.data(), rank));
+    if (!ok(api_->GetDimensions(tensor_info, shape.data(), rank)))
+      return false;
 
     auto type = data_type(element_type);
     // ponytail: dynamic dims are fixed once at load; varying them per run needs rebinding resized buffers.

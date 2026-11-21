@@ -160,12 +160,9 @@
 - 只读大对象传 `const T&`，修改调用方对象传 `T&`，转移所有权按值或 `T&&`；
   数值、指针、std::string_view、std::span 按值传递。
 - 所有代码（含工具、示例、测试）不抛异常、不用 try/catch：
-  初始化配置错误或无可用引擎等用 `KZ_CHECK_MSG` 记录后 abort；
-  推理失败用 `KZ_CHECK_RETURN` 记录后返回空结果（std::nullopt、false）。
-  用于挑选的 `Engine::create`/initialize、`Context::create`、
-  `ImagePreprocessor::create` 和 `hrtc::load` 返回空值，由调用方决定。
+  初始化失败（配置错误、无可用引擎、输出与后处理不匹配等）和推理失败均用 `KZ_CHECK_RETURN` 记录日志后返回空结果（`nullptr`、`std::nullopt`、`false`），由调用方决定后续处理。
 - SDK 状态码直接传检查宏，错误信息取自 SDK；优先用不抛异常的 SDK 接口（如 ORT C API），
-  SDK 类型不泄漏到上层。资源回滚用 RAII 或 `KZ_SCOPE_FAIL`，abort 用 `EXPECT_DEATH` 测试。
+  SDK 类型不泄漏到上层。资源回滚用 RAII 或 `KZ_SCOPE_FAIL`。
 - 输出只用 `KZ_LOG_*`，不用 cout、printf、spdlog；推理热路径不输出常规日志，
   缓冲区在加载或首次运行时分配并复用。
 

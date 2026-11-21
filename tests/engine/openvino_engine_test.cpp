@@ -121,9 +121,8 @@ TEST(OpenvinoEngineTest, RejectsNonIrModelAndBuffer) {
 TEST(OpenvinoEngineTest, ChecksConfig) {
   auto engine = hrt::engine::Engine::create("openvino");
   ASSERT_NE(engine, nullptr);
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
-  EXPECT_DEATH(engine->initialize(identity_ir_param(R"({"unknown": 1})")), "");
-  EXPECT_DEATH(engine->initialize(identity_ir_param(R"({"num_threads": -1})")), "");
+  EXPECT_FALSE(engine->initialize(identity_ir_param(R"({"unknown": 1})")));
+  EXPECT_FALSE(engine->initialize(identity_ir_param(R"({"num_threads": -1})")));
 }
 
 TEST(OpenvinoEngineTest, RunsImageModelPipeline) {

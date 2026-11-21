@@ -147,11 +147,10 @@ TEST(OnnxruntimeEngineTest, FixesDynamicShapesAtLoad) {
 
   auto engine = hrt::engine::Engine::create(hrt::engine::EngineType::Ort);
   EXPECT_FALSE(engine->initialize(relu_param({}, {-1, -1})));
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
-  EXPECT_DEATH(engine->initialize(relu_param(R"({"input_shapes": {"y": [1, 4]}})", {-1, -1})), "");
-  EXPECT_DEATH(engine->initialize(relu_param(R"({"input_shapes": {"x": [1, 4, 1]}})", {-1, -1})), "");
-  EXPECT_DEATH(engine->initialize(relu_param(R"({"input_shapes": {"x": [1, 5]}})")), "");
-  EXPECT_DEATH(engine->initialize(relu_param(R"({"input_shapes": {"x": [1, 0]}})")), "");
+  EXPECT_FALSE(engine->initialize(relu_param(R"({"input_shapes": {"y": [1, 4]}})", {-1, -1})));
+  EXPECT_FALSE(engine->initialize(relu_param(R"({"input_shapes": {"x": [1, 4, 1]}})", {-1, -1})));
+  EXPECT_FALSE(engine->initialize(relu_param(R"({"input_shapes": {"x": [1, 5]}})")));
+  EXPECT_FALSE(engine->initialize(relu_param(R"({"input_shapes": {"x": [1, 0]}})")));
 }
 
 TEST(OnnxruntimeEngineTest, ChecksConfig) {
@@ -159,12 +158,11 @@ TEST(OnnxruntimeEngineTest, ChecksConfig) {
   // Operator libraries are optional: a missing one is skipped.
   EXPECT_TRUE(engine->initialize(relu_param(R"({"custom_op_libraries": ["/nonexistent/libops.so"]})")));
 
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
-  EXPECT_DEATH(engine->initialize(relu_param(R"({"execution_provider": "gpu"})")), "");
-  EXPECT_DEATH(engine->initialize(relu_param(R"({"provider_options": {"ModelFormat": "MLProgram"}})")), "");
-  EXPECT_DEATH(engine->initialize(relu_param(R"({"intra_op_threads": 2})")), "");
-  EXPECT_DEATH(engine->initialize(relu_param("[1]")), "");
-  EXPECT_DEATH(engine->initialize(relu_param("{")), "");
+  EXPECT_FALSE(engine->initialize(relu_param(R"({"execution_provider": "gpu"})")));
+  EXPECT_FALSE(engine->initialize(relu_param(R"({"provider_options": {"ModelFormat": "MLProgram"}})")));
+  EXPECT_FALSE(engine->initialize(relu_param(R"({"intra_op_threads": 2})")));
+  EXPECT_FALSE(engine->initialize(relu_param("[1]")));
+  EXPECT_FALSE(engine->initialize(relu_param("{")));
 }
 
 TEST(OnnxruntimeEngineTest, RejectsBadModelsAndBuffers) {

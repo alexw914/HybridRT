@@ -190,16 +190,15 @@ TEST(SegmentTest, KeepsNonzeroClassId) {
 }
 
 TEST(SegmentTest, AbortsOnMismatchedOutputs) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   auto engine = segment_engine(DataType::Float32);
   auto config = segment_config();
   config["class_num"] = 2;
-  EXPECT_DEATH(
+  EXPECT_EQ(
       hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("GeneralYoloSegment", config, engine),
-      "");
-  EXPECT_DEATH(
+      nullptr);
+  EXPECT_EQ(
       hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("Mystery", segment_config(), engine),
-      "");
+      nullptr);
   EXPECT_EQ(hrt::postprocess::check_postprocess_config("SemanticSegment", Json::parse(R"({"class_num": 3})")).size(),
             1U);
 }
@@ -284,7 +283,6 @@ TEST(SegmentTest, DecodesNhwcRawHeadsAndPrototypes) {
 }
 
 TEST(SegmentTest, ChecksExplicitRawHeadStrides) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   for (const auto& type : {"YoloV8Segment", "Yolo26Segment"}) {
     FakeEngine engine({proto(DataType::Float32, {1, 3, 32, 64})},
                       {proto(DataType::Float32, {1, 7, 2, 4}), proto(DataType::Float32, {1, 2, 8, 16}),
@@ -300,7 +298,6 @@ TEST(SegmentTest, ChecksExplicitRawHeadStrides) {
 }
 
 TEST(SegmentTest, ChecksRawYoloV8RegMax) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})},
                     {proto(DataType::Float32, {1, 11, 2, 2}), proto(DataType::Float32, {1, 2, 4, 4})});
   auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
@@ -309,23 +306,22 @@ TEST(SegmentTest, ChecksRawYoloV8RegMax) {
             nullptr);
   for (const auto bins : {0, 1, 16}) {
     config["reg_max"] = bins;
-    EXPECT_DEATH(
+    EXPECT_EQ(
         hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("YoloV8Segment", config, engine),
-        "");
+        nullptr);
   }
 }
 
 TEST(SegmentTest, AbortsOnRawHeadsThatDoNotFit) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto input = proto(DataType::Float32, {1, 3, 16, 16});
   const auto masks = proto(DataType::Float32, {1, 2, 4, 4});
   const auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
   for (const auto& outputs : hrt::Vector<hrt::Vector<hrt::core::BufferProto>>{
            {proto(DataType::Float32, {1, 7, 2, 2})}, {proto(DataType::Float32, {1, 8, 2, 2}), masks}}) {
     FakeEngine engine({input}, outputs);
-    EXPECT_DEATH(
+    EXPECT_EQ(
         hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("Yolo26Segment", config, engine),
-        "");
+        nullptr);
   }
 }
 
@@ -480,7 +476,6 @@ TEST(SegmentTest, DecodesEndToEndRowsWithoutNms) {
 }
 
 TEST(SegmentTest, AbortsOnMismatchedEndToEndOutputs) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto input = proto(DataType::Float32, {1, 3, 16, 16});
   const auto masks = proto(DataType::Float32, {1, 2, 4, 4});
   const auto config = Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5]})");
@@ -489,13 +484,13 @@ TEST(SegmentTest, AbortsOnMismatchedEndToEndOutputs) {
                                                         {proto(DataType::Float32, {1, 3, 9}), masks},
                                                         {proto(DataType::Float32, {1, 7, 1}), masks}}) {
     FakeEngine engine({input}, outputs);
-    EXPECT_DEATH(
-        hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("E2ESegment", config, engine), "");
+    EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>("E2ESegment", config, engine),
+              nullptr);
   }
   FakeEngine valid({input}, {proto(DataType::Float32, {1, 3, 8}), masks});
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(
-                   "E2ESegment", Json::parse(R"({"class_num": 1, "iou_threshold": [0.5]})"), valid),
-               "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::SegmentResultMap>(
+                "E2ESegment", Json::parse(R"({"class_num": 1, "iou_threshold": [0.5]})"), valid),
+            nullptr);
 }
 
 #ifdef HRT_ORT_MODEL_TEST

@@ -71,15 +71,15 @@ template <typename Result>
 auto create_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
     -> UniquePtr<Postprocessor<Result>> {
   const auto* entry = find_entry(type);
-  KZ_CHECK_MSG(entry != nullptr, "postprocess: unknown type \"{}\"", type);
+  KZ_CHECK_RETURN(entry != nullptr, nullptr, "postprocess: unknown type \"{}\"", type);
   const auto* creator = std::get_if<Creator<Result>>(&entry->creator);
-  KZ_CHECK_MSG(creator != nullptr, "postprocess: \"{}\" does not produce the requested result type", type);
+  KZ_CHECK_RETURN(creator != nullptr, nullptr, "postprocess: \"{}\" does not produce the requested result type", type);
   auto postprocessor = (*creator)();
-  KZ_CHECK_MSG(postprocessor != nullptr, "postprocess: cannot create \"{}\"", type);
+  KZ_CHECK_RETURN(postprocessor != nullptr, nullptr, "postprocess: cannot create \"{}\"", type);
   const auto problems = postprocessor->check_config(config);
-  KZ_CHECK_MSG(problems.empty(), "postprocess: invalid {} config: {}", type, core::join(problems));
-  KZ_CHECK_MSG(engine.input_size().has_value(), "postprocess: {} needs one 4-D image input", type);
-  KZ_CHECK_MSG(postprocessor->init(config, engine), "postprocess: {} does not fit the engine", type);
+  KZ_CHECK_RETURN(problems.empty(), nullptr, "postprocess: invalid {} config: {}", type, core::join(problems));
+  KZ_CHECK_RETURN(engine.input_size().has_value(), nullptr, "postprocess: {} needs one 4-D image input", type);
+  KZ_CHECK_RETURN(postprocessor->init(config, engine), nullptr, "postprocess: {} does not fit the engine", type);
   return postprocessor;
 }
 

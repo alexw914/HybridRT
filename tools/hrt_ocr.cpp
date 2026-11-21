@@ -131,6 +131,8 @@ auto main(int argc, char** argv) -> int {
 
   // OcrModel is not thread-safe; images run one after another.
   const auto ocr = hrt::model::OcrModel::create(algos[0], algos[1]);
+  if (ocr == nullptr)
+    return 1;
   Json output = {{"detection", algos[0].name},
                  {"recognition", algos[1].name},
                  {"task", "ocr"},

@@ -47,8 +47,7 @@ for object in results.boxes() {
 
 `Image::with_row_pitch` takes padded rows; image bounds are checked before the
 call. Errors carry a `Status` and the library's message. Library logs go to the
-console; `set_log_callback` forwards them. An engine whose outputs do not fit
-the postprocess config still aborts the process, as in C++.
+console; `set_log_callback` forwards them.
 
 `hybridrt/examples/run_models.rs` runs the same algos and images as the Python example (one per
 task plus OCR) and prints the results; algos missing from the package are skipped:

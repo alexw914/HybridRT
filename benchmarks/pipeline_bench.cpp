@@ -47,6 +47,10 @@ auto BM_Task(benchmark::State& state) -> void {
   }
   hrt::bench::with_result(task, [&]<typename Result>() -> void {
     const auto model = hrt::model::ImageModel<Result>::create(entry);
+    if (model == nullptr) {
+      state.SkipWithError("ImageModel::create failed");
+      return;
+    }
     for (auto _ : state) {
       auto result = model->process_sync(*image);
       if (!result) {
@@ -116,6 +120,10 @@ auto BM_Ocr(benchmark::State& state) -> void {
     return;
   }
   const auto model = hrt::model::OcrModel::create(*det_algo, *rec_algo);
+  if (model == nullptr) {
+    state.SkipWithError("OcrModel::create failed");
+    return;
+  }
   std::size_t lines = 0;
   for (auto _ : state) {
     auto result = model->process_sync(*image);

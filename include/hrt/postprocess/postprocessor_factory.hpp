@@ -19,8 +19,8 @@ namespace hrt::postprocess {
 auto check_postprocess_config(std::string_view type, const kitzoo::json::Json& config) -> Vector<String>;
 
 // The built-in postprocessor of `type` for Result, checked and initialized for
-// `engine`. Aborts on an unknown type, a type of another Result, a config
-// check_config() rejects, or engine outputs init() rejects.
+// `engine`. Returns nullptr and logs on an unknown type, a type of another
+// Result, a config check_config() rejects, or engine outputs init() rejects.
 template <typename Result>
 auto create_postprocessor(std::string_view type, const kitzoo::json::Json& config, const engine::Engine& engine)
     -> UniquePtr<Postprocessor<Result>>;

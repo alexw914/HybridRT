@@ -67,7 +67,6 @@ void expect_yolov8_box(const hrt::postprocess::DetectResultMap& result) {
 }
 
 TEST(DetectTest, InfersStridesInOutputOrderAndChecksExplicitValues) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   for (const auto& type : {"YoloV5Detect", "YoloV8Detect", "Yolo26Detect"}) {
     const bool anchored = hrt::String(type) == "YoloV5Detect";
     const auto channels = anchored ? 6 : 5;
@@ -86,7 +85,6 @@ TEST(DetectTest, InfersStridesInOutputOrderAndChecksExplicitValues) {
 }
 
 TEST(DetectTest, ChecksExplicitRegMaxAgainstEveryHead) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 9, 2, 2})});
   auto config = yolov8_config();
   config["reg_max"] = 2;
@@ -94,15 +92,15 @@ TEST(DetectTest, ChecksExplicitRegMaxAgainstEveryHead) {
             nullptr);
   for (const auto bins : {0, 1, 16}) {
     config["reg_max"] = bins;
-    EXPECT_DEATH(
-        hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV8Detect", config, engine), "");
+    EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV8Detect", config, engine),
+              nullptr);
   }
   config.erase("reg_max");
   FakeEngine inconsistent({proto(DataType::Float32, {1, 3, 16, 16})},
                           {proto(DataType::Float32, {1, 9, 2, 2}), proto(DataType::Float32, {1, 13, 1, 1})});
-  EXPECT_DEATH(
+  EXPECT_EQ(
       hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV8Detect", config, inconsistent),
-      "");
+      nullptr);
 }
 
 TEST(DetectYoloV8Test, DecodesNchwFloat) {
@@ -168,19 +166,18 @@ TEST(DetectYoloV8Test, FiltersInt8AtThreshold) {
 }
 
 TEST(DetectYoloV8Test, AbortsOnMismatchedConfig) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 9, 2, 2})});
   auto config = yolov8_config();
   config["class_num"] = 2;
-  EXPECT_DEATH(
-      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV8Detect", config, engine), "");
-  EXPECT_DEATH(
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV8Detect", config, engine),
+            nullptr);
+  EXPECT_EQ(
       hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("Unknown", yolov8_config(), engine),
-      "");
+      nullptr);
   auto negative = yolov8_config();
   negative["confidence_threshold"] = {-0.1};
-  EXPECT_DEATH(
-      hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV8Detect", negative, engine), "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV8Detect", negative, engine),
+            nullptr);
 }
 
 TEST(DetectYolo26Test, ReadsDistancesInCells) {
@@ -208,9 +205,8 @@ TEST(DetectYolo26Test, ReadsDistancesInCells) {
   EXPECT_NEAR(box.score, sigmoid(3.0F), 1e-5F);
   // YOLOv8-sized heads (distance bins) do not fit.
   FakeEngine bins({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 65, 2, 2})});
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("Yolo26Detect", config, bins),
-               "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("Yolo26Detect", config, bins),
+            nullptr);
   EXPECT_EQ(hrt::postprocess::check_postprocess_config("Yolo26Detect", Json::parse(R"({"reg_max": 1})")).size(), 1U);
 }
 
@@ -258,9 +254,9 @@ TEST(DetectYoloV5Test, TakesOneStrideAndAnchorListPerHead) {
   for (const auto* bad :
        {R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "anchors": [[8, 8, 16]]})",
         R"({"class_num": 1, "confidence_threshold": [0.25], "iou_threshold": [0.45], "anchors": [[8, 8]]})"})
-    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV5Detect",
-                                                                                           Json::parse(bad), engine),
-                 "")
+    EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("YoloV5Detect",
+                                                                                        Json::parse(bad), engine),
+              nullptr)
         << bad;
 }
 
@@ -452,11 +448,10 @@ TEST(DetectGeneralTest, ChecksConfigWithoutThrowing) {
   EXPECT_EQ(problems(R"({"box_format": "cxcywh"})").size(), 1U);
   EXPECT_EQ(hrt::postprocess::check_postprocess_config("Mystery", Json::object()).size(), 1U);
 
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   FakeEngine engine({proto(DataType::Float32, {1, 3, 40, 40})}, {proto(DataType::Float32, {1, 5, 2})});
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
-                   "GeneralDetect", Json::parse(R"({"class_num": "one"})"), engine),
-               "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>(
+                "GeneralDetect", Json::parse(R"({"class_num": "one"})"), engine),
+            nullptr);
 }
 
 #ifdef HRT_ORT_MODEL_TEST

@@ -96,8 +96,8 @@ auto OpenVinoEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo:
   core::Problems problems;
   core::check_keys(config, {"num_threads"}, "config", problems);
   core::read(config, "num_threads", num_threads, "config", problems);
-  KZ_CHECK_MSG(problems.empty(), "openvino: invalid config: {}", core::join(problems));
-  KZ_CHECK_MSG(num_threads >= 0, "openvino: num_threads must be non-negative");
+  KZ_CHECK_RETURN(problems.empty(), false, "openvino: invalid config: {}", core::join(problems));
+  KZ_CHECK_RETURN(num_threads >= 0, false, "openvino: num_threads must be non-negative");
 
   if (!check_status(ov_core_create(&core_), "create core"))
     return false;
@@ -159,6 +159,7 @@ auto OpenVinoEngine::do_release() -> void {
   request_ = nullptr;
   compiled_model_ = nullptr;
   model_ = nullptr;
+  weights_ = nullptr;
   core_ = nullptr;
 }
 

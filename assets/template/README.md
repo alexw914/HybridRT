@@ -161,7 +161,7 @@ C++ callers create a built-in postprocessor with
 `hrt/postprocess/postprocessor_factory.hpp`; the result types are in
 `hrt/postprocess/result_types.hpp`. `supports_postprocessor<Result>(type)` checks whether a
 built-in type produces `Result` without constructing it. Creation checks the result type,
-configuration and engine outputs; invalid requests abort. `check_postprocess_config(type, config)`
+configuration and engine outputs; invalid requests log and return null. `check_postprocess_config(type, config)`
 returns configuration problems before engine initialization. Every built-in type is registered
 once in `source/postprocess/postprocessor_factory.cpp`, which `ImageModel` uses as well.
 
@@ -331,7 +331,7 @@ hrt-ocr -m ocr.hrtc -r ppocrv6_tiny_rec -e ort -i assets/test/images -o ocr_resu
 `OcrModel::create(package, "ppocrv6_tiny_det", "ppocrv6_tiny_rec")`. Each algo keeps its own backend
 alternatives, but both stages must run on one device: CPU engines (ONNX Runtime CPU, MNN, ncnn, RKNN), CUDA
 (TensorRT) or Ascend. Recognition is created on the detection context and only its engines
-of that device are tried; without one, `create` aborts. No package schema or existing
+of that device are tried; without one, `create` logs and returns null. No package schema or existing
 image-model result type changes.
 
 Each stage is an `ImageModel<postprocess::OcrResult>` with default options (one engine).

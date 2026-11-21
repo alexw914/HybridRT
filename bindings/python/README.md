@@ -49,8 +49,6 @@ config: `inter_bgr`, `inter_rgb`, `inter_rgba` as (H, W, C); `planar_bgr`,
 
 Errors raise `hrt.HybridRTError` with a `status`. Library logs go to the
 console; `hrt.use_python_logging()` forwards them to the `hybridrt` logger.
-An engine whose outputs do not fit the postprocess config still aborts the
-process, as in C++.
 
 `examples/run_models.py` runs one algo per task (`yolov8n_detect`, `yolov8n_obb`, `yolov8n_pose`,
 `yolov8n_segment`, `yolov8n_classify`) and OCR (`ppocrv6_tiny_det` + `ppocrv6_tiny_rec`) on

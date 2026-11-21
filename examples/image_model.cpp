@@ -87,6 +87,8 @@ auto main(int argc, char** argv) -> int {
     // The first engine of the algo that runs on this machine.
     const auto model =
         from_json ? hrt::model::ImageModel<Result>::create(entry) : hrt::model::ImageModel<Result>::create(*packed);
+    if (model == nullptr)
+      return false;
     const auto result = model->process_sync(*image);
     if (!result)
       return false;

@@ -100,6 +100,14 @@ TEST(OcrModelTest, RecognizesLinesInBatchesLikeOneByOne) {
   ASSERT_TRUE(det_algo && single_algo && batched_algo);
   auto one_by_one = hrt::model::OcrModel::create(*det_algo, *single_algo);
   auto in_batches = hrt::model::OcrModel::create(*det_algo, *batched_algo);
+  EXPECT_EQ(one_by_one->detection_engine_type(), hrt::engine::EngineType::Ort);
+  EXPECT_EQ(one_by_one->recognition_engine_type(), hrt::engine::EngineType::Ort);
+  EXPECT_FALSE(one_by_one->detection_input_size().empty());
+  EXPECT_FALSE(one_by_one->recognition_input_size().empty());
+  EXPECT_EQ(one_by_one->recognition_batch(), 1U);
+  EXPECT_EQ(in_batches->recognition_batch(), 8U);
+  EXPECT_EQ(in_batches->detection_input_size(), one_by_one->detection_input_size());
+  EXPECT_EQ(in_batches->recognition_input_size(), one_by_one->recognition_input_size());
   // Upright lines read their region of the frame; turned clockwise, every line is rotated back first.
   cv::Mat turned;
   cv::rotate(bgr, turned, cv::ROTATE_90_CLOCKWISE);
@@ -136,7 +144,7 @@ TEST(OcrModelTest, RejectsStagesOnDifferentDevices) {
   const auto rec_algo = hrt::hrtc::load_algo(rec);
   ASSERT_TRUE(det_algo && rec_algo);
   // ONNX Runtime detection runs on the CPU; a TensorRT-only recognizer is another device.
-  EXPECT_DEATH(hrt::model::OcrModel::create(*det_algo, *rec_algo), "");
+  EXPECT_EQ(hrt::model::OcrModel::create(*det_algo, *rec_algo), nullptr);
 #else
   GTEST_SKIP() << "Needs ONNX Runtime and OpenCV imgcodecs";
 #endif

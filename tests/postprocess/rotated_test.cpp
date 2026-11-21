@@ -26,7 +26,6 @@ using hrt::core::DataType;
 using hrt::test::proto;
 
 TEST(RotatedTest, InfersYoloV8StridesAndRegMax) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 16, 16})}, {proto(DataType::Float32, {1, 10, 2, 2})});
   auto config =
       kitzoo::json::Json::parse(R"({"class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.45]})");
@@ -36,8 +35,8 @@ TEST(RotatedTest, InfersYoloV8StridesAndRegMax) {
   EXPECT_NE(hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("YoloV8Rotated", config, engine),
             nullptr);
   config["reg_max"] = 16;
-  EXPECT_DEATH(
-      hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("YoloV8Rotated", config, engine), "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("YoloV8Rotated", config, engine),
+            nullptr);
 }
 
 TEST(RotatedTest, NmsMergesOverlappingBoxes) {
@@ -190,18 +189,17 @@ TEST(RotatedTest, E2EDecodesRowsWithoutNms) {
 }
 
 TEST(RotatedTest, E2EAbortsOnInvalidConfigOrOutputs) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto input = proto(DataType::Float32, {1, 3, 8, 8});
   const auto config = kitzoo::json::Json::parse(R"({"class_num": 15, "confidence_threshold": [0.25]})");
   for (const auto& shape : hrt::Vector<hrt::core::Shape>{{1, 20, 21504}, {1, 300, 6}}) {
     hrt::test::FakeEngine engine({input}, {proto(DataType::Float32, shape)});
-    EXPECT_DEATH(
-        hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("E2ERotated", config, engine), "");
+    EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>("E2ERotated", config, engine),
+              nullptr);
   }
   hrt::test::FakeEngine valid({input}, {proto(DataType::Float32, {1, 300, 7})});
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>(
-                   "E2ERotated", kitzoo::json::Json::parse(R"({"class_num": 15, "iou_threshold": [0.45]})"), valid),
-               "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::RotatedResultMap>(
+                "E2ERotated", kitzoo::json::Json::parse(R"({"class_num": 15, "iou_threshold": [0.45]})"), valid),
+            nullptr);
 }
 
 #ifdef HRT_ORT_MODEL_TEST

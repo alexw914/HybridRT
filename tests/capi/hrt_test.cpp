@@ -109,12 +109,15 @@ TEST(HrtTest, ReportsLoadErrors) {
 TEST(HrtTest, ReportsModelErrorsWithoutAborting) {
   auto unknown_key = classify_config();
   unknown_key["preprocess"]["unknown_key"] = 1;
-  auto* package = load_package({identity_algo("classify", classify_config()), identity_algo("bad", unknown_key),
-                                identity_algo("absent", classify_config(), "unknown")});
+  auto mismatch = classify_config();
+  mismatch["preprocess"]["dst_image_format"] = "inter_rgb";
+  auto* package =
+      load_package({identity_algo("classify", classify_config()), identity_algo("bad", unknown_key),
+                    identity_algo("absent", classify_config(), "unknown"), identity_algo("mismatch", mismatch)});
   ASSERT_NE(package, nullptr);
-  ASSERT_EQ(hrt_package_algo_count(package), 3U);
+  ASSERT_EQ(hrt_package_algo_count(package), 4U);
   EXPECT_EQ(std::string_view(hrt_package_algo_name(package, 1)), "bad");
-  EXPECT_EQ(hrt_package_algo_name(package, 3), nullptr);
+  EXPECT_EQ(hrt_package_algo_name(package, 4), nullptr);
 
   HrtModel* model = nullptr;
   EXPECT_EQ(hrt_model_create(package, "missing", nullptr, &model), HRT_STATUS_NOT_FOUND);
@@ -126,6 +129,10 @@ TEST(HrtTest, ReportsModelErrorsWithoutAborting) {
   const HrtModelOptions large{1, 65, 1};
   EXPECT_EQ(hrt_model_create(package, "classify", &large, &model), HRT_STATUS_INVALID_ARGUMENT);
   EXPECT_EQ(hrt_model_create(package, "absent", nullptr, &model), HRT_STATUS_UNAVAILABLE);
+#ifdef HRT_TEST_ORT
+  EXPECT_EQ(hrt_model_create(package, "mismatch", nullptr, &model), HRT_STATUS_INVALID_CONFIG);
+  EXPECT_NE(std::string_view(hrt_last_error()), "");
+#endif
   EXPECT_EQ(model, nullptr);
   EXPECT_EQ(hrt_model_create(nullptr, nullptr, nullptr, &model), HRT_STATUS_INVALID_ARGUMENT);
   hrt_package_destroy(package);

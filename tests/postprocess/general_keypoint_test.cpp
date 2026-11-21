@@ -216,17 +216,15 @@ TEST(GeneralKeypointTest, DequantizesEveryUnbatchedHeatmap) {
 }
 
 TEST(GeneralKeypointTest, RejectsMultipleSetsWithinBatchSample) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   for (const auto& shape : hrt::Vector<hrt::core::Shape>{{4, 2, 1, 4, 4}, {4, 0, 4, 4}}) {
     hrt::test::FakeEngine engine({proto(DataType::Float32, {4, 3, 16, 16})}, {proto(DataType::Float32, shape)});
-    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>(
-                     "GeneralKeypoint", kitzoo::json::Json::object(), engine),
-                 "");
+    EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>(
+                  "GeneralKeypoint", kitzoo::json::Json::object(), engine),
+              nullptr);
   }
 }
 
 TEST(GeneralKeypointTest, AbortsOnInvalidShapes) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
 
   struct Case {
     const char* type;
@@ -244,31 +242,30 @@ TEST(GeneralKeypointTest, AbortsOnInvalidShapes) {
   for (const auto& item : cases) {
     hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {proto(DataType::Float32, item.shape)});
     const kitzoo::json::Json config{{"general_keypoint_type", item.type}};
-    EXPECT_DEATH(
+    EXPECT_EQ(
         hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("GeneralKeypoint", config, engine),
-        "");
+        nullptr);
   }
   hrt::test::FakeEngine empty({proto(DataType::Float32, {1, 3, 8, 8})}, {});
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>(
-                   "GeneralKeypoint", kitzoo::json::Json::object(), empty),
-               "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>(
+                "GeneralKeypoint", kitzoo::json::Json::object(), empty),
+            nullptr);
 }
 
 TEST(GeneralKeypointTest, AbortsOnInvalidVisibilityOutputs) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto config = kitzoo::json::Json::parse(R"({"general_keypoint_type":"point_with_visible"})");
   const auto x = proto(DataType::Float32, {1, 2, 4});
   for (const auto& visibility : hrt::Vector<hrt::core::Shape>{{1, 2, 2}, {1, 2, 4}, {1, 1, 3}, {2, 2, 3}}) {
     hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})},
                                  {x, x, proto(DataType::Float32, visibility)});
-    EXPECT_DEATH(
+    EXPECT_EQ(
         hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("GeneralKeypoint", config, engine),
-        "");
+        nullptr);
   }
   hrt::test::FakeEngine missing({proto(DataType::Float32, {1, 3, 8, 8})}, {x, x});
-  EXPECT_DEATH(
+  EXPECT_EQ(
       hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("GeneralKeypoint", config, missing),
-      "");
+      nullptr);
 }
 
 TEST(GeneralKeypointTest, DecodesChannelFirstPoints) {
@@ -482,21 +479,20 @@ TEST(GeneralKeypointTest, AppliesSigmoidToScores) {
 }
 
 TEST(GeneralKeypointTest, AbortsOnInvalidSimccOutputs) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto config = kitzoo::json::Json::parse(R"({"general_keypoint_type":"simcc"})");
   const auto x = proto(DataType::Float32, {1, 2, 8});
   const auto input = proto(DataType::Float32, {1, 3, 4, 4});
   for (const auto& outputs : hrt::Vector<hrt::Vector<hrt::core::BufferProto>>{
            {x}, {x, x, x}, {x, proto(DataType::Float32, {1, 3, 8})}, {x, proto(DataType::Float32, {2, 2, 8})}}) {
     hrt::test::FakeEngine engine({input}, outputs);
-    EXPECT_DEATH(
+    EXPECT_EQ(
         hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("GeneralKeypoint", config, engine),
-        "");
+        nullptr);
   }
   hrt::test::FakeEngine engine({input}, {x, x});
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>(
-                   "GeneralKeypoint", kitzoo::json::Json::parse(R"({"heatmap_refine":"taylor"})"), engine),
-               "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>(
+                "GeneralKeypoint", kitzoo::json::Json::parse(R"({"heatmap_refine":"taylor"})"), engine),
+            nullptr);
 }
 
 } // namespace

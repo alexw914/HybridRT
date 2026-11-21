@@ -34,6 +34,8 @@ auto engine_type_from(std::string_view name) -> EngineType;
 
 auto device_type_of(EngineType type) -> core::DeviceType;
 
+auto to_string(EngineType type) -> std::string_view;
+
 enum class DataLayout {
   Nchw,
   Nhwc,
@@ -59,8 +61,8 @@ public:
   Engine(Engine&&) = delete;
   auto operator=(Engine&&) -> Engine& = delete;
 
-  // Releases any previous model first. Aborts when `param.config` is not a JSON
-  // object or holds settings the backend does not know.
+  // Releases any previous model first. Returns false and logs when `param.config`
+  // is not a JSON object, holds unknown settings, or the model cannot be loaded.
   auto initialize(const hrtc::EngineParam& param) -> bool;
 
   auto release() -> void;

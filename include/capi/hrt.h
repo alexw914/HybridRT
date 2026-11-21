@@ -215,9 +215,8 @@ HRT_API HrtModelOptions hrt_model_options_default(void);
 
 // Loads `algo` (null: the first one) with the first engine, in package order,
 // that runs on this machine; `options` may be null. The package may be
-// destroyed afterwards. Config, option and engine availability problems are
-// returned; an engine whose outputs do not fit the config still aborts, as in
-// hrt::model::ImageModel::create.
+// destroyed afterwards. Config, option, engine availability and output-mismatch
+// problems are returned with the logged message in hrt_last_error.
 HRT_API HrtStatus hrt_model_create(const HrtPackage* package, const char* algo, const HrtModelOptions* options,
                                    HrtModel** model);
 

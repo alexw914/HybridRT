@@ -75,6 +75,19 @@ TEST_F(ImageModelTest, RunsPreprocessInferenceAndPostprocess) {
   auto model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>::create(
       classify_algo(R"({"dst_image_format": "planar_rgb", "std": [255, 255, 255]})"), cpu_);
   ASSERT_NE(model, nullptr);
+  EXPECT_EQ(model->algo_name(), "classify");
+  EXPECT_EQ(model->engine_type(), hrt::engine::EngineType::Ort);
+  EXPECT_EQ(hrt::engine::to_string(model->engine_type()), "Ort");
+  EXPECT_EQ(model->preprocessor_type(), hrt::preprocess::ImagePreprocessorType::Cpu);
+  EXPECT_EQ(model->input_size(), (hrt::core::Size{2, 2}));
+  EXPECT_EQ(model->batch(), 1U);
+  EXPECT_EQ(model->input_names(), (hrt::Vector<hrt::String>{"x"}));
+  EXPECT_EQ(model->output_names(), (hrt::Vector<hrt::String>{"y"}));
+  ASSERT_EQ(model->input_protos().size(), 1U);
+  EXPECT_EQ(model->input_protos()[0].shape, (hrt::core::Shape{1, 3, 2, 2}));
+  EXPECT_EQ(model->input_protos()[0].data_type, hrt::core::DataType::Float32);
+  ASSERT_EQ(model->output_protos().size(), 1U);
+  EXPECT_EQ(model->output_protos()[0].shape, (hrt::core::Shape{1, 3, 2, 2}));
 
   hrt::Vector<std::uint8_t> pixels;
   const auto result = model->process_sync(uniform_bgr(pixels, 10, 20, 30));
@@ -84,6 +97,23 @@ TEST_F(ImageModelTest, RunsPreprocessInferenceAndPostprocess) {
   EXPECT_FLOAT_EQ((*result)[0][0], 30.0F / 255.0F);
   EXPECT_FLOAT_EQ((*result)[0][4], 20.0F / 255.0F);
   EXPECT_FLOAT_EQ((*result)[0][11], 10.0F / 255.0F);
+}
+
+TEST_F(ImageModelTest, ReportsFallbackEngineAndStaticBatchMetadata) {
+  auto algo = classify_algo(R"({"dst_image_format": "planar_rgb", "std": [255, 255, 255]})", "GeneralClassify", 4);
+  algo.engines.insert(algo.engines.begin(), {.engine_type = "unknown", .config = {}, .proto = {}, .data = {}});
+  auto model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>::create(algo, cpu_);
+  ASSERT_NE(model, nullptr);
+  EXPECT_EQ(model->algo_name(), "classify");
+  EXPECT_EQ(model->engine_type(), hrt::engine::EngineType::Ort);
+  EXPECT_EQ(model->preprocessor_type(), hrt::preprocess::ImagePreprocessorType::Cpu);
+  EXPECT_EQ(model->input_size(), (hrt::core::Size{2, 2}));
+  EXPECT_EQ(model->batch(), 4U);
+  ASSERT_EQ(model->input_protos().size(), 1U);
+  EXPECT_EQ(model->input_protos()[0].shape, (hrt::core::Shape{4, 3, 2, 2}));
+  ASSERT_EQ(model->output_protos().size(), 1U);
+  EXPECT_EQ(model->output_protos()[0].shape, (hrt::core::Shape{4, 3, 2, 2}));
+  EXPECT_EQ(hrt::engine::to_string(hrt::engine::EngineType::Unknown), "Unknown");
 }
 
 #if defined(__APPLE__) && defined(HRT_ORT_MODEL_TEST)
@@ -196,12 +226,11 @@ TEST_F(ImageModelTest, CreatesFromAlgoJson) {
   EXPECT_FLOAT_EQ((*result)[0][0], 30.0F / 255.0F);
   EXPECT_FLOAT_EQ((*result)[0][11], 10.0F / 255.0F);
 
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   using Model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>;
-  EXPECT_DEATH(Model::create(kitzoo::json::Json::array(), cpu_), "");
+  EXPECT_EQ(Model::create(kitzoo::json::Json::array(), cpu_), nullptr);
   auto missing = algo;
   missing["config"]["engine"]["backends"][0]["data"] = (dir / "models" / "missing.onnx").string();
-  EXPECT_DEATH(Model::create(missing, cpu_), "");
+  EXPECT_EQ(Model::create(missing, cpu_), nullptr);
 }
 
 TEST_F(ImageModelTest, ServesConcurrentCallsFromPools) {
@@ -303,32 +332,30 @@ TEST_F(ImageModelTest, CreatesContextForEngineAndPreprocessor) {
   // A CPU engine takes the context of a device preprocessor.
   const auto cuda_algo = classify_algo(R"({"device": "cuda"})");
   if (hrt::core::Context::create(hrt::core::DeviceType::Cuda) == nullptr) {
-    GTEST_FLAG_SET(death_test_style, "threadsafe");
-    EXPECT_DEATH(Model::create(cuda_algo), "");
+    EXPECT_EQ(Model::create(cuda_algo), nullptr);
   } else {
     EXPECT_EQ(Model::create(cuda_algo)->context()->device_type(), hrt::core::DeviceType::Cuda);
   }
 }
 
 TEST_F(ImageModelTest, AbortsOnUnusableConfigurations) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   using Model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>;
-  EXPECT_DEATH(Model::create(classify_algo("{}", "Mystery"), cpu_), "");
-  EXPECT_DEATH(Model::create(classify_algo("{}"), cpu_, {.preprocess = 1, .engine = 0, .postprocess = 1}), "");
-  EXPECT_DEATH(Model::create(classify_algo("{}"), cpu_, {.preprocess = 65, .engine = 1, .postprocess = 1}), "");
-  EXPECT_DEATH(Model::create(classify_algo("{}"), hrt::SharedPtr<hrt::core::Context>{}), "");
+  EXPECT_EQ(Model::create(classify_algo("{}", "Mystery"), cpu_), nullptr);
+  EXPECT_EQ(Model::create(classify_algo("{}"), cpu_, {.preprocess = 1, .engine = 0, .postprocess = 1}), nullptr);
+  EXPECT_EQ(Model::create(classify_algo("{}"), cpu_, {.preprocess = 65, .engine = 1, .postprocess = 1}), nullptr);
+  EXPECT_EQ(Model::create(classify_algo("{}"), hrt::SharedPtr<hrt::core::Context>{}), nullptr);
 
   auto algo = classify_algo("{}");
   algo.engines[0].engine_type = "unknown";
-  EXPECT_DEATH(Model::create(algo, cpu_), "");
+  EXPECT_EQ(Model::create(algo, cpu_), nullptr);
 
   // Engine settings are checked when the engine loads.
   auto bad_config = classify_algo("{}");
   bad_config.engines[0].config = R"({"intra_op_threads": 2})";
-  EXPECT_DEATH(Model::create(bad_config, cpu_), "");
+  EXPECT_EQ(Model::create(bad_config, cpu_), nullptr);
 
   // An interleaved target cannot feed an NCHW input.
-  EXPECT_DEATH(Model::create(classify_algo(R"({"dst_image_format": "inter_rgb"})"), cpu_), "");
+  EXPECT_EQ(Model::create(classify_algo(R"({"dst_image_format": "inter_rgb"})"), cpu_), nullptr);
 }
 
 // Second stage of a cascade: an identity classifier with a width x height

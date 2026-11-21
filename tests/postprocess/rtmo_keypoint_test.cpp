@@ -93,7 +93,6 @@ TEST(RtmoKeypointTest, AppliesConfiguredThresholds) {
 }
 
 TEST(RtmoKeypointTest, AbortsOnInvalidConfigOrOutputs) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto input = proto(DataType::Float32, {1, 3, 8, 8});
   const auto boxes = proto(DataType::Float32, {1, 4, 5});
   const auto keypoints = proto(DataType::Float32, {1, 4, 17, 3});
@@ -104,15 +103,15 @@ TEST(RtmoKeypointTest, AbortsOnInvalidConfigOrOutputs) {
                                                         {proto(DataType::Float32, {1, 4, 4}), keypoints},
                                                         {proto(DataType::Float32, {2, 4, 5}), keypoints}}) {
     FakeEngine engine({input}, outputs);
-    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("RtmoKeypoint",
-                                                                                             Json::object(), engine),
-                 "");
+    EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("RtmoKeypoint",
+                                                                                          Json::object(), engine),
+              nullptr);
   }
   FakeEngine valid({input}, {boxes, keypoints});
   for (const char* text : {R"({"confidence_threshold":[0.1,0.2]})", R"({"iou_threshold":[1.5]})", R"({"class_num":1})"})
-    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("RtmoKeypoint",
-                                                                                             Json::parse(text), valid),
-                 "");
+    EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("RtmoKeypoint",
+                                                                                          Json::parse(text), valid),
+              nullptr);
 }
 
 #ifdef HRT_ORT_MODEL_TEST

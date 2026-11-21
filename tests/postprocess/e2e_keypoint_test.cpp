@@ -94,22 +94,22 @@ TEST(E2EKeypointTest, MapsRowsAndKeypointsWithoutNms) {
 }
 
 TEST(E2EKeypointTest, AbortsOnInvalidConfigOrOutputs) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
   const auto input = proto(DataType::Float32, {1, 3, 8, 8});
   const auto config = Json::parse(R"({"class_num": 1, "keypoint_num": 17, "confidence_threshold": [0.25]})");
   for (const auto& shape : hrt::Vector<hrt::core::Shape>{{1, 56, 8400}, {1, 300, 56}, {300, 57}}) {
     FakeEngine engine({input}, {proto(DataType::Float32, shape)});
-    EXPECT_DEATH(
-        hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("E2EKeypoint", config, engine), "");
+    EXPECT_EQ(
+        hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("E2EKeypoint", config, engine),
+        nullptr);
   }
   FakeEngine valid({input}, {proto(DataType::Float32, {1, 300, 57})});
   for (const char* text : {R"({"class_num": 1, "keypoint_num": 0, "confidence_threshold": [0.25]})",
                            R"({"class_num": 1, "keypoint_num": 17})",
                            R"({"class_num": 1, "keypoint_num": 17, "confidence_threshold": [0.25],
                                "iou_threshold": [0.45]})"})
-    EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("E2EKeypoint",
-                                                                                             Json::parse(text), valid),
-                 "");
+    EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("E2EKeypoint",
+                                                                                          Json::parse(text), valid),
+              nullptr);
 }
 
 #ifdef HRT_ORT_MODEL_TEST

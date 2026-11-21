@@ -141,7 +141,7 @@ auto TensorrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo:
   core::check_keys(config, {"plugin_libraries", "input_shapes"}, "config", problems);
   core::read(config, "plugin_libraries", plugin_libraries, "config", problems);
   core::read(config, "input_shapes", input_shapes, "config", problems);
-  KZ_CHECK_MSG(problems.empty(), "tensorrt: {}", core::join(problems));
+  KZ_CHECK_RETURN(problems.empty(), false, "tensorrt: {}", core::join(problems));
   load_plugins(plugin_libraries);
 
   runtime_.reset(nvinfer1::createInferRuntime(logger()));
@@ -175,7 +175,7 @@ auto TensorrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo:
   }
   // Dynamic dims are fixed once, within optimization profile 0; outputs then follow from the inputs.
   core::fix_shapes(input_shapes, input_names_, input_protos_, "config.input_shapes", problems);
-  KZ_CHECK_MSG(problems.empty(), "tensorrt: {}", core::join(problems));
+  KZ_CHECK_RETURN(problems.empty(), false, "tensorrt: {}", core::join(problems));
   for (std::size_t i = 0; i < input_protos_.size(); ++i) {
     const auto& shape = input_protos_[i].shape;
     KZ_CHECK_RETURN(!core::is_dynamic(shape), false,

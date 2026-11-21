@@ -26,10 +26,11 @@ namespace {
 
 constexpr std::size_t kMaxStageNum = 64;
 
-auto check_options(const ImageModelOptions& options, std::string_view algo) -> void {
+auto check_options(const ImageModelOptions& options, std::string_view algo) -> bool {
   for (const auto num : {options.preprocess, options.engine, options.postprocess})
-    KZ_CHECK_MSG(num >= 1 && num <= kMaxStageNum, "ImageModel: stage counts of algo {} must be in [1, {}]", algo,
-                 kMaxStageNum);
+    KZ_CHECK_RETURN(num >= 1 && num <= kMaxStageNum, false, "ImageModel: stage counts of algo {} must be in [1, {}]",
+                    algo, kMaxStageNum);
+  return true;
 }
 
 auto read_config(const hrtc::AlgoParam& algo) -> kitzoo::json::Reader {
@@ -180,10 +181,10 @@ auto make_buffers(const Vector<core::BufferProto>& protos, const engine::Engine*
   return buffers;
 }
 
-auto read_algo(const kitzoo::json::Json& algo) -> hrtc::AlgoParam {
+auto read_algo(const kitzoo::json::Json& algo) -> std::optional<hrtc::AlgoParam> {
   auto param = hrtc::load_algo(algo);
-  KZ_CHECK_MSG(param.has_value(), "ImageModel: cannot read the algo JSON");
-  return std::move(*param);
+  KZ_CHECK_RETURN(param.has_value(), std::nullopt, "ImageModel: cannot read the algo JSON");
+  return param;
 }
 
 } // namespace
@@ -233,27 +234,35 @@ template <typename Result>
 auto ImageModel<Result>::create(const hrtc::AlgoParam& algo, SharedPtr<core::Context> context,
                                 const ImageModelOptions& options, const PostprocessorFactory& factory)
     -> UniquePtr<ImageModel> {
-  KZ_CHECK_MSG(context != nullptr, "ImageModel: algo {} needs a context", algo.name);
-  check_options(options, algo.name);
+  KZ_CHECK_RETURN(context != nullptr, nullptr, "ImageModel: algo {} needs a context", algo.name);
+  if (!check_options(options, algo.name))
+    return nullptr;
   const auto problems = check(algo, !factory);
-  KZ_CHECK_MSG(problems.empty(), "ImageModel: invalid config of algo {}: {}", algo.name, core::join(problems));
+  KZ_CHECK_RETURN(problems.empty(), nullptr, "ImageModel: invalid config of algo {}: {}", algo.name,
+                  core::join(problems));
   auto loaded = load_first(algo, preprocess_device(algo), context);
-  KZ_CHECK_MSG(loaded.has_value(), "ImageModel: no engine of algo {} runs on this context in this build", algo.name);
+  KZ_CHECK_RETURN(loaded.has_value(), nullptr, "ImageModel: no engine of algo {} runs on this context in this build",
+                  algo.name);
   UniquePtr<ImageModel> model(new ImageModel(std::move(loaded->context), options));
-  model->build(algo, read_config(algo).raw(), factory, std::move(loaded->engine), *loaded->param);
+  if (!model->build(algo, read_config(algo).raw(), factory, std::move(loaded->engine), *loaded->param))
+    return nullptr;
   return model;
 }
 
 template <typename Result>
 auto ImageModel<Result>::create(const hrtc::AlgoParam& algo, const ImageModelOptions& options,
                                 const PostprocessorFactory& factory) -> UniquePtr<ImageModel> {
-  check_options(options, algo.name);
+  if (!check_options(options, algo.name))
+    return nullptr;
   const auto problems = check(algo, !factory);
-  KZ_CHECK_MSG(problems.empty(), "ImageModel: invalid config of algo {}: {}", algo.name, core::join(problems));
+  KZ_CHECK_RETURN(problems.empty(), nullptr, "ImageModel: invalid config of algo {}: {}", algo.name,
+                  core::join(problems));
   auto loaded = load_first(algo, preprocess_device(algo), nullptr);
-  KZ_CHECK_MSG(loaded.has_value(), "ImageModel: no engine of algo {} runs on this machine in this build", algo.name);
+  KZ_CHECK_RETURN(loaded.has_value(), nullptr, "ImageModel: no engine of algo {} runs on this machine in this build",
+                  algo.name);
   UniquePtr<ImageModel> model(new ImageModel(std::move(loaded->context), options));
-  model->build(algo, read_config(algo).raw(), factory, std::move(loaded->engine), *loaded->param);
+  if (!model->build(algo, read_config(algo).raw(), factory, std::move(loaded->engine), *loaded->param))
+    return nullptr;
   return model;
 }
 
@@ -261,19 +270,21 @@ template <typename Result>
 auto ImageModel<Result>::create(const kitzoo::json::Json& algo, SharedPtr<core::Context> context,
                                 const ImageModelOptions& options, const PostprocessorFactory& factory)
     -> UniquePtr<ImageModel> {
-  return create(read_algo(algo), std::move(context), options, factory);
+  const auto param = read_algo(algo);
+  return param ? create(*param, std::move(context), options, factory) : nullptr;
 }
 
 template <typename Result>
 auto ImageModel<Result>::create(const kitzoo::json::Json& algo, const ImageModelOptions& options,
                                 const PostprocessorFactory& factory) -> UniquePtr<ImageModel> {
-  return create(read_algo(algo), options, factory);
+  const auto param = read_algo(algo);
+  return param ? create(*param, options, factory) : nullptr;
 }
 
 template <typename Result>
 auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::Json& config,
                                const PostprocessorFactory& factory, UniquePtr<engine::Engine> first,
-                               const hrtc::EngineParam& chosen) -> void {
+                               const hrtc::EngineParam& chosen) -> bool {
   context_->set_current();
   preprocessor_param_ = preprocess_config(config.value("preprocess", kitzoo::json::Json::object()))
                             .get<preprocess::ImagePreprocessorParam>();
@@ -282,14 +293,20 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
   const auto postprocess_num = options_.postprocess;
 
   const auto& engine = *first;
+  algo_name_ = algo.name;
+  engine_type_ = engine::engine_type_from(chosen.engine_type);
   input_layout_ = engine.proto().input_layout;
+  input_names_ = engine.input_names();
+  output_names_ = engine.output_names();
+  input_protos_ = engine.input_protos();
+  output_protos_ = engine.output_protos();
 
   const auto postprocess_config = config.value("postprocess", kitzoo::json::Json::object());
   for (std::size_t i = 0; i < postprocess_num; ++i) {
     auto postprocessor = factory ? factory(postprocess_config, engine)
                                  : postprocess::create_postprocessor<Result>(
                                        postprocess_config["type"].get_ref<const String&>(), postprocess_config, engine);
-    KZ_CHECK_MSG(postprocessor != nullptr, "ImageModel: no postprocessor for algo {}", algo.name);
+    KZ_CHECK_RETURN(postprocessor != nullptr, false, "ImageModel: no postprocessor for algo {}", algo.name);
     postprocessor_pool_.add(std::make_unique<UniquePtr<postprocess::Postprocessor<Result>>>(std::move(postprocessor)));
   }
 
@@ -303,51 +320,58 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
   // A batch above 1 has every input sample viewed in place and decoded from
   // the same sample of every output.
   const auto& inputs = engine.input_protos();
-  KZ_CHECK_MSG(!inputs.empty() && !inputs.front().shape.empty() && inputs.front().shape[0] >= 1,
-               "ImageModel: algo {} needs an image input with a static batch", algo.name);
+  KZ_CHECK_RETURN(!inputs.empty() && !inputs.front().shape.empty() && inputs.front().shape[0] >= 1, false,
+                  "ImageModel: algo {} needs an image input with a static batch", algo.name);
   batch_ = static_cast<std::size_t>(inputs.front().shape[0]);
   if (batch_ > 1) {
     for (const auto& output : engine.output_protos()) {
-      KZ_CHECK_MSG(!output.shape.empty() && output.shape[0] == inputs.front().shape[0],
-                   "ImageModel: every output of algo {} needs the input batch {} as its leading dim", algo.name,
-                   batch_);
+      KZ_CHECK_RETURN(!output.shape.empty() && output.shape[0] == inputs.front().shape[0], false,
+                      "ImageModel: every output of algo {} needs the input batch {} as its leading dim", algo.name,
+                      batch_);
     }
   }
 
   core::MemoryType input_memory = core::MemoryType::Cpu;
   for (std::size_t i = 0; i < preprocess_num + engine_num; ++i) {
     auto buffers = make_buffers(engine.input_protos(), host_input_engine);
-    KZ_CHECK_MSG(buffers && !buffers->empty(), "ImageModel: cannot allocate the inputs of algo {}", algo.name);
+    KZ_CHECK_RETURN(buffers && !buffers->empty(), false, "ImageModel: cannot allocate the inputs of algo {}",
+                    algo.name);
     auto image = input_image(*buffers, 0);
-    KZ_CHECK_MSG(image.has_value(), "ImageModel: the engine input of algo {} does not fit the preprocess config",
-                 algo.name);
+    KZ_CHECK_RETURN(image.has_value(), false,
+                    "ImageModel: the engine input of algo {} does not fit the preprocess config", algo.name);
+    input_size_ = image->size();
     input_memory = buffers->front()->memory_type();
     input_pool_.add(std::make_unique<core::Buffers>(std::move(*buffers)));
   }
   // VPC addresses whole DVPP buffers; samples at an offset are not verified.
-  KZ_CHECK_MSG(batch_ == 1 || (input_memory != core::MemoryType::Dvpp &&
-                               preprocessor_param_.device != preprocess::ImagePreprocessorType::Dvpp),
-               "ImageModel: the dvpp preprocessor of algo {} supports only a batch of 1", algo.name);
+  KZ_CHECK_RETURN(batch_ == 1 || (input_memory != core::MemoryType::Dvpp &&
+                                  preprocessor_param_.device != preprocess::ImagePreprocessorType::Dvpp),
+                  false, "ImageModel: the dvpp preprocessor of algo {} supports only a batch of 1", algo.name);
   for (std::size_t i = 0; i < preprocess_num; ++i) {
     auto preprocessor = preprocess::ImagePreprocessor::create(preprocessor_param_.device, input_memory);
-    KZ_CHECK_MSG(preprocessor != nullptr, "ImageModel: preprocess device of algo {} is not available in this build",
-                 algo.name);
+    KZ_CHECK_RETURN(preprocessor != nullptr, false,
+                    "ImageModel: preprocess device of algo {} is not available in this build", algo.name);
+    preprocessor_type_ = preprocessor->type();
     preprocessor_pool_.add(std::make_unique<UniquePtr<preprocess::ImagePreprocessor>>(std::move(preprocessor)));
   }
   for (std::size_t i = 0; i < engine_num + postprocess_num; ++i) {
     auto buffers = make_buffers(engine.output_protos(), &engine);
-    KZ_CHECK_MSG(buffers.has_value(), "ImageModel: cannot allocate the outputs of algo {}", algo.name);
+    KZ_CHECK_RETURN(buffers.has_value(), false, "ImageModel: cannot allocate the outputs of algo {}", algo.name);
     output_pool_.add(std::make_unique<core::Buffers>(std::move(*buffers)));
   }
-  for (std::size_t i = 0; i < preprocess_num + engine_num + postprocess_num; ++i)
-    stream_pool_.add(std::make_unique<UniquePtr<core::Stream>>(context_->create_stream()));
+  for (std::size_t i = 0; i < preprocess_num + engine_num + postprocess_num; ++i) {
+    auto stream = context_->create_stream();
+    KZ_CHECK_RETURN(stream != nullptr, false, "ImageModel: cannot create stream for algo {}", algo.name);
+    stream_pool_.add(std::make_unique<UniquePtr<core::Stream>>(std::move(stream)));
+  }
 
   engine_pool_.add(std::make_unique<UniquePtr<engine::Engine>>(std::move(first)));
   for (std::size_t i = 1; i < engine_num; ++i) {
     auto extra = load_engine(chosen);
-    KZ_CHECK_MSG(extra != nullptr, "ImageModel: cannot load engine {} of algo {}", i, algo.name);
+    KZ_CHECK_RETURN(extra != nullptr, false, "ImageModel: cannot load engine {} of algo {}", i, algo.name);
     engine_pool_.add(std::make_unique<UniquePtr<engine::Engine>>(std::move(extra)));
   }
+  return true;
 }
 
 template <typename Result>

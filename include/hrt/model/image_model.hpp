@@ -60,9 +60,9 @@ public:
 
   // Runs everything in `context`: CPU engines run under any context, device
   // engines and device preprocessors (cuda, dvpp) need one of their device.
-  // Aborts when the config fails check_algo_config (only "postprocess.type" with a
-  // custom factory), `options` is out of range, no engine runs on `context`,
-  // or the engine does not fit the config.
+  // Returns nullptr and logs when the config fails check_algo_config (only
+  // "postprocess.type" with a custom factory), `options` is out of range, no
+  // engine runs on `context`, or the engine does not fit the config.
   static auto create(const hrtc::AlgoParam& algo, SharedPtr<core::Context> context,
                      const ImageModelOptions& options = {}, const PostprocessorFactory& factory = {})
       -> UniquePtr<ImageModel>;
@@ -73,8 +73,8 @@ public:
   static auto create(const hrtc::AlgoParam& algo, const ImageModelOptions& options = {},
                      const PostprocessorFactory& factory = {}) -> UniquePtr<ImageModel>;
   // From one entry of a manifest's "algos", {"name", "config"}; file paths are
-  // absolute or relative to the working directory. Aborts when it cannot be
-  // read.
+  // absolute or relative to the working directory. Returns nullptr and logs
+  // when it cannot be read or initialized.
   static auto create(const kitzoo::json::Json& algo, SharedPtr<core::Context> context,
                      const ImageModelOptions& options = {}, const PostprocessorFactory& factory = {})
       -> UniquePtr<ImageModel>;
@@ -100,6 +100,12 @@ public:
   auto process_sync(const Vector<core::Image>& srcs, const Vector<core::Rect>& src_rects = {})
       -> std::optional<Vector<Result>>;
 
+  KZ_NODISCARD auto algo_name() const -> const String& { return algo_name_; }
+
+  KZ_NODISCARD auto engine_type() const -> engine::EngineType { return engine_type_; }
+
+  KZ_NODISCARD auto preprocessor_type() const -> preprocess::ImagePreprocessorType { return preprocessor_type_; }
+
   KZ_NODISCARD auto context() const -> const SharedPtr<core::Context>& { return context_; }
 
   KZ_NODISCARD auto preprocessor_param() const -> const preprocess::ImagePreprocessorParam& {
@@ -108,14 +114,25 @@ public:
 
   KZ_NODISCARD auto options() const -> const ImageModelOptions& { return options_; }
 
+  // Image input width and height expected by the engine.
+  KZ_NODISCARD auto input_size() const -> core::Size { return input_size_; }
+
   // Static batch of the engine's image input, from the leading dim of its shape.
   KZ_NODISCARD auto batch() const -> std::size_t { return batch_; }
+
+  KZ_NODISCARD auto input_names() const -> const Vector<String>& { return input_names_; }
+
+  KZ_NODISCARD auto output_names() const -> const Vector<String>& { return output_names_; }
+
+  KZ_NODISCARD auto input_protos() const -> const Vector<core::BufferProto>& { return input_protos_; }
+
+  KZ_NODISCARD auto output_protos() const -> const Vector<core::BufferProto>& { return output_protos_; }
 
 private:
   ImageModel(SharedPtr<core::Context> context, const ImageModelOptions& options);
 
   auto build(const hrtc::AlgoParam& algo, const kitzoo::json::Json& config, const PostprocessorFactory& factory,
-             UniquePtr<engine::Engine> first, const hrtc::EngineParam& chosen) -> void;
+             UniquePtr<engine::Engine> first, const hrtc::EngineParam& chosen) -> bool;
 
   template <bool Single>
   auto run(std::span<const core::Image> srcs, std::span<const core::Rect> src_rects)
@@ -132,8 +149,16 @@ private:
 
   SharedPtr<core::Context> context_;
   ImageModelOptions options_;
+  String algo_name_;
+  engine::EngineType engine_type_ = engine::EngineType::Unknown;
+  preprocess::ImagePreprocessorType preprocessor_type_ = preprocess::ImagePreprocessorType::Cpu;
   engine::DataLayout input_layout_ = engine::DataLayout::Nchw;
+  core::Size input_size_;
   std::size_t batch_ = 1;
+  Vector<String> input_names_;
+  Vector<String> output_names_;
+  Vector<core::BufferProto> input_protos_;
+  Vector<core::BufferProto> output_protos_;
   preprocess::ImagePreprocessorParam preprocessor_param_;
   kitzoo::thread::ObjectPool<UniquePtr<preprocess::ImagePreprocessor>> preprocessor_pool_;
   kitzoo::thread::ObjectPool<UniquePtr<engine::Engine>> engine_pool_;

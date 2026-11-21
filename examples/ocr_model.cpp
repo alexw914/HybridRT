@@ -85,6 +85,8 @@ auto main(int argc, char** argv) -> int {
   if (!image)
     return 1;
   const auto model = hrt::model::OcrModel::create(*package, detection, recognition);
+  if (model == nullptr)
+    return 1;
   const auto result = model->process_sync(*image);
   if (!result)
     return 1;

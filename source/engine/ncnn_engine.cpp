@@ -101,7 +101,7 @@ auto NcnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
   core::Problems problems;
   core::check_keys(config, {"num_threads"}, "config", problems);
   core::read(config, "num_threads", num_threads_, "config", problems);
-  KZ_CHECK_MSG(problems.empty(), "ncnn: {}", core::join(problems));
+  KZ_CHECK_RETURN(problems.empty(), false, "ncnn: {}", core::join(problems));
 
   net_ = std::make_unique<ncnn::Net>();
   net_->opt.num_threads = num_threads_;

@@ -114,9 +114,11 @@ OcrModel::~OcrModel() = default;
 
 auto OcrModel::create(const hrtc::AlgoParam& detection, const hrtc::AlgoParam& recognition) -> UniquePtr<OcrModel> {
   const auto problems = check_ocr_config(detection, recognition);
-  KZ_CHECK_MSG(problems.empty(), "OcrModel: invalid config: {}", core::join(problems));
+  KZ_CHECK_RETURN(problems.empty(), nullptr, "OcrModel: invalid config: {}", core::join(problems));
   UniquePtr<OcrModel> model(new OcrModel);
   model->impl_->detection = ImageModel<postprocess::OcrResult>::create(detection);
+  if (model->impl_->detection == nullptr)
+    return nullptr;
   // Recognition shares the detection context, so both stages read the same source without staging it per line.
   // CPU engines run under any context, so engines of other devices are dropped first.
   const auto& context = model->impl_->detection->context();
@@ -124,9 +126,11 @@ auto OcrModel::create(const hrtc::AlgoParam& detection, const hrtc::AlgoParam& r
   std::erase_if(same_device.engines, [&](const auto& param) -> bool {
     return engine::device_type_of(engine::engine_type_from(param.engine_type)) != context->device_type();
   });
-  KZ_CHECK_MSG(!same_device.engines.empty(), "OcrModel: algo {} has no engine on the device of algo {}",
-               recognition.name, detection.name);
+  KZ_CHECK_RETURN(!same_device.engines.empty(), nullptr, "OcrModel: algo {} has no engine on the device of algo {}",
+                  recognition.name, detection.name);
   model->impl_->recognition = ImageModel<postprocess::OcrResult>::create(same_device, context);
+  if (model->impl_->recognition == nullptr)
+    return nullptr;
   return model;
 }
 
@@ -134,7 +138,7 @@ auto OcrModel::create(const hrtc::Package& package, std::string_view detection, 
     -> UniquePtr<OcrModel> {
   const auto* det = package.find(detection);
   const auto* rec = package.find(recognition);
-  KZ_CHECK_MSG(det != nullptr && rec != nullptr, "OcrModel: detection or recognition algo is missing");
+  KZ_CHECK_RETURN(det != nullptr && rec != nullptr, nullptr, "OcrModel: detection or recognition algo is missing");
   return create(*det, *rec);
 }
 
@@ -188,6 +192,26 @@ auto OcrModel::process_sync(const core::Image& src) -> std::optional<postprocess
     (*result)[i].recognition_score = recognition.front().recognition_score;
   }
   return result;
+}
+
+auto OcrModel::detection_engine_type() const -> engine::EngineType {
+  return impl_->detection->engine_type();
+}
+
+auto OcrModel::recognition_engine_type() const -> engine::EngineType {
+  return impl_->recognition->engine_type();
+}
+
+auto OcrModel::detection_input_size() const -> core::Size {
+  return impl_->detection->input_size();
+}
+
+auto OcrModel::recognition_input_size() const -> core::Size {
+  return impl_->recognition->input_size();
+}
+
+auto OcrModel::recognition_batch() const -> std::size_t {
+  return impl_->recognition->batch();
 }
 
 } // namespace hrt::model

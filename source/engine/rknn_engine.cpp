@@ -108,7 +108,7 @@ auto RknnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
   core::read(config, "image_input", image_input, "config", problems);
   core::read(config, "custom_op_libraries", custom_op_libraries, "config", problems);
   core::read_enum(config, "core_mask", core_mask, "config", problems);
-  KZ_CHECK_MSG(problems.empty(), "rknn: {}", core::join(problems));
+  KZ_CHECK_RETURN(problems.empty(), false, "rknn: {}", core::join(problems));
 
   // A model that does not load fails this backend, so the next one can be tried.
   auto status = rknn_init(&context_, const_cast<std::uint8_t*>(param.data->data()),
@@ -120,7 +120,7 @@ auto RknnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
 
   rknn_input_output_num io{};
   status = rknn_query(context_, RKNN_QUERY_IN_OUT_NUM, &io, sizeof(io));
-  KZ_CHECK_MSG(status == RKNN_SUCC, "rknn: querying the IO count failed: {}", status);
+  KZ_CHECK_RETURN(status == RKNN_SUCC, false, "rknn: querying the IO count failed: {}", status);
   proto_ = {DataLayout::Nhwc, DataLayout::Nchw};
 
   Map<String, rknn_tensor_attr> inputs;
@@ -130,7 +130,7 @@ auto RknnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
     status = rknn_query(context_, RKNN_QUERY_NATIVE_INPUT_ATTR, &attr, sizeof(attr));
     if (status == RKNN_SUCC && attr.fmt == RKNN_TENSOR_NC1HWC2)
       status = rknn_query(context_, RKNN_QUERY_INPUT_ATTR, &attr, sizeof(attr));
-    KZ_CHECK_MSG(status == RKNN_SUCC, "rknn: querying input {} failed: {}", i, status);
+    KZ_CHECK_RETURN(status == RKNN_SUCC, false, "rknn: querying input {} failed: {}", i, status);
     inputs.emplace(attr.name, attr);
   }
   for (auto& [name, attr] : inputs) {
@@ -164,7 +164,7 @@ auto RknnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
     rknn_tensor_attr attr{};
     attr.index = i;
     status = rknn_query(context_, RKNN_QUERY_OUTPUT_ATTR, &attr, sizeof(attr));
-    KZ_CHECK_MSG(status == RKNN_SUCC, "rknn: querying output {} failed: {}", i, status);
+    KZ_CHECK_RETURN(status == RKNN_SUCC, false, "rknn: querying output {} failed: {}", i, status);
     if (attr.type == RKNN_TENSOR_FLOAT16) {
       attr.type = RKNN_TENSOR_FLOAT32;
       attr.size *= 2;
@@ -176,8 +176,8 @@ auto RknnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
     const auto type = data_type(attr.type);
     auto mem = make_mem(rknn_create_mem(context_, attr.size));
     KZ_CHECK_RETURN(type.has_value(), false, "rknn: output {} has an unsupported data type", name);
-    KZ_CHECK_MSG(mem != nullptr && rknn_set_io_mem(context_, mem.get(), &attr) == RKNN_SUCC,
-                 "rknn: cannot prepare output {}", name);
+    KZ_CHECK_RETURN(mem != nullptr && rknn_set_io_mem(context_, mem.get(), &attr) == RKNN_SUCC, false,
+                    "rknn: cannot prepare output {}", name);
     output_names_.push_back(name);
     output_protos_.push_back({core::MemoryType::Cpu, *type, tensor_shape(attr), {}});
     output_attrs_.push_back(attr);

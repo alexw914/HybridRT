@@ -76,15 +76,15 @@ auto CannEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
     KZ_LOG_ERROR("cann: engine data (the .om model) is empty");
     return false;
   }
-  KZ_CHECK_MSG(config.empty(), "cann: config takes no settings");
+  KZ_CHECK_RETURN(config.empty(), false, "cann: config takes no settings");
   static_cast<void>(backend::AclRuntime::instance());
   // A model that does not load fails this backend, so the next one can be tried.
   KZ_CHECK_RETURN(aclmdlLoadFromMem(param.data->data(), param.data->size(), &model_id_) == ACL_SUCCESS, false,
                   "cann: aclmdlLoadFromMem failed: {}", aclGetRecentErrMsg());
   loaded_ = true;
   desc_ = aclmdlCreateDesc();
-  KZ_CHECK_MSG(desc_ != nullptr && aclmdlGetDesc(desc_, model_id_) == ACL_SUCCESS, "cann: aclmdlGetDesc failed: {}",
-               aclGetRecentErrMsg());
+  KZ_CHECK_RETURN(desc_ != nullptr && aclmdlGetDesc(desc_, model_id_) == ACL_SUCCESS, false,
+                  "cann: aclmdlGetDesc failed: {}", aclGetRecentErrMsg());
 
   const auto input_count = aclmdlGetNumInputs(desc_);
   if (input_count == 0)
@@ -106,8 +106,8 @@ auto CannEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
        sorted_by_name(input_count, [&](std::size_t i) { return aclmdlGetInputNameByIndex(desc_, i); })) {
     aclmdlIODims dims{};
     const auto type = data_type(aclmdlGetInputDataType(desc_, index));
-    KZ_CHECK_MSG(aclmdlGetInputDimsV2(desc_, index, &dims) == ACL_SUCCESS, "cann: aclmdlGetInputDimsV2 failed: {}",
-                 aclGetRecentErrMsg());
+    KZ_CHECK_RETURN(aclmdlGetInputDimsV2(desc_, index, &dims) == ACL_SUCCESS, false,
+                    "cann: aclmdlGetInputDimsV2 failed: {}", aclGetRecentErrMsg());
     KZ_CHECK_RETURN(type.has_value(), false, "cann: input {} has an unsupported data type", index);
     input_names_.push_back(name);
     // VPC writes the inputs, so they come from the DVPP pool with its row padding.
@@ -118,8 +118,8 @@ auto CannEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
            aclmdlGetNumOutputs(desc_), [&](std::size_t i) { return aclmdlGetOutputNameByIndex(desc_, i); })) {
     aclmdlIODims dims{};
     const auto type = data_type(aclmdlGetOutputDataType(desc_, index));
-    KZ_CHECK_MSG(aclmdlGetOutputDims(desc_, index, &dims) == ACL_SUCCESS, "cann: aclmdlGetOutputDims failed: {}",
-                 aclGetRecentErrMsg());
+    KZ_CHECK_RETURN(aclmdlGetOutputDims(desc_, index, &dims) == ACL_SUCCESS, false,
+                    "cann: aclmdlGetOutputDims failed: {}", aclGetRecentErrMsg());
     KZ_CHECK_RETURN(type.has_value(), false, "cann: output {} has an unsupported data type", index);
     output_names_.push_back(name);
     output_protos_.push_back({core::MemoryType::Acl, *type, tensor_shape(dims), {}});

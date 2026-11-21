@@ -83,6 +83,28 @@ auto device_type_of(EngineType type) -> core::DeviceType {
   }
 }
 
+auto to_string(EngineType type) -> std::string_view {
+  switch (type) {
+  case EngineType::Ncnn:
+    return "Ncnn";
+  case EngineType::Mnn:
+    return "Mnn";
+  case EngineType::Ort:
+    return "Ort";
+  case EngineType::Rknn:
+    return "Rknn";
+  case EngineType::Cann:
+    return "Cann";
+  case EngineType::TensorRt:
+    return "TensorRt";
+  case EngineType::OpenVino:
+    return "OpenVino";
+  case EngineType::Unknown:
+    break;
+  }
+  return "Unknown";
+}
+
 auto Engine::create(EngineType type) -> UniquePtr<Engine> {
   switch (type) {
 #ifdef HRT_USE_ORT
@@ -114,7 +136,7 @@ auto Engine::create(EngineType type) -> UniquePtr<Engine> {
     return std::make_unique<CannEngine>();
 #endif
   default:
-    KZ_LOG_WARN("Engine: type {} is not available in this build", static_cast<int>(type));
+    KZ_LOG_WARN("Engine: type {} is not available in this build", to_string(type));
     return nullptr;
   }
 }
@@ -128,8 +150,8 @@ Engine::~Engine() = default;
 auto Engine::initialize(const hrtc::EngineParam& param) -> bool {
   release();
   const kitzoo::json::Reader reader{param.config.empty() ? std::string_view{"{}"} : std::string_view{param.config}};
-  KZ_CHECK_MSG(reader.is_parse_success() && reader.raw().is_object(), "Engine: config of {} is not a JSON object: {}",
-               param.engine_type, reader.error_info());
+  KZ_CHECK_RETURN(reader.is_parse_success() && reader.raw().is_object(), false,
+                  "Engine: config of {} is not a JSON object: {}", param.engine_type, reader.error_info());
   if (do_initialize(param, reader.raw()))
     return true;
   release();

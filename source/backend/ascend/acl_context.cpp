@@ -14,7 +14,8 @@ namespace hrt::backend {
 
 AclStream::AclStream() {
   aclrtStream stream = nullptr;
-  KZ_CHECK_MSG(aclrtCreateStream(&stream) == ACL_SUCCESS, "acl: aclrtCreateStream failed: {}", aclGetRecentErrMsg());
+  KZ_CHECK_RETURN(aclrtCreateStream(&stream) == ACL_SUCCESS, , "acl: aclrtCreateStream failed: {}",
+                  aclGetRecentErrMsg());
   handle_ = stream;
 }
 
@@ -57,7 +58,8 @@ auto AclContext::set_current() -> void {
 
 auto AclContext::create_stream() -> UniquePtr<core::Stream> {
   set_current();
-  return std::make_unique<AclStream>();
+  auto stream = std::make_unique<AclStream>();
+  return stream->handle() != nullptr ? std::move(stream) : nullptr;
 }
 
 } // namespace hrt::backend

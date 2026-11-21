@@ -68,7 +68,7 @@ auto MnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
   core::read(config, "num_thread", num_thread, "config", problems);
   core::read(config, "cache_file", cache_file, "config", problems);
   core::read(config, "cache_dir", cache_dir, "config", problems);
-  KZ_CHECK_MSG(problems.empty(), "mnn: {}", core::join(problems));
+  KZ_CHECK_RETURN(problems.empty(), false, "mnn: {}", core::join(problems));
 
   interpreter_.reset(MNN::Interpreter::createFromBuffer(param.data->data(), param.data->size()));
   if (interpreter_ == nullptr) {

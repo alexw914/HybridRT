@@ -81,16 +81,17 @@ TEST(PostprocessorFactoryTest, RejectsUnknownAndIncompatibleResultTypes) {
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {proto(DataType::Float32, {1, 3})});
   const auto config = kitzoo::json::Json::object();
   EXPECT_EQ(hrt::postprocess::check_postprocess_config("Unknown", config).size(), 1U);
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::ClassifyResult>("Unknown", config, engine), "");
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::ClassifyResult>("Embedding", config, engine),
-               "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::ClassifyResult>("Unknown", config, engine),
+            nullptr);
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::ClassifyResult>("Embedding", config, engine),
+            nullptr);
 }
 
 TEST(PostprocessorFactoryTest, RejectsInvalidConfiguration) {
   hrt::test::FakeEngine engine({proto(DataType::Float32, {1, 3, 8, 8})}, {proto(DataType::Float32, {1, 3})});
-  EXPECT_DEATH(hrt::postprocess::create_postprocessor<hrt::postprocess::ClassifyResult>("GeneralClassify",
-                                                                                        {{"extra", 1}}, engine),
-               "");
+  EXPECT_EQ(hrt::postprocess::create_postprocessor<hrt::postprocess::ClassifyResult>("GeneralClassify", {{"extra", 1}},
+                                                                                     engine),
+            nullptr);
 }
 
 } // namespace

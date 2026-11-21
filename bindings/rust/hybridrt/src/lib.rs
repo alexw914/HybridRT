@@ -541,8 +541,7 @@ unsafe impl Sync for Model {}
 
 impl Model {
     /// Loads `algo`, or the first algo of the package; the package may be
-    /// dropped afterwards. An engine whose outputs do not fit the postprocess
-    /// config still aborts the process, as in C++.
+    /// dropped afterwards.
     pub fn new(package: &Package, algo: Option<&str>, options: ModelOptions) -> Result<Self> {
         let algo = algo.map(|name| c_string(name, "the algo name")).transpose()?;
         let options = sys::HrtModelOptions {
