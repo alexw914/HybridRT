@@ -163,15 +163,18 @@ auto to_json(const hrt::postprocess::SegmentResultMap& result, const hrt::core::
   return results;
 }
 
-// Runs `algo` on every readable image in `dir`; all images are submitted to
-// kThreads workers first, then the results are collected in name order while
-// progress is logged every second. Failures are recorded in "error" and make
-// the run fail. A non-empty `draw_dir` receives each image with its results
-// drawn; embeddings have nothing to draw.
+// Runs `algo` on every readable image in `dir`, grouped by the model's static
+// batch size; batches are submitted to kThreads workers first, then the results
+// are collected in name order while progress is logged every second. Failures
+// are recorded in "error" and make the run fail. A non-empty `draw_dir`
+// receives each image with its results drawn; embeddings have nothing to draw.
 template <typename Result>
 auto validate(const hrt::hrtc::AlgoParam& algo, const hrt::model::ImageModelOptions& options,
               const std::filesystem::path& dir, const std::filesystem::path& draw_dir, Json& images) -> bool {
   const auto model = hrt::model::ImageModel<Result>::create(algo, options);
+  if (model == nullptr)
+    return false;
+  const auto batch = model->batch();
   std::error_code ec;
   auto paths = kitzoo::os::list_directory(dir, ec);
   if (ec) {
@@ -181,52 +184,76 @@ auto validate(const hrt::hrtc::AlgoParam& algo, const hrt::model::ImageModelOpti
   std::erase_if(paths, [](const auto& path) -> bool {
     return !kitzoo::os::is_regular(path) || !cv::haveImageReader(path.string());
   });
+  std::ranges::sort(paths);
 
-  KZ_LOG_INFO("total images: {}", paths.size());
+  KZ_LOG_INFO("total images: {}, batch: {}", paths.size(), batch);
   std::atomic<std::size_t> done = 0;
   std::atomic<std::size_t> ran = 0;
-  const auto run = [&](const std::filesystem::path& path) -> Json {
+  const auto run_batch = [&](std::size_t first, std::size_t count) -> hrt::Vector<Json> {
     KZ_SCOPE_EXIT {
-      ++done;
+      done += count;
     };
-    Json entry = {{"file", path.filename().string()},
-                  {"width", 0},
-                  {"height", 0},
-                  {"error", nullptr},
-                  {"results", Json::array()}};
-    cv::Mat bgr = cv::imread(path.string(), cv::IMREAD_COLOR);
-    const auto image =
-        bgr.empty() ? std::nullopt
-                    : hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, bgr.data, hrt::core::ImageFormat::InterBgr,
-                                             {bgr.cols, bgr.rows}, hrt::core::DataType::Uint8, bgr.step);
-    const auto result = image ? model->process_sync(*image) : std::nullopt;
-    if (!image) {
-      entry["error"] = "cannot read the image";
-      return entry;
+    hrt::Vector<Json> entries;
+    entries.reserve(count);
+    hrt::Vector<cv::Mat> mats(count);
+    hrt::Vector<hrt::core::Image> valid_images;
+    hrt::Vector<std::size_t> valid_indices;
+    valid_images.reserve(count);
+    valid_indices.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+      const auto& path = paths[first + i];
+      entries.push_back({{"file", path.filename().string()},
+                         {"width", 0},
+                         {"height", 0},
+                         {"error", nullptr},
+                         {"results", Json::array()}});
+      mats[i] = cv::imread(path.string(), cv::IMREAD_COLOR);
+      auto image =
+          mats[i].empty()
+              ? std::nullopt
+              : hrt::core::Image::wrap(hrt::core::MemoryType::Cpu, mats[i].data, hrt::core::ImageFormat::InterBgr,
+                                       {mats[i].cols, mats[i].rows}, hrt::core::DataType::Uint8, mats[i].step);
+      if (!image) {
+        entries[i]["error"] = "cannot read the image";
+        continue;
+      }
+      valid_images.push_back(std::move(*image));
+      valid_indices.push_back(i);
     }
-    if (!result) {
-      entry["error"] = "inference failed";
-      return entry;
-    }
-    ++ran;
-    entry["width"] = bgr.cols;
-    entry["height"] = bgr.rows;
-    entry["results"] = to_json(*result, {0, 0, bgr.cols, bgr.rows});
-    if constexpr (!std::is_same_v<Result, hrt::postprocess::EmbeddingResult>) {
-      if (!draw_dir.empty()) {
-        hrt::core::draw(bgr, *result);
-        cv::imwrite((draw_dir / path.filename()).string(), bgr);
+    if (!valid_images.empty()) {
+      const auto results = model->process_sync(valid_images);
+      if (!results || results->size() != valid_images.size()) {
+        for (const auto idx : valid_indices)
+          entries[idx]["error"] = "inference failed";
+      } else {
+        for (std::size_t k = 0; k < valid_indices.size(); ++k) {
+          const auto idx = valid_indices[k];
+          auto& bgr = mats[idx];
+          auto& entry = entries[idx];
+          ++ran;
+          entry["width"] = bgr.cols;
+          entry["height"] = bgr.rows;
+          entry["results"] = to_json((*results)[k], {0, 0, bgr.cols, bgr.rows});
+          if constexpr (!std::is_same_v<Result, hrt::postprocess::EmbeddingResult>) {
+            if (!draw_dir.empty()) {
+              hrt::core::draw(bgr, (*results)[k]);
+              cv::imwrite((draw_dir / paths[first + idx].filename()).string(), bgr);
+            }
+          }
+        }
       }
     }
-    return entry;
+    return entries;
   };
 
   const kitzoo::time::Stopwatch watch;
   kitzoo::thread::ThreadPool pool(kThreads, "validate");
-  hrt::Vector<std::future<Json>> pending;
-  pending.reserve(paths.size());
-  for (const auto& path : paths)
-    pending.push_back(pool.submit_task(run, path));
+  hrt::Vector<std::future<hrt::Vector<Json>>> pending;
+  pending.reserve((paths.size() + batch - 1) / batch);
+  for (std::size_t first = 0; first < paths.size(); first += batch) {
+    const auto count = std::min(batch, paths.size() - first);
+    pending.push_back(pool.submit_task(run_batch, first, count));
+  }
   kitzoo::time::Stopwatch tick;
   const auto progress = [&]() -> void {
     if (tick.elapsed() < std::chrono::seconds(1))
@@ -235,16 +262,19 @@ auto validate(const hrt::hrtc::AlgoParam& algo, const hrt::model::ImageModelOpti
     tick.reset();
   };
   bool ok = true;
-  for (std::size_t i = 0; i < pending.size(); ++i) {
-    while (pending[i].wait_for(std::chrono::milliseconds(100)) != std::future_status::ready)
+  std::size_t index = 0;
+  for (auto& future : pending) {
+    while (future.wait_for(std::chrono::milliseconds(100)) != std::future_status::ready)
       progress();
     progress();
-    auto entry = pending[i].get();
-    if (!entry["error"].is_null()) {
-      KZ_LOG_ERROR("{}: {}", paths[i].string(), entry["error"].get<hrt::String>());
-      ok = false;
+    for (auto& entry : future.get()) {
+      if (!entry["error"].is_null()) {
+        KZ_LOG_ERROR("{}: {}", paths[index].string(), entry["error"].get<hrt::String>());
+        ok = false;
+      }
+      images.push_back(std::move(entry));
+      ++index;
     }
-    images.push_back(std::move(entry));
   }
   const auto elapsed = watch.elapsed_as<std::chrono::duration<double, std::milli>>().count();
   KZ_LOG_INFO("total {:.1f} ms, {:.2f} ms per image, {}/{} images inferred", elapsed,

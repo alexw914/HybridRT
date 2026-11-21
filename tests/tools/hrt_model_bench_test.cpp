@@ -58,13 +58,38 @@ TEST_F(HrtModelBenchTest, ChecksArguments) {
   EXPECT_EQ(run({}).exit_code, 1);
   EXPECT_EQ(run({"-m", manifest_}).exit_code, 1);
   EXPECT_EQ(run({"-m", manifest_, "-n", "relu", "-i", "0"}).exit_code, 1);
+  EXPECT_EQ(run({"-m", manifest_, "-n", "relu", "-d", "-1"}).exit_code, 1);
 }
 
 TEST_F(HrtModelBenchTest, TimesManifestAndPackage) {
   const auto from_manifest = run({"-m", manifest_, "-n", "relu", "-i", "3", "-w", "1"});
   EXPECT_EQ(from_manifest.exit_code, 0);
-  EXPECT_NE(from_manifest.output.find("relu/ort"), hrt::String::npos);
-  EXPECT_NE(from_manifest.output.find("FPS"), hrt::String::npos);
+  EXPECT_NE(from_manifest.output.find("relu/ort"), hrt::String::npos) << from_manifest.output;
+  EXPECT_NE(from_manifest.output.find("batch=1, runs=3, warmup=1"), hrt::String::npos) << from_manifest.output;
+  EXPECT_NE(from_manifest.output.find("Throughput:"), hrt::String::npos) << from_manifest.output;
+  EXPECT_NE(from_manifest.output.find("FPS"), hrt::String::npos) << from_manifest.output;
+  EXPECT_NE(from_manifest.output.find("Latency:"), hrt::String::npos) << from_manifest.output;
+  EXPECT_NE(from_manifest.output.find("Enqueue:"), hrt::String::npos) << from_manifest.output;
+  EXPECT_NE(from_manifest.output.find("H2D:"), hrt::String::npos) << from_manifest.output;
+  EXPECT_NE(from_manifest.output.find("Compute:"), hrt::String::npos) << from_manifest.output;
+  EXPECT_NE(from_manifest.output.find("D2H:"), hrt::String::npos) << from_manifest.output;
+  EXPECT_NE(from_manifest.output.find("p90 ="), hrt::String::npos) << from_manifest.output;
+  EXPECT_NE(from_manifest.output.find("p95 ="), hrt::String::npos) << from_manifest.output;
+  EXPECT_NE(from_manifest.output.find("p99 ="), hrt::String::npos) << from_manifest.output;
+  EXPECT_NE(from_manifest.output.find("Total Host Walltime:"), hrt::String::npos) << from_manifest.output;
+
+  const auto no_transfer =
+      run({"-m", manifest_, "-n", "relu", "-i", "2", "-w", "0", "--no-data-transfers", "-d", "0.01"});
+  EXPECT_EQ(no_transfer.exit_code, 0);
+  EXPECT_NE(no_transfer.output.find("skipped (--no-data-transfers)"), hrt::String::npos) << no_transfer.output;
+
+  const auto batch_model = hrt::test::unary_model("Relu", {4, 4});
+  kitzoo::os::write_file(dir_ / "relu_b4.onnx",
+                         std::string_view(reinterpret_cast<const char*>(batch_model.data()), batch_model.size()));
+  const auto batched =
+      run({"-m", write_manifest("batch4.json", dir_ / "relu_b4.onnx"), "-n", "relu", "-i", "2", "-w", "1"});
+  EXPECT_EQ(batched.exit_code, 0);
+  EXPECT_NE(batched.output.find("batch=4, runs=2, warmup=1"), hrt::String::npos) << batched.output;
 
   const auto package = hrt::hrtc::load_json(manifest_);
   ASSERT_TRUE(package);

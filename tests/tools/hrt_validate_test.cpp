@@ -70,6 +70,15 @@ TEST_F(HrtValidateTest, ChecksArguments) {
   EXPECT_EQ(run({"-m", manifest_, "-n", "classify", "-i", (dir_ / "missing").string()}).exit_code, 1);
   EXPECT_EQ(run({"-m", manifest_, "-n", "classify", "-i", (dir_ / "images").string(), "--engine-num", "0"}).exit_code,
             1);
+
+  // Mismatched preprocess layout fails cleanly with exit code 1 instead of aborting.
+  auto bad_manifest = kitzoo::json::Reader{std::filesystem::path(manifest_)}.raw();
+  bad_manifest["algos"][0]["config"]["preprocess"]["dst_image_format"] = "inter_rgb";
+  const auto bad_path = (dir_ / "bad.json").string();
+  kitzoo::os::write_file(bad_path, bad_manifest.dump());
+  const auto bad_init = run({"-m", bad_path, "-n", "classify", "-i", (dir_ / "images").string(), "-o", output_});
+  EXPECT_EQ(bad_init.exit_code, 1) << bad_init.output;
+  EXPECT_NE(bad_init.output.find("does not fit the preprocess config"), hrt::String::npos) << bad_init.output;
 }
 
 TEST_F(HrtValidateTest, WritesClassifyResults) {
@@ -175,6 +184,46 @@ TEST_F(HrtValidateTest, WritesSemanticMasksAsRunLengths) {
       total += count.get<std::size_t>();
     EXPECT_EQ(total, 48U);
     EXPECT_GT(rle.size(), 2U);
+  }
+}
+
+TEST_F(HrtValidateTest, BatchesDirectoryByStaticBatch) {
+  const auto model = hrt::test::unary_model("Identity", {4, 3, 2, 2});
+  kitzoo::os::write_file(dir_ / "identity.onnx",
+                         std::string_view(reinterpret_cast<const char*>(model.data()), model.size()));
+  const hrt::Array<hrt::Pair<const char*, cv::Scalar>, 5> samples{{
+      {"0.png", cv::Scalar(10, 20, 30)},
+      {"1.png", cv::Scalar(40, 50, 60)},
+      {"2.png", cv::Scalar(70, 80, 90)},
+      {"4.png", cv::Scalar(100, 110, 120)},
+      {"5.png", cv::Scalar(130, 140, 150)},
+  }};
+  std::filesystem::remove(dir_ / "images" / "a.png");
+  for (const auto& [name, color] : samples)
+    ASSERT_TRUE(cv::imwrite((dir_ / "images" / name).string(), cv::Mat(8, 6, CV_8UC3, color)));
+  // Unreadable image in the middle of the first batch of 4.
+  kitzoo::os::write_file(dir_ / "images" / "3.png", "\x89PNG\r\n\x1a\nbroken");
+
+  const auto result = run({"-m", manifest_, "-n", "embedding", "-i", (dir_ / "images").string(), "-o", output_});
+  EXPECT_EQ(result.exit_code, 1);
+  EXPECT_NE(result.output.find("total images: 6, batch: 4"), hrt::String::npos) << result.output;
+  EXPECT_NE(result.output.find("5/6 images inferred"), hrt::String::npos) << result.output;
+  const auto json = read_output();
+  ASSERT_EQ(json["images"].size(), 6U);
+  const hrt::Array<const char*, 6> order{"0.png", "1.png", "2.png", "3.png", "4.png", "5.png"};
+  for (std::size_t i = 0; i < order.size(); ++i)
+    EXPECT_EQ(json["images"][i]["file"], order[i]);
+  EXPECT_EQ(json["images"][3]["error"], "cannot read the image");
+  EXPECT_TRUE(json["images"][3]["results"].empty());
+  for (std::size_t i = 0; i < samples.size(); ++i) {
+    const auto slot = i >= 3 ? i + 1 : i;
+    const auto& entry = json["images"][slot];
+    EXPECT_TRUE(entry["error"].is_null()) << samples[i].first;
+    const auto& vector = entry["results"].at(0)["embedding"];
+    ASSERT_EQ(vector.size(), 12U);
+    // Planar RGB: channel 0 is R (BGR[2]), channel 2 is B (BGR[0]).
+    EXPECT_NEAR(vector[0].get<double>(), samples[i].second[2] / 255.0, 1e-6);
+    EXPECT_NEAR(vector[11].get<double>(), samples[i].second[0] / 255.0, 1e-6);
   }
 }
 
