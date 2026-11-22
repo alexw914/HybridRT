@@ -72,7 +72,7 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
             sudo apt-get update
-            sudo apt-get install -y clang ninja-build libopencv-dev
+            sudo apt-get install -y clang ninja-build libopencv-dev unzip
             echo "CC=clang" >> "$GITHUB_ENV"
             echo "CXX=clang++" >> "$GITHUB_ENV"
           else
@@ -82,9 +82,26 @@ jobs:
       - name: Download ONNX Runtime
         if: runner.os != 'Windows'
         run: |
-          name="onnxruntime-${{ matrix.ort }}-${ORT_VERSION}"
-          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/${name}.tgz" | tar xz
-          echo "ORT_ROOT=$PWD/${name}" >> "$GITHUB_ENV"
+          set -euo pipefail
+          ort_dir="$PWD/onnxruntime-${{ matrix.ort }}-${ORT_VERSION}"
+          mkdir -p "${ort_dir}/include" "${ort_dir}/lib"
+          curl -fsSL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${ORT_VERSION}/microsoft.ml.onnxruntime.${ORT_VERSION}.nupkg" -o ort.zip
+          unzip -q ort.zip "build/native/include/*" "runtimes/${{ matrix.ort }}/native/*" -d ort_pkg
+          cp -R ort_pkg/build/native/include/. "${ort_dir}/include/"
+          cp -R "ort_pkg/runtimes/${{ matrix.ort }}/native/." "${ort_dir}/lib/"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            soname="$(readelf -d "${ort_dir}/lib/libonnxruntime.so" | sed -n 's/.*Library soname: \[\(.*\)\]/\1/p')"
+            if [ -n "$soname" ] && [ "$soname" != "libonnxruntime.so" ]; then
+              ln -sf libonnxruntime.so "${ort_dir}/lib/${soname}"
+            fi
+          else
+            install_name="$(basename "$(otool -D "${ort_dir}/lib/libonnxruntime.dylib" | tail -n 1)")"
+            if [ -n "$install_name" ] && [ "$install_name" != "libonnxruntime.dylib" ]; then
+              ln -sf libonnxruntime.dylib "${ort_dir}/lib/${install_name}"
+            fi
+          fi
+          rm -rf ort.zip ort_pkg
+          echo "ORT_ROOT=${ort_dir}" >> "$GITHUB_ENV"
 
       - name: Configure
         if: runner.os != 'Windows'
@@ -103,12 +120,16 @@ jobs:
           Invoke-WebRequest https://github.com/opencv/opencv/releases/download/4.12.0/opencv-4.12.0-windows.exe -OutFile external/opencv.exe
           $process = Start-Process external/opencv.exe -ArgumentList '-y', "-o$PWD/external" -WindowStyle Hidden -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw 'OpenCV extraction failed' }
-          $name = "onnxruntime-win-x64-$env:ORT_VERSION"
-          Invoke-WebRequest "https://github.com/microsoft/onnxruntime/releases/download/v$env:ORT_VERSION/$name.zip" -OutFile external/ort.zip
-          Expand-Archive external/ort.zip external
-          "ORT_ROOT=$PWD/external/$name" >> $env:GITHUB_ENV
+          $ortDir = "$PWD/external/onnxruntime-win-x64-$env:ORT_VERSION"
+          New-Item -ItemType Directory -Force "$ortDir/include", "$ortDir/lib" | Out-Null
+          Invoke-WebRequest "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/$env:ORT_VERSION/microsoft.ml.onnxruntime.$env:ORT_VERSION.nupkg" -OutFile external/ort.zip
+          Expand-Archive external/ort.zip external/ort_pkg
+          Copy-Item external/ort_pkg/build/native/include/* "$ortDir/include" -Recurse
+          Copy-Item external/ort_pkg/runtimes/win-x64/native/* "$ortDir/lib" -Recurse
+          Remove-Item external/ort.zip, external/ort_pkg -Recurse -Force
+          "ORT_ROOT=$ortDir" >> $env:GITHUB_ENV
           "OpenCV_DIR=$PWD/external/opencv/build/x64/vc16/lib" >> $env:GITHUB_ENV
-          "$PWD/external/$name/lib" >> $env:GITHUB_PATH
+          "$ortDir/lib" >> $env:GITHUB_PATH
           "$PWD/external/opencv/build/x64/vc16/bin" >> $env:GITHUB_PATH
 
       - name: Configure
