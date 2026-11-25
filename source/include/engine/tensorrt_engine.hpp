@@ -19,16 +19,16 @@ namespace hrt::engine {
 // optimization profile 0, and without it only a dynamic leading batch dim, to 1.
 // CUDA buffers bind directly; host buffers are staged through device copies,
 // which run fastest from create_host_memory() (CUDA-pinned).
-class TensorrtEngine final : public Engine {
+class TensorRTEngine final : public Engine {
 public:
-  TensorrtEngine() = default;
+  TensorRTEngine() = default;
 
-  ~TensorrtEngine() override;
+  ~TensorRTEngine() override;
 
-  TensorrtEngine(const TensorrtEngine&) = delete;
-  auto operator=(const TensorrtEngine&) -> TensorrtEngine& = delete;
-  TensorrtEngine(TensorrtEngine&&) = delete;
-  auto operator=(TensorrtEngine&&) -> TensorrtEngine& = delete;
+  TensorRTEngine(const TensorRTEngine&) = delete;
+  auto operator=(const TensorRTEngine&) -> TensorRTEngine& = delete;
+  TensorRTEngine(TensorRTEngine&&) = delete;
+  auto operator=(TensorRTEngine&&) -> TensorRTEngine& = delete;
 
   auto set_inputs(const core::Buffers& inputs) -> bool override;
 

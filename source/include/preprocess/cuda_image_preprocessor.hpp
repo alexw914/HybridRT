@@ -20,6 +20,15 @@ namespace hrt::preprocess {
 // planar inputs and sources, other source formats) to the CPU.
 class CudaImagePreprocessor final : public ImagePreprocessor {
 public:
+  KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Cuda; }
+
+  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::Cuda; }
+
+  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override { return type == core::MemoryType::Cuda; }
+
+  KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
+
+protected:
   // Interleaved BGR/RGB or NV12/NV21/I420/YV12 uint8 to a 3-channel uint8 or
   // float32 input in one kernel: color conversion, resize (linear, nearest or
   // cubic), padding, channel order and normalization.
@@ -30,14 +39,6 @@ public:
   auto fused_batch(std::span<core::Image* const> dsts, std::span<const ImageTransform> transforms,
                    std::span<const core::Image* const> srcs, const ImagePreprocessorParam& param, core::Stream* stream)
       -> bool override;
-
-  KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Cuda; }
-
-  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::Cuda; }
-
-  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override { return type == core::MemoryType::Cuda; }
-
-  KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
 
 private:
   KZ_NODISCARD auto supports_fused(const core::Image& dst, const core::Image& src,

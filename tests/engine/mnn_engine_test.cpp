@@ -96,7 +96,7 @@ TEST(MnnEngineTest, RunsOnMetal) {
   ASSERT_EQ(backends[0], MNN_FORWARD_METAL);
   interpreter->releaseSession(session);
 
-  run_relu_model(R"({"forward_type":"metal","num_thread":4})");
+  run_relu_model(R"({"forward_type":"metal","num_threads":4})");
 }
 #endif
 

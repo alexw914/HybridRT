@@ -114,7 +114,7 @@ auto OpenVinoEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo:
                     "read IR model"))
     return false;
 
-  if (!read_ports(true) || !read_ports(false))
+  if (!read_io(true) || !read_io(false))
     return false;
 
   ov_property_t properties[2]{{ov_property_key_hint_inference_precision, "f32"}, {}};
@@ -221,7 +221,7 @@ auto OpenVinoEngine::inference(KZ_MAYBE_UNUSED core::Stream* stream) -> bool {
   return check_status(ov_infer_request_infer(request_), "run inference");
 }
 
-auto OpenVinoEngine::read_ports(bool input) -> bool {
+auto OpenVinoEngine::read_io(bool input) -> bool {
   size_t count = 0;
   const auto status = input ? ov_model_inputs_size(model_, &count) : ov_model_outputs_size(model_, &count);
   if (!check_status(status, input ? "query input count" : "query output count"))

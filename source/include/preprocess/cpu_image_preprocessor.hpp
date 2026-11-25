@@ -19,6 +19,15 @@ namespace hrt::preprocess {
 // RK memory that maps to the host.
 class CpuImagePreprocessor final : public ImagePreprocessor {
 public:
+  KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Cpu; }
+
+  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::Cpu; }
+
+  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override;
+
+  KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
+
+protected:
   auto fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color, core::Stream* stream)
       -> bool override;
 
@@ -35,20 +44,9 @@ public:
   auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
              const ImagePreprocessorParam& param, core::Stream* stream) -> bool override;
 
-  KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Cpu; }
-
-  KZ_NODISCARD auto memory_type() const -> core::MemoryType override { return core::MemoryType::Cpu; }
-
-  KZ_NODISCARD auto accepts(core::MemoryType type) const -> bool override;
-
-  KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
-
 private:
   auto convert_normalize(core::Image& dst, const core::Image& src, const core::Rect& roi, const Array<float, 3>& mean,
                          const Array<float, 3>& stddev, core::Stream* stream) -> bool override;
-
-  KZ_NODISCARD auto supports_fused(const core::Image& dst, const core::Image& src,
-                                   const ImagePreprocessorParam& param) const -> bool override;
 
   // Reused intermediates for multi-step conversions.
   cv::Mat bgr_;

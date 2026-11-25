@@ -89,10 +89,6 @@ public:
   // nullopt, logged, for any other inputs or a dynamic or empty size.
   KZ_NODISCARD auto input_size() const -> std::optional<core::Size>;
 
-  KZ_NODISCARD auto inputs() const -> const core::Buffers& { return inputs_; }
-
-  KZ_NODISCARD auto outputs() const -> const core::Buffers& { return outputs_; }
-
   // Empty host memory that this backend copies to and from fastest (e.g.
   // CUDA-pinned), for IO the host writes or reads; null when plain host memory
   // is as good. Sized by the Buffer built over it.

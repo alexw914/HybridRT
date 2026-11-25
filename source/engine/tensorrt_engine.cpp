@@ -131,11 +131,11 @@ auto tensor_shape(const nvinfer1::Dims& dims) -> core::Shape {
 
 } // namespace
 
-TensorrtEngine::~TensorrtEngine() {
+TensorRTEngine::~TensorRTEngine() {
   release();
 }
 
-auto TensorrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json::Json& config) -> bool {
+auto TensorRTEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json::Json& config) -> bool {
   if (param.data == nullptr || param.data->empty()) {
     KZ_LOG_ERROR("tensorrt: engine data (the serialized engine) is empty");
     return false;
@@ -204,7 +204,7 @@ auto TensorrtEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo:
   return true;
 }
 
-auto TensorrtEngine::bind(std::size_t index, bool input, const SharedPtr<core::Buffer>& buffer) -> bool {
+auto TensorRTEngine::bind(std::size_t index, bool input, const SharedPtr<core::Buffer>& buffer) -> bool {
   auto& staging = (input ? input_staging_ : output_staging_)[index];
   std::uintptr_t address = 0;
   if (buffer->memory_type() == core::MemoryType::Cuda && buffer->is_contiguous()) {
@@ -223,11 +223,11 @@ auto TensorrtEngine::bind(std::size_t index, bool input, const SharedPtr<core::B
   return context_->setTensorAddress(name.c_str(), pointer);
 }
 
-auto TensorrtEngine::create_host_memory() const -> SharedPtr<core::Memory> {
+auto TensorRTEngine::create_host_memory() const -> SharedPtr<core::Memory> {
   return backend::create_cuda_host_memory();
 }
 
-auto TensorrtEngine::set_inputs(const core::Buffers& inputs) -> bool {
+auto TensorRTEngine::set_inputs(const core::Buffers& inputs) -> bool {
   if (!Engine::set_inputs(inputs))
     return false;
   for (std::size_t i = 0; i < inputs.size(); ++i) {
@@ -239,7 +239,7 @@ auto TensorrtEngine::set_inputs(const core::Buffers& inputs) -> bool {
   return true;
 }
 
-auto TensorrtEngine::set_outputs(const core::Buffers& outputs) -> bool {
+auto TensorRTEngine::set_outputs(const core::Buffers& outputs) -> bool {
   if (!Engine::set_outputs(outputs))
     return false;
   for (std::size_t i = 0; i < outputs.size(); ++i) {
@@ -251,7 +251,7 @@ auto TensorrtEngine::set_outputs(const core::Buffers& outputs) -> bool {
   return true;
 }
 
-auto TensorrtEngine::inference(core::Stream* stream) -> bool {
+auto TensorRTEngine::inference(core::Stream* stream) -> bool {
   for (std::size_t i = 0; i < inputs_.size(); ++i) {
     if (input_staging_[i] != nullptr &&
         !core::Buffer::copy(*input_staging_[i], *inputs_[i], core::CopyPolicy::DirectCopy, stream))
@@ -277,7 +277,7 @@ auto TensorrtEngine::inference(core::Stream* stream) -> bool {
   return true;
 }
 
-auto TensorrtEngine::do_release() -> void {
+auto TensorRTEngine::do_release() -> void {
   input_staging_.clear();
   output_staging_.clear();
   context_.reset();

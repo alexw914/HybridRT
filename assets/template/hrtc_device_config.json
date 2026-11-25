@@ -56,7 +56,7 @@
               "engine_type": "mnn",
               "config": {
                 "forward_type": "cpu",
-                "num_thread": 4,
+                "num_threads": 4,
                 "cache_file": "",
                 "cache_dir": ""
               },

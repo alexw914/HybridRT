@@ -98,13 +98,14 @@ auto NcnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
     KZ_LOG_ERROR("ncnn: engine proto (the .param text) is empty");
     return false;
   }
+  int num_threads = 4;
   core::Problems problems;
   core::check_keys(config, {"num_threads"}, "config", problems);
-  core::read(config, "num_threads", num_threads_, "config", problems);
+  core::read(config, "num_threads", num_threads, "config", problems);
   KZ_CHECK_RETURN(problems.empty(), false, "ncnn: {}", core::join(problems));
 
   net_ = std::make_unique<ncnn::Net>();
-  net_->opt.num_threads = num_threads_;
+  net_->opt.num_threads = num_threads;
   net_->opt.lightmode = true;
   param_text_.assign(param.proto->begin(), param.proto->end());
   weights_ = param.data;

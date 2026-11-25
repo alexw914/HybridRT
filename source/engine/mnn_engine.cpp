@@ -59,13 +59,13 @@ auto MnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
     return false;
   }
   auto forward_type = MNN_FORWARD_CPU;
-  int num_thread = 4;
+  int num_threads = 4;
   String cache_file;
   String cache_dir;
   core::Problems problems;
-  core::check_keys(config, {"forward_type", "num_thread", "cache_file", "cache_dir"}, "config", problems);
+  core::check_keys(config, {"forward_type", "num_threads", "cache_file", "cache_dir"}, "config", problems);
   core::read_enum(config, "forward_type", forward_type, "config", problems);
-  core::read(config, "num_thread", num_thread, "config", problems);
+  core::read(config, "num_threads", num_threads, "config", problems);
   core::read(config, "cache_file", cache_file, "config", problems);
   core::read(config, "cache_dir", cache_dir, "config", problems);
   KZ_CHECK_RETURN(problems.empty(), false, "mnn: {}", core::join(problems));
@@ -79,7 +79,7 @@ auto MnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
 
   MNN::ScheduleConfig schedule;
   schedule.type = forward_type;
-  schedule.numThread = num_thread;
+  schedule.numThread = num_threads;
   MNN::BackendConfig backend;
   backend.precision = MNN::BackendConfig::Precision_Low;
   backend.power = MNN::BackendConfig::Power_Normal;

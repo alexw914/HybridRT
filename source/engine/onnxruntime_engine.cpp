@@ -273,8 +273,6 @@ auto OrtEngine::resolve_outputs() -> bool {
     release_values(inputs);
     release_values(outputs);
   };
-  Vector<const char*> input_names;
-  Vector<const char*> output_names;
   for (std::size_t i = 0; i < inputs.size(); ++i) {
     const auto& proto = input_protos_[i];
     failure = error(api_->CreateTensorAsOrtValue(allocator, proto.shape.data(), proto.shape.size(),
@@ -284,12 +282,9 @@ auto OrtEngine::resolve_outputs() -> bool {
     failure = error(api_->GetTensorMutableData(inputs[i], &data));
     KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
     std::memset(data, 0, static_cast<std::size_t>(core::volume(proto.shape)) * core::data_type_size(proto.data_type));
-    input_names.push_back(input_names_[i].c_str());
   }
-  for (const auto& name : output_names_)
-    output_names.push_back(name.c_str());
-  failure = error(api_->Run(session_, nullptr, input_names.data(), inputs.data(), inputs.size(), output_names.data(),
-                            outputs.size(), outputs.data()));
+  failure = error(api_->Run(session_, nullptr, input_name_ptrs_.data(), inputs.data(), inputs.size(),
+                            output_name_ptrs_.data(), outputs.size(), outputs.data()));
   KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: resolving output shapes: {}", failure);
   for (std::size_t i = 0; i < outputs.size(); ++i) {
     OrtTensorTypeAndShapeInfo* info = nullptr;

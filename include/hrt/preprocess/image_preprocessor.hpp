@@ -62,7 +62,6 @@ NLOHMANN_JSON_SERIALIZE_ENUM(ResizeType, {
                                              {ResizeType::KeepRatio, "keep_ratio"},
                                              {ResizeType::CenterCrop, "center_crop"},
                                              {ResizeType::LetterBox, "letter_box"},
-                                             {ResizeType::LetterBox, "center_keep_ratio"},
                                              {ResizeType::PadOutside, "pad_outside"},
                                              {ResizeType::TextLine, "text_line"},
                                          })
@@ -153,6 +152,23 @@ public:
                const ImagePreprocessorParam& param, core::Stream* stream = nullptr)
       -> std::optional<Vector<ImageTransform>>;
 
+  KZ_NODISCARD virtual auto type() const -> ImagePreprocessorType = 0;
+
+  // Memory type of scratch images.
+  KZ_NODISCARD virtual auto memory_type() const -> core::MemoryType = 0;
+
+  KZ_NODISCARD virtual auto accepts(core::MemoryType type) const -> bool = 0;
+
+  // For Fill and Normalize, `dst` and `src` are the same image.
+  KZ_NODISCARD virtual auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const
+      -> bool = 0;
+
+protected:
+  ImagePreprocessor();
+
+  auto cpu_resize(core::Image& dst, const core::Rect& dst_roi, const core::Image& src, const core::Rect& src_roi,
+                  InterpolationMode mode, core::Stream* stream) -> bool;
+
   // Narrows the regions to what this device can address, for the images it would run on.
   virtual auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst,
                           const core::Image& src) const -> void;
@@ -180,20 +196,6 @@ public:
   virtual auto fused_batch(std::span<core::Image* const> dsts, std::span<const ImageTransform> transforms,
                            std::span<const core::Image* const> srcs, const ImagePreprocessorParam& param,
                            core::Stream* stream) -> bool;
-
-  KZ_NODISCARD virtual auto type() const -> ImagePreprocessorType = 0;
-
-  // Memory type of scratch images.
-  KZ_NODISCARD virtual auto memory_type() const -> core::MemoryType = 0;
-
-  KZ_NODISCARD virtual auto accepts(core::MemoryType type) const -> bool = 0;
-
-  // For Fill and Normalize, `dst` and `src` are the same image.
-  KZ_NODISCARD virtual auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const
-      -> bool = 0;
-
-protected:
-  ImagePreprocessor();
 
 private:
   // Where one sample runs on this device: the transform to return, the same in

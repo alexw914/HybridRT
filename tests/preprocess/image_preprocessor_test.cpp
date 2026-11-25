@@ -42,7 +42,7 @@ auto param_with(hrt::preprocess::ResizeType type) -> hrt::preprocess::ImagePrepr
 
 TEST(ImagePreprocessorTest, ParsesParams) {
   auto param = kitzoo::json::Json::parse(R"({
-    "resize_type": "center_keep_ratio", "dst_image_format": "inter_bgr",
+    "resize_type": "letter_box", "dst_image_format": "inter_bgr",
     "std": [255, 255, 255], "pad_scale": 1.5
   })")
                    .get<hrt::preprocess::ImagePreprocessorParam>();

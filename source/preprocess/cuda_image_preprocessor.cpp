@@ -124,17 +124,16 @@ auto create_preprocess_param(const core::Image& dst, const ImageTransform& trans
 
 } // namespace
 
-auto CudaImagePreprocessor::supports(ImageOperation /*op*/, const core::Image& /*dst*/,
-                                     const core::Image& /*src*/) const -> bool {
-  return false;
+auto CudaImagePreprocessor::supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool {
+  return op == ImageOperation::Fused && input_format(src.format()).has_value() &&
+         src.data_type() == core::DataType::Uint8 && (is_interleaved(dst.format()) || is_planar(dst.format())) &&
+         (dst.data_type() == core::DataType::Float32 || dst.data_type() == core::DataType::Uint8);
 }
 
 auto CudaImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
                                            const ImagePreprocessorParam& param) const -> bool {
   const auto normalize = param.normalize_type != NormalizeType::None && !is_identity(param.mean, param.std);
-  return input_format(src.format()).has_value() && src.data_type() == core::DataType::Uint8 &&
-         (is_interleaved(dst.format()) || is_planar(dst.format())) &&
-         (dst.data_type() == core::DataType::Float32 || (dst.data_type() == core::DataType::Uint8 && !normalize));
+  return supports(ImageOperation::Fused, dst, src) && (dst.data_type() == core::DataType::Float32 || !normalize);
 }
 
 auto CudaImagePreprocessor::fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,

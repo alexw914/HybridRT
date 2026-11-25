@@ -91,10 +91,7 @@ RknnEngine::~RknnEngine() {
 }
 
 auto RknnEngine::make_mem(rknn_tensor_mem* mem) -> TensorMem {
-  return {mem, [context = context_](rknn_tensor_mem* m) {
-            if (m != nullptr)
-              rknn_destroy_mem(context, m);
-          }};
+  return {mem, MemDeleter{context_}};
 }
 
 auto RknnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json::Json& config) -> bool {

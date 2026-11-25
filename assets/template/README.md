@@ -33,7 +33,7 @@ most 64) to `ImageModel::create`.
 | --- | --- | --- |
 | `device` | `auto` | `auto` (device of the engine input), `cpu`, `cuda`, `rga`, `dvpp`, `metal` (macOS, never picked by `auto`) |
 | `interpolation_mode` | `linear` | `linear`, `nearest`, `cubic` |
-| `resize_type` | `normal` | `normal` (stretch), `keep_ratio` (top-left), `letter_box` (centered as Ultralytics' LetterBox: scaled size rounded half to even and at least 1, offset rounded down; alias `center_keep_ratio`), `center_crop` (square input, needs `resize_short_size`), `pad_outside` (grows the source rect to the input aspect ratio, scaled by `pad_scale`), `text_line` (full input height, proportional width rounded up and capped at input width, right padding) |
+| `resize_type` | `normal` | `normal` (stretch), `keep_ratio` (top-left), `letter_box` (centered as Ultralytics' LetterBox: scaled size rounded half to even and at least 1, offset rounded down), `center_crop` (square input, needs `resize_short_size`), `pad_outside` (grows the source rect to the input aspect ratio, scaled by `pad_scale`), `text_line` (full input height, proportional width rounded up and capped at input width, right padding) |
 | `dst_image_format` | `planar_rgb` | `planar_rgb`, `planar_bgr`, `inter_rgb`, `inter_bgr`, `inter_rgba`, `gray`, `nv12`, `nv21`, `yu12`, `yv12`; planar and gray need an NCHW input, interleaved NHWC |
 | `normalize_type` | `full` | `full`, `roi` (only the resized region), `none` |
 | `mean`, `std` | `[0, 0, 0]`, `[1, 1, 1]` | Per channel: `x = (x - mean) / std` |
@@ -113,7 +113,7 @@ normalization). Model conversion and preprocessing must match the selected backe
 | `ort` | `intra_op_num_threads`, `inter_op_num_threads` (0: ONNX Runtime's default); `execution_provider`: `cpu`, `coreml`, `cuda`, `tensorrt`, `openvino`, `dml`, `qnn`, `xnnpack`, `cann`, `dnnl`, `webgpu`, `vitisai` (falls back to the CPU with a warning when the ONNX Runtime package lacks it or it fails to start, including on options it rejects); `provider_options`: string keys and values passed to the provider unchanged, as named in its ONNX Runtime documentation (e.g. CoreML `ModelFormat` `NeuralNetwork`/`MLProgram`, `MLComputeUnits`; CUDA `device_id`; OpenVINO `device_type`; QNN `backend_type`; DirectML only `device_id`); `custom_op_libraries`: paths; `input_shapes` |
 | `openvino` | `num_threads` (0: OpenVINO default; positive values limit CPU inference threads); reads IR XML/BIN from `proto`/`data`, uses an FP32 inference precision hint, and runs on CPU; fixed tensor shapes and NCHW layout |
 | `ncnn` | `num_threads` (4) |
-| `mnn` | `forward_type`: `cpu`, `opencl`, `metal`, `vulkan`, `cuda`, `nn`, `auto`; `num_thread` (4); `cache_file`, `cache_dir`: OpenCL tuning cache |
+| `mnn` | `forward_type`: `cpu`, `opencl`, `metal`, `vulkan`, `cuda`, `nn`, `auto`; `num_threads` (4); `cache_file`, `cache_dir`: OpenCL tuning cache |
 | `trt` | `plugin_libraries`: paths, loaded before the engine is deserialized; `input_shapes` (within optimization profile 0) |
 | `rknn` | `image_input` (true: uint8 inputs); `core_mask`: `RKNN_NPU_CORE_AUTO`, `RKNN_NPU_CORE_0`, `RKNN_NPU_CORE_1`, `RKNN_NPU_CORE_2`, `RKNN_NPU_CORE_0_1`, `RKNN_NPU_CORE_0_1_2`; `custom_op_libraries`: paths |
 | `cann` | none |

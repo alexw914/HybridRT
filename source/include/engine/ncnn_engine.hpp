@@ -40,7 +40,6 @@ private:
   // ncnn reads weights in place, so the model bytes outlive the net.
   String param_text_;
   SharedPtr<const hrtc::Bytes> weights_;
-  int num_threads_ = 4;
   Vector<int> input_indexes_;
   Vector<int> output_indexes_;
   Vector<ncnn::Mat> input_mats_;

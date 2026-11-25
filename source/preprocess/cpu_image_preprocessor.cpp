@@ -185,7 +185,8 @@ auto CpuImagePreprocessor::supports(ImageOperation op, const core::Image& dst, c
     return false;
   }
   case ImageOperation::Fused:
-    break;
+    return src_layout == Layout::Inter3 && src.data_type() == core::DataType::Uint8 && dst_layout == Layout::Planar3 &&
+           dst.data_type() == core::DataType::Float32;
   }
   return false;
 }
@@ -341,12 +342,6 @@ auto CpuImagePreprocessor::convert_normalize(core::Image& dst, const core::Image
     input(rect).convertTo(output(rect), CV_32F, alpha, -static_cast<double>(mean[c]) * alpha);
   }
   return true;
-}
-
-auto CpuImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
-                                          const ImagePreprocessorParam& /*param*/) const -> bool {
-  return image_layout(src.format()) == Layout::Inter3 && src.data_type() == core::DataType::Uint8 &&
-         image_layout(dst.format()) == Layout::Planar3 && dst.data_type() == core::DataType::Float32;
 }
 
 auto CpuImagePreprocessor::fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,

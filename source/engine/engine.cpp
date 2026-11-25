@@ -125,7 +125,7 @@ auto Engine::create(EngineType type) -> UniquePtr<Engine> {
 #endif
 #ifdef HRT_USE_TENSORRT
   case EngineType::TensorRt:
-    return std::make_unique<TensorrtEngine>();
+    return std::make_unique<TensorRTEngine>();
 #endif
 #ifdef HRT_USE_RKNN
   case EngineType::Rknn:

@@ -74,7 +74,7 @@ auto even(int& offset, int& length) -> void {
 } // namespace
 
 auto DvppImagePreprocessor::create() -> UniquePtr<ImagePreprocessor> {
-  auto preprocessor = std::make_unique<DvppImagePreprocessor>();
+  UniquePtr<DvppImagePreprocessor> preprocessor(new DvppImagePreprocessor());
   return preprocessor->channel_ >= 0 ? std::move(preprocessor) : nullptr;
 }
 

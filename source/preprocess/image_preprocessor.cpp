@@ -322,6 +322,12 @@ auto ImagePreprocessor::cpu() -> ImagePreprocessor* {
   return cpu_.get();
 }
 
+auto ImagePreprocessor::cpu_resize(core::Image& dst, const core::Rect& dst_roi, const core::Image& src,
+                                   const core::Rect& src_roi, InterpolationMode mode, core::Stream* stream) -> bool {
+  auto* fallback = cpu();
+  return fallback != nullptr && fallback->resize(dst, dst_roi, src, src_roi, mode, stream);
+}
+
 auto ImagePreprocessor::process_fused(std::span<core::Image> dsts, std::span<const core::Image> srcs,
                                       std::span<const core::Rect> src_rects, const ImagePreprocessorParam& param,
                                       core::Stream* stream) -> std::optional<Vector<ImageTransform>> {

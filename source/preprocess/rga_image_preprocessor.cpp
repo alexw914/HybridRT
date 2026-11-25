@@ -103,19 +103,10 @@ auto RgaImagePreprocessor::resize(core::Image& dst, const core::Rect& dst_roi, c
   const auto scale_x = static_cast<double>(dst_roi.width) / src_roi.width;
   const auto scale_y = static_cast<double>(dst_roi.height) / src_roi.height;
   if (mode != InterpolationMode::Linear || scale_x > 16 || scale_y > 16 || scale_x < 0.0625 || scale_y < 0.0625)
-    return cpu_.resize(dst, dst_roi, src, src_roi, mode, stream);
+    return cpu_resize(dst, dst_roi, src, src_roi, mode, stream);
   return select_cores() && rga_ok(improcess(rga_buffer(src, stream, false), rga_buffer(dst, stream, true), {},
                                             rga_rect(src_roi), rga_rect(dst_roi), {}, IM_SYNC),
                                   "improcess");
-}
-
-auto RgaImagePreprocessor::convert(core::Image& dst, const core::Image& src, core::Stream* stream) -> bool {
-  return cpu_.convert(dst, src, stream);
-}
-
-auto RgaImagePreprocessor::normalize(core::Image& image, const core::Rect& roi, const Array<float, 3>& mean,
-                                     const Array<float, 3>& stddev, core::Stream* stream) -> bool {
-  return cpu_.normalize(image, roi, mean, stddev, stream);
 }
 
 } // namespace hrt::preprocess

@@ -21,22 +21,12 @@ public:
   // staging every image through the media allocator for nothing.
   static auto create() -> UniquePtr<ImagePreprocessor>;
 
-  DvppImagePreprocessor();
-
   ~DvppImagePreprocessor() override;
 
   DvppImagePreprocessor(const DvppImagePreprocessor&) = delete;
   auto operator=(const DvppImagePreprocessor&) -> DvppImagePreprocessor& = delete;
   DvppImagePreprocessor(DvppImagePreprocessor&&) = delete;
   auto operator=(DvppImagePreprocessor&&) -> DvppImagePreprocessor& = delete;
-
-  // VPC needs even region offsets and sizes; other images keep theirs, as the CPU
-  // operators take any region and rounding costs accuracy on cascaded crops.
-  auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst, const core::Image& src) const
-      -> void override;
-
-  auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
-             const ImagePreprocessorParam& param, core::Stream* stream) -> bool override;
 
   KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Dvpp; }
 
@@ -46,7 +36,18 @@ public:
 
   KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
 
+protected:
+  // VPC needs even region offsets and sizes; other images keep theirs, as the CPU
+  // operators take any region and rounding costs accuracy on cascaded crops.
+  auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst, const core::Image& src) const
+      -> void override;
+
+  auto fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
+             const ImagePreprocessorParam& param, core::Stream* stream) -> bool override;
+
 private:
+  DvppImagePreprocessor();
+
   KZ_NODISCARD auto supports_fused(const core::Image& dst, const core::Image& src,
                                    const ImagePreprocessorParam& param) const -> bool override;
 

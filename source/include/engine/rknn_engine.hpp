@@ -9,7 +9,6 @@
 
 #include <hrt/engine/engine.hpp>
 
-#include <functional>
 #include <rknn_api.h>
 
 namespace hrt::engine {
@@ -42,7 +41,15 @@ protected:
   auto do_release() -> void override;
 
 private:
-  using TensorMem = UniquePtr<rknn_tensor_mem, std::function<void(rknn_tensor_mem*)>>;
+  struct MemDeleter {
+    rknn_context context = 0;
+
+    auto operator()(rknn_tensor_mem* mem) const -> void {
+      if (mem != nullptr)
+        rknn_destroy_mem(context, mem);
+    }
+  };
+  using TensorMem = UniquePtr<rknn_tensor_mem, MemDeleter>;
 
   auto make_mem(rknn_tensor_mem* mem) -> TensorMem;
 

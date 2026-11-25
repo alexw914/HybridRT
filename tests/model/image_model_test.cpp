@@ -298,7 +298,8 @@ TEST_F(ImageModelTest, PicksTheFirstUsableEngine) {
 
 TEST_F(ImageModelTest, ChecksConfigWithoutThrowing) {
   using hrt::model::check_algo_config;
-  EXPECT_TRUE(check_algo_config(classify_algo(R"({"resize_type": "center_keep_ratio"})")).empty());
+  EXPECT_TRUE(check_algo_config(classify_algo(R"({"resize_type": "letter_box"})")).empty());
+  EXPECT_FALSE(check_algo_config(classify_algo(R"({"resize_type": "center_keep_ratio"})")).empty());
   EXPECT_EQ(check_algo_config(classify_algo(R"({"resize_typ": "normal"})")).size(), 1U);
   EXPECT_EQ(check_algo_config(classify_algo(R"({"resize_type": "stretch"})")).size(), 1U);
   EXPECT_EQ(check_algo_config(classify_algo(R"({"mean": [0, 0]})")).size(), 1U);

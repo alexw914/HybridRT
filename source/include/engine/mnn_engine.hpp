@@ -14,7 +14,7 @@
 namespace hrt::engine {
 
 // EngineParam.data holds the .mnn model. Config: {"forward_type": "cpu" |
-// "opencl" | ..., "num_thread": 4, "cache_file": .., "cache_dir": ..}, the
+// "opencl" | ..., "num_threads": 4, "cache_file": .., "cache_dir": ..}, the
 // last two for OpenCL tuning caches.
 class MnnEngine final : public Engine {
 public:

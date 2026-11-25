@@ -38,7 +38,7 @@ protected:
   auto do_release() -> void override;
 
 private:
-  auto read_ports(bool input) -> bool;
+  auto read_io(bool input) -> bool;
 
   ov_core_t* core_ = nullptr;
   ov_model_t* model_ = nullptr;

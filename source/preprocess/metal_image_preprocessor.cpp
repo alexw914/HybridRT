@@ -78,22 +78,10 @@ MetalImagePreprocessor::MetalImagePreprocessor() : state_(std::make_unique<State
 MetalImagePreprocessor::~MetalImagePreprocessor() = default;
 
 auto MetalImagePreprocessor::create() -> UniquePtr<ImagePreprocessor> {
-  auto processor = std::make_unique<MetalImagePreprocessor>();
+  UniquePtr<MetalImagePreprocessor> processor(new MetalImagePreprocessor());
   if (processor->state_->pipeline == nil || processor->state_->queue == nil)
     return nullptr;
   return processor;
-}
-
-auto MetalImagePreprocessor::type() const -> ImagePreprocessorType {
-  return ImagePreprocessorType::Metal;
-}
-
-auto MetalImagePreprocessor::memory_type() const -> core::MemoryType {
-  return core::MemoryType::Cpu;
-}
-
-auto MetalImagePreprocessor::accepts(core::MemoryType type) const -> bool {
-  return type == core::MemoryType::Cpu;
 }
 
 // The kernel works on wrapped host memory in place. Discrete GPUs would read it over the bus for every tap, so they
