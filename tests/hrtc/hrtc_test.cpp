@@ -147,6 +147,14 @@ TEST_F(HrtcTest, RejectsInvalidManifests) {
     {"name": "a", "config": {"engine": {"backends": [{"engine_type": "ort"}]}}},
     {"name": "a", "config": {"engine": {"backends": [{"engine_type": "ort"}]}}}]})");
   EXPECT_FALSE(hrt::hrtc::load_json(dir_ / "dup.json"));
+
+  kitzoo::os::write_file(dir_ / "unknown.json", R"({"name": "x", "version": "1", "extra": true, "algos": [
+    {"name": "a", "config": {"engine": {"backends": [{"engine_type": "ort"}]}}}]})");
+  EXPECT_FALSE(hrt::hrtc::load_json(dir_ / "unknown.json"));
+
+  kitzoo::os::write_file(dir_ / "empty_engine.json", R"({"name": "x", "version": "1", "algos": [
+    {"name": "a", "config": {"engine": {"backends": [{"engine_type": ""}]}}}]})");
+  EXPECT_FALSE(hrt::hrtc::load_json(dir_ / "empty_engine.json"));
 }
 
 } // namespace

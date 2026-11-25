@@ -481,18 +481,22 @@ namespace {
 // of the last dimension are contiguous.
 auto read_floats(const core::Buffer& output, const std::uint8_t* base, std::size_t count, std::size_t first,
                  core::Buffer& scratch) -> const float* {
-  if (output.data_type() == core::DataType::Float32)
+  const bool is_float = output.data_type() == core::DataType::Float32;
+  const auto& shape = output.shape();
+  if (is_float && (output.is_contiguous() || shape.size() <= first + 1))
     return static_cast<const float*>(static_cast<const void*>(base));
   if (static_cast<std::size_t>(scratch.volume()) < count)
     scratch.reshape({static_cast<std::int64_t>(count)});
   auto* out = static_cast<float*>(scratch.memory()->mutable_cpu());
   const auto* floats = out;
   const auto convert = [&](const std::uint8_t* in, std::size_t values) -> void {
-    dequantize_values(static_cast<const std::int8_t*>(static_cast<const void*>(in)), values, output.scale(),
-                      output.zero_point(), out);
+    if (is_float)
+      std::memcpy(out, in, values * sizeof(float));
+    else
+      dequantize_values(static_cast<const std::int8_t*>(static_cast<const void*>(in)), values, output.scale(),
+                        output.zero_point(), out);
     out += values;
   };
-  const auto& shape = output.shape();
   if (output.is_contiguous() || shape.size() <= first + 1) {
     convert(base, count);
     return floats;

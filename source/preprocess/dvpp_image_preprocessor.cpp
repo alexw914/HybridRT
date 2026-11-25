@@ -90,8 +90,8 @@ DvppImagePreprocessor::DvppImagePreprocessor() {
   channel_ = channel;
   // A channel can open where the media service cannot run, so prove VPC works once; a
   // failure here leaves supports() false and the CPU operators take over.
-  const core::Image src(core::MemoryType::Acl, core::ImageFormat::InterBgr, core::DataType::Uint8, {64, 64});
-  core::Image dst(core::MemoryType::Acl, core::ImageFormat::InterBgr, core::DataType::Uint8, {32, 32});
+  const core::Image src(core::MemoryType::Dvpp, core::ImageFormat::InterBgr, core::DataType::Uint8, {64, 64});
+  core::Image dst(core::MemoryType::Dvpp, core::ImageFormat::InterBgr, core::DataType::Uint8, {32, 32});
   const ImageTransform transform{.dst_roi = {0, 0, 32, 32}, .src_roi = {0, 0, 64, 64}, .input_size = {32, 32}};
   if (!src.valid() || !dst.valid() || !fused(dst, transform, src, ImagePreprocessorParam{}, nullptr)) {
     KZ_LOG_WARN("dvpp: VPC is unusable on this device; preprocessing falls back to the CPU");
@@ -107,6 +107,11 @@ DvppImagePreprocessor::~DvppImagePreprocessor() {
 
 auto DvppImagePreprocessor::supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool {
   return op == ImageOperation::Fused && channel_ >= 0 && is_vpc_image(dst) && is_vpc_image(src);
+}
+
+auto DvppImagePreprocessor::supports_fused(const core::Image& dst, const core::Image& src,
+                                           const ImagePreprocessorParam& param) const -> bool {
+  return supports(ImageOperation::Fused, dst, src) && param.interpolation_mode != InterpolationMode::Cubic;
 }
 
 auto DvppImagePreprocessor::adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst,

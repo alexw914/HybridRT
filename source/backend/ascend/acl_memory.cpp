@@ -49,9 +49,10 @@ auto address(core::Memory& memory, bool write, core::Stream* stream) -> void* {
 auto AclMemory::aligned_stride(const core::Shape& shape) const -> core::Stride {
   if (memory_type() != core::MemoryType::Dvpp || shape.size() < 2)
     return core::contiguous_stride(shape);
-  // Width is the second axis, or the third when the first is a single plane.
+  // Width is the last axis for planar/gray layouts ({C, H, W}) and the second
+  // axis for interleaved/semi-planar layouts ({H, W, C}).
   auto aligned = shape;
-  const auto axis = shape[0] == 1 && shape.size() > 2 ? 2U : 1U;
+  const auto axis = shape.size() > 2 && shape[0] <= 4 && shape.back() > 4 ? shape.size() - 1 : 1U;
   aligned[axis] = (aligned[axis] + 15) / 16 * 16;
   return core::contiguous_stride(aligned);
 }
@@ -81,6 +82,7 @@ auto AclMemory::reallocate(std::size_t size) -> bool {
     return true;
   void* device = nullptr;
   // Both return a plain int, so the branches share a type without a cast.
+  // On Atlas 300V Pro (Ascend 310P), dev_id is reserved (0) and follows the thread's ACL context.
   const int status = memory_type() == core::MemoryType::Dvpp ? hi_mpi_dvpp_malloc(0, &device, size)
                                                              : aclrtMalloc(&device, size, ACL_MEM_MALLOC_HUGE_FIRST);
   KZ_CHECK_RETURN(status == ACL_SUCCESS, false, "acl: allocating {} bytes failed: 0x{:X} {}", size,

@@ -45,6 +45,13 @@ TEST(CanvasTest, DrawsFullImageMasksAndBorder) {
   hrt::core::draw(canvas, result);
   EXPECT_GT(cv::countNonZero(canvas.reshape(1)), 3);
   EXPECT_GT(cv::countNonZero(canvas.row(0).reshape(1)), 0);
+
+  // Masks extending past the image border are clipped rather than throwing.
+  canvas.setTo(0);
+  object.mask.rect = {-4, -4, 16, 16};
+  object.mask.data.assign(16 * 16, 1);
+  hrt::core::draw(canvas, result);
+  EXPECT_GT(cv::countNonZero(canvas.reshape(1)), 0);
 }
 
 TEST(CanvasTest, DrawsClassifyLabelTopLeft) {

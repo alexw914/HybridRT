@@ -159,6 +159,9 @@ auto NcnnEngine::set_inputs(const core::Buffers& inputs) -> bool {
     auto* data = inputs[i]->memory()->mutable_cpu();
     if (data == nullptr || !inputs[i]->is_contiguous()) {
       KZ_LOG_ERROR("ncnn: input {} needs contiguous host memory", i);
+      input_mats_.clear();
+      input_refcounts_.reset();
+      inputs_.clear();
       return false;
     }
     const auto& shape = net_->blobs()[static_cast<std::size_t>(input_indexes_[i])].shape;

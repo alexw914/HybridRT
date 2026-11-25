@@ -8,6 +8,7 @@
 
 #include <kitzoo/log/logger.hpp>
 
+#include <algorithm>
 #include <im2d.hpp>
 
 #include "include/memory/dma_buffer_memory.hpp"
@@ -39,13 +40,13 @@ auto rga_format(core::ImageFormat format) -> int {
 }
 
 // Pixel row stride and row count from the byte strides {total, row, pixel}.
-auto rga_buffer(const core::Image& image, core::Stream* stream) -> rga_buffer_t {
+auto rga_buffer(const core::Image& image, core::Stream* stream, bool write) -> rga_buffer_t {
   const auto& stride = image.stride();
   const auto w_stride = static_cast<int>(stride[1] / stride[2]);
   const auto h_stride = static_cast<int>(stride[0] / stride[1]);
   const auto size = image.size();
-  return wrapbuffer_fd_t(static_cast<int>(image.memory()->mutable_device(stream)), size.width, size.height, w_stride,
-                         h_stride, rga_format(image.format()));
+  const auto fd = write ? image.memory()->mutable_device(stream) : image.memory()->device(stream);
+  return wrapbuffer_fd_t(static_cast<int>(fd), size.width, size.height, w_stride, h_stride, rga_format(image.format()));
 }
 
 auto rga_rect(const core::Rect& rect) -> im_rect {
@@ -89,10 +90,12 @@ auto RgaImagePreprocessor::adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, 
 auto RgaImagePreprocessor::fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color,
                                 core::Stream* stream) -> bool {
   // Packed as 0xAABBGGRR in memory order of the destination format.
-  const auto r = static_cast<int>(image.format() == core::ImageFormat::InterRgb ? color[0] : color[2]);
-  const auto g = static_cast<int>(color[1]);
-  const auto b = static_cast<int>(image.format() == core::ImageFormat::InterRgb ? color[2] : color[0]);
-  return select_cores() && rga_ok(imfill(rga_buffer(image, stream), rga_rect(roi), (b << 16) | (g << 8) | r), "imfill");
+  const auto clamp_u8 = [](float value) -> int { return std::clamp(static_cast<int>(value), 0, 255); };
+  const auto r = clamp_u8(image.format() == core::ImageFormat::InterRgb ? color[0] : color[2]);
+  const auto g = clamp_u8(color[1]);
+  const auto b = clamp_u8(image.format() == core::ImageFormat::InterRgb ? color[2] : color[0]);
+  return select_cores() &&
+         rga_ok(imfill(rga_buffer(image, stream, true), rga_rect(roi), (b << 16) | (g << 8) | r), "imfill");
 }
 
 auto RgaImagePreprocessor::resize(core::Image& dst, const core::Rect& dst_roi, const core::Image& src,
@@ -101,8 +104,8 @@ auto RgaImagePreprocessor::resize(core::Image& dst, const core::Rect& dst_roi, c
   const auto scale_y = static_cast<double>(dst_roi.height) / src_roi.height;
   if (mode != InterpolationMode::Linear || scale_x > 16 || scale_y > 16 || scale_x < 0.0625 || scale_y < 0.0625)
     return cpu_.resize(dst, dst_roi, src, src_roi, mode, stream);
-  return select_cores() && rga_ok(improcess(rga_buffer(src, stream), rga_buffer(dst, stream), {}, rga_rect(src_roi),
-                                            rga_rect(dst_roi), {}, IM_SYNC),
+  return select_cores() && rga_ok(improcess(rga_buffer(src, stream, false), rga_buffer(dst, stream, true), {},
+                                            rga_rect(src_roi), rga_rect(dst_roi), {}, IM_SYNC),
                                   "improcess");
 }
 

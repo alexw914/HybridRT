@@ -320,8 +320,8 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
   // A batch above 1 has every input sample viewed in place and decoded from
   // the same sample of every output.
   const auto& inputs = engine.input_protos();
-  KZ_CHECK_RETURN(!inputs.empty() && !inputs.front().shape.empty() && inputs.front().shape[0] >= 1, false,
-                  "ImageModel: algo {} needs an image input with a static batch", algo.name);
+  KZ_CHECK_RETURN(inputs.size() == 1 && !inputs.front().shape.empty() && inputs.front().shape[0] >= 1, false,
+                  "ImageModel: algo {} needs one image input with a static batch", algo.name);
   batch_ = static_cast<std::size_t>(inputs.front().shape[0]);
   if (batch_ > 1) {
     for (const auto& output : engine.output_protos()) {

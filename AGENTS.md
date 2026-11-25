@@ -7,6 +7,9 @@
 ## 项目与基础能力
 
 - HybridRT 是 C++20 模型推理框架，只负责预处理、推理、后处理及模型封装。
+- 项目范围与边界：只支持图像类模型，只支持固定静态尺寸输入与固定 batch 组批，不支持动态 shape 和动态 batch；
+  `ImageModel` 只面向传统视觉任务（检测、旋转框、分割、关键点、分类、Embedding），OCR 作为独立类别由 `OcrModel` 封装。
+  所有模型均以实际训练框架导出的模型为出发点，模型与参数配置只在初始化阶段检查，推理与解码路径不为极端或脱离实际导出的异常情况做过度防御。
 - 通用能力统一使用 kitzoo，不重复实现或包装；缺失能力补充到 kitzoo，只链接所需模块：
   JSON 用 `kitzoo::json::Reader` 解析、nlohmann 原生接口读取，参数结构体用
   `NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT` 映射；`get<T>()` 前用
@@ -41,7 +44,8 @@
   新增设备扩展 `Memory::create`/`wrap`、`copy_memory`、`Context::create`、
   `ImagePreprocessor::create`，上层流程不按后端分支。
 - 预处理流程只在 `ImagePreprocessor` 基类实现，算子默认返回 false，设备子类只重写支持的算子；
-  不支持的步骤由 `supports()` 返回 false 并回退 CPU。后处理只在主机执行，按 `postprocess.type` 注册。
+  不支持的步骤由 `supports()` 返回 false 并回退 CPU。Ascend/ACL 系列只支持 DVPP（VPC 输出 uint8）
+  配合模型内 AIPP 完成归一化的使用形式，不做归一化回退 CPU。后处理只在主机执行，按 `postprocess.type` 注册。
 - `ImageModel` 的 algo 只描述模型（preprocess、postprocess），引擎只读取自己的 config。
   各阶段实例数只通过 create 的 `ImageModelOptions` 传入，不写入模型包。
   自定义算子库从引擎 config 加载（ORT/RKNN 的 `custom_op_libraries`、

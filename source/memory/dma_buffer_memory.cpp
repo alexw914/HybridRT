@@ -110,11 +110,11 @@ auto DmaBufferMemory::aligned_stride(const core::Shape& shape) const -> core::St
   if (shape.size() < 2)
     return stride;
   const auto last = shape.size() - 1;
-  stride[last] = static_cast<std::size_t>(shape[last]);
-  stride[last - 1] = stride[last] * align(static_cast<std::size_t>(shape[last - 1]), 16);
-  for (auto i = last - 1; i > 0; --i)
-    stride[i - 1] = stride[i] * static_cast<std::size_t>(shape[i - 1]);
-  return stride;
+  // Planar/gray/2D layouts end with width; interleaved layouts end with pixel bytes (<= 4).
+  const auto axis = shape[last] > 4 && (shape.size() == 2 || shape[last - 2] <= 4) ? last : last - 1;
+  auto aligned = shape;
+  aligned[axis] = static_cast<std::int64_t>(align(static_cast<std::size_t>(aligned[axis]), 16));
+  return core::contiguous_stride(aligned);
 }
 
 DmaBufferMemory::DmaBufferMemory(const core::Shape& shape, const core::Stride& stride, bool device32)

@@ -92,6 +92,11 @@ auto load_plugins(const Vector<String>& libraries) -> void {
 #endif
     if (has_creators && getPluginRegistry()->loadLibrary(library.c_str()) == nullptr) {
       KZ_LOG_WARN("tensorrt: cannot register the plugins of {}", library);
+#ifdef _WIN32
+      FreeLibrary(handle);
+#else
+      dlclose(handle);
+#endif
       continue;
     }
 #endif
@@ -226,8 +231,10 @@ auto TensorrtEngine::set_inputs(const core::Buffers& inputs) -> bool {
   if (!Engine::set_inputs(inputs))
     return false;
   for (std::size_t i = 0; i < inputs.size(); ++i) {
-    if (!bind(i, true, inputs[i]))
+    if (!bind(i, true, inputs[i])) {
+      inputs_.clear();
       return false;
+    }
   }
   return true;
 }
@@ -236,8 +243,10 @@ auto TensorrtEngine::set_outputs(const core::Buffers& outputs) -> bool {
   if (!Engine::set_outputs(outputs))
     return false;
   for (std::size_t i = 0; i < outputs.size(); ++i) {
-    if (!bind(i, false, outputs[i]))
+    if (!bind(i, false, outputs[i])) {
+      outputs_.clear();
       return false;
+    }
   }
   return true;
 }

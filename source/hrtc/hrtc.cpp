@@ -11,9 +11,11 @@
 #include <kitzoo/log/logger.hpp>
 #include <kitzoo/os/filesys.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <concepts>
 #include <cstring>
+#include <initializer_list>
 
 #include "include/hrtc/hrtc_generated.h"
 
@@ -99,9 +101,24 @@ auto read_bytes(const Json& object, const char* key, SharedPtr<const Bytes>& out
   return true;
 }
 
+auto check_keys(const Json& object, std::initializer_list<std::string_view> allowed, const char* section) -> bool {
+  for (const auto& [key, value] : object.items()) {
+    if (std::find(allowed.begin(), allowed.end(), key) == allowed.end()) {
+      KZ_LOG_ERROR("hrtc manifest: unknown key \"{}\" in {}", key, section);
+      return false;
+    }
+  }
+  return true;
+}
+
 auto read_engine(const Json& json, EngineParam& engine) -> bool {
-  if (!json.is_object() || !read_string(json, "engine_type", engine.engine_type))
+  if (!json.is_object() || !check_keys(json, {"engine_type", "config", "proto", "data"}, "engine") ||
+      !read_string(json, "engine_type", engine.engine_type))
     return false;
+  if (engine.engine_type.empty()) {
+    KZ_LOG_ERROR("hrtc manifest: \"engine_type\" must not be empty");
+    return false;
+  }
   if (const auto config = json.find("config"); config != json.end()) {
     if (!config->is_object()) {
       KZ_LOG_ERROR("hrtc manifest: \"config\" of engine {} must be an object", engine.engine_type);
@@ -116,7 +133,8 @@ auto read_engine(const Json& json, EngineParam& engine) -> bool {
 // and dropped, with the then empty "engine" section, from the stored config.
 auto read_algo(const Json& json, AlgoParam& algo) -> bool {
   String config_text;
-  if (!json.is_object() || !read_string(json, "name", algo.name) || !read_text(json, "config", config_text))
+  if (!json.is_object() || !check_keys(json, {"name", "config"}, "algo") || !read_string(json, "name", algo.name) ||
+      !read_text(json, "config", config_text))
     return false;
   const kitzoo::json::Reader reader{config_text};
   auto config = reader.raw();
@@ -263,7 +281,8 @@ auto load_json(const std::filesystem::path& path) -> std::optional<Package> {
   }
 
   Package package;
-  if (!read_string(json, "name", package.name) || !read_string(json, "version", package.version))
+  if (!check_keys(json, {"name", "version", "description", "algos"}, "manifest") ||
+      !read_string(json, "name", package.name) || !read_string(json, "version", package.version))
     return std::nullopt;
   if (json.contains("description") && !read_string(json, "description", package.description))
     return std::nullopt;

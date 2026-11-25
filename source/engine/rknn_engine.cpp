@@ -75,6 +75,8 @@ auto register_custom_ops(rknn_context context, const Vector<String>& libraries) 
     auto* symbol = handle == nullptr ? nullptr : dlsym(handle, "hrt_rknn_register_custom_ops");
     if (symbol == nullptr) {
       KZ_LOG_WARN("rknn: skipping custom op library {}: {}", library, dlerror());
+      if (handle != nullptr)
+        dlclose(handle);
       continue;
     }
     if (reinterpret_cast<Register>(symbol)(context) != RKNN_SUCC)
@@ -198,8 +200,12 @@ auto RknnEngine::set_inputs(const core::Buffers& inputs) -> bool {
             ? make_mem(rknn_create_mem_from_fd(context_, static_cast<std::int32_t>(memory->device()),
                                                memory->mutable_cpu(), static_cast<std::uint32_t>(memory->bytes()), 0))
             : make_mem(rknn_create_mem(context_, static_cast<std::uint32_t>(memory->bytes())));
-    KZ_CHECK_RETURN(mem != nullptr && rknn_set_io_mem(context_, mem.get(), &input_attrs_[i]) == RKNN_SUCC, false,
-                    "rknn: cannot bind input {}", i);
+    if (mem == nullptr || rknn_set_io_mem(context_, mem.get(), &input_attrs_[i]) != RKNN_SUCC) {
+      KZ_LOG_ERROR("rknn: cannot bind input {}", i);
+      input_mems_.clear();
+      inputs_.clear();
+      return false;
+    }
     input_mems_.push_back(std::move(mem));
   }
   return true;

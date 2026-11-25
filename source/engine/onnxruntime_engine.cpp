@@ -369,24 +369,43 @@ auto OrtEngine::create_values(const core::Buffers& buffers, bool input) -> bool 
   release_values(values);
   for (std::size_t i = 0; i < buffers.size(); ++i) {
     auto* data = buffers[i]->memory()->mutable_cpu();
-    KZ_CHECK_RETURN(data != nullptr && buffers[i]->is_contiguous(), false,
-                    "onnxruntime: buffer {} needs contiguous host memory", i);
+    if (data == nullptr || !buffers[i]->is_contiguous()) {
+      KZ_LOG_ERROR("onnxruntime: buffer {} needs contiguous host memory", i);
+      release_values(values);
+      return false;
+    }
     OrtValue* value = nullptr;
     const auto& shape = protos[i].shape;
     auto failure = error(api_->CreateTensorWithDataAsOrtValue(memory_info_, data, buffers[i]->bytes(), shape.data(),
                                                               shape.size(), ort_type(protos[i].data_type), &value));
-    KZ_CHECK_RETURN(failure.empty(), false, "onnxruntime: {}", failure);
+    if (!failure.empty()) {
+      KZ_LOG_ERROR("onnxruntime: {}", failure);
+      release_values(values);
+      return false;
+    }
     values.push_back(value);
   }
   return true;
 }
 
 auto OrtEngine::set_inputs(const core::Buffers& inputs) -> bool {
-  return Engine::set_inputs(inputs) && create_values(inputs_, true);
+  if (!Engine::set_inputs(inputs))
+    return false;
+  if (!create_values(inputs_, true)) {
+    inputs_.clear();
+    return false;
+  }
+  return true;
 }
 
 auto OrtEngine::set_outputs(const core::Buffers& outputs) -> bool {
-  return Engine::set_outputs(outputs) && create_values(outputs_, false);
+  if (!Engine::set_outputs(outputs))
+    return false;
+  if (!create_values(outputs_, false)) {
+    outputs_.clear();
+    return false;
+  }
+  return true;
 }
 
 auto OrtEngine::inference(core::Stream* /*stream*/) -> bool {

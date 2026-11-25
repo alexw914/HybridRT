@@ -143,6 +143,8 @@ auto MnnEngine::set_inputs(const core::Buffers& inputs) -> bool {
     auto* data = inputs[i]->memory()->mutable_cpu();
     if (data == nullptr || !inputs[i]->is_contiguous()) {
       KZ_LOG_ERROR("mnn: input {} needs contiguous host memory", i);
+      host_inputs_.clear();
+      inputs_.clear();
       return false;
     }
     host_inputs_.emplace_back(
@@ -159,6 +161,8 @@ auto MnnEngine::set_outputs(const core::Buffers& outputs) -> bool {
     auto* data = outputs[i]->memory()->mutable_cpu();
     if (data == nullptr || !outputs[i]->is_contiguous()) {
       KZ_LOG_ERROR("mnn: output {} needs contiguous host memory", i);
+      host_outputs_.clear();
+      outputs_.clear();
       return false;
     }
     host_outputs_.emplace_back(

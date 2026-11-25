@@ -9,6 +9,7 @@
 
 #include <kitzoo/log/logger.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <opencv2/core.hpp>
 
@@ -29,16 +30,18 @@ auto check_stage(const hrtc::AlgoParam& algo, std::string_view stage) -> core::P
   return problems;
 }
 
-// The box truncated to whole pixels like PP-OCR; it must lie inside the source and span 2 x 2 pixels.
+// The box clipped to the source image and truncated to whole pixels like PP-OCR;
+// degenerate boxes smaller than 2 x 2 pixels are skipped.
 auto text_region(const core::Rect2f& rect, core::Size size) -> std::optional<core::Rect> {
-  KZ_CHECK_RETURN(std::isfinite(rect.x) && std::isfinite(rect.y) && std::isfinite(rect.width) &&
-                      std::isfinite(rect.height) && rect.x >= 0 && rect.y >= 0 &&
-                      rect.x + rect.width <= static_cast<float>(size.width) &&
-                      rect.y + rect.height <= static_cast<float>(size.height),
-                  std::nullopt, "OcrModel: text box leaves the source image");
-  const core::Rect region{static_cast<int>(rect.x), static_cast<int>(rect.y), static_cast<int>(rect.width),
-                          static_cast<int>(rect.height)};
-  KZ_CHECK_RETURN(region.width >= 2 && region.height >= 2, std::nullopt, "OcrModel: degenerate text box");
+  if (!std::isfinite(rect.x) || !std::isfinite(rect.y) || !std::isfinite(rect.width) || !std::isfinite(rect.height))
+    return std::nullopt;
+  const auto x0 = std::clamp(static_cast<int>(rect.x), 0, size.width);
+  const auto y0 = std::clamp(static_cast<int>(rect.y), 0, size.height);
+  const auto x1 = std::clamp(static_cast<int>(rect.x + rect.width), 0, size.width);
+  const auto y1 = std::clamp(static_cast<int>(rect.y + rect.height), 0, size.height);
+  const core::Rect region{x0, y0, x1 - x0, y1 - y0};
+  if (region.width < 2 || region.height < 2)
+    return std::nullopt;
   return region;
 }
 
@@ -124,7 +127,8 @@ auto OcrModel::create(const hrtc::AlgoParam& detection, const hrtc::AlgoParam& r
   const auto& context = model->impl_->detection->context();
   auto same_device = recognition;
   std::erase_if(same_device.engines, [&](const auto& param) -> bool {
-    return engine::device_type_of(engine::engine_type_from(param.engine_type)) != context->device_type();
+    const auto device = engine::device_type_of(engine::engine_type_from(param.engine_type));
+    return device != core::DeviceType::Cpu && device != context->device_type();
   });
   KZ_CHECK_RETURN(!same_device.engines.empty(), nullptr, "OcrModel: algo {} has no engine on the device of algo {}",
                   recognition.name, detection.name);
@@ -158,16 +162,19 @@ auto OcrModel::process_sync(const core::Image& src) -> std::optional<postprocess
   }
   // Every line goes to one recognition call, which runs them in batches of the recognizer's batch: wide lines as
   // their region of the source, tall ones rotated whole.
+  postprocess::OcrResult valid;
   Vector<core::Image> lines;
   Vector<core::Rect> regions;
+  valid.reserve(result->size());
   lines.reserve(result->size());
   regions.reserve(result->size());
   std::size_t tall = 0;
-  for (const auto& text : *result) {
+  for (auto& text : *result) {
     const auto region = text_region(text.rect, src.size());
     if (!region)
-      return std::nullopt;
+      continue;
     if (region->height < region->width * 1.5) {
+      valid.push_back(std::move(text));
       lines.push_back(*source);
       regions.push_back(*region);
       continue;
@@ -178,20 +185,23 @@ auto OcrModel::process_sync(const core::Image& src) -> std::optional<postprocess
     const auto rotated = host != nullptr ? impl_->rotate(*host, *region, impl_->rotated[tall++]) : std::nullopt;
     if (!rotated)
       return std::nullopt;
+    valid.push_back(std::move(text));
     lines.push_back(*rotated);
     regions.emplace_back();
   }
+  if (valid.empty())
+    return valid;
   auto recognitions = impl_->recognition->process_sync(lines, regions);
-  if (!recognitions || recognitions->size() != result->size())
+  if (!recognitions || recognitions->size() != valid.size())
     return std::nullopt;
-  for (std::size_t i = 0; i < result->size(); ++i) {
+  for (std::size_t i = 0; i < valid.size(); ++i) {
     auto& recognition = (*recognitions)[i];
     if (recognition.size() != 1)
       return std::nullopt;
-    (*result)[i].text = std::move(recognition.front().text);
-    (*result)[i].recognition_score = recognition.front().recognition_score;
+    valid[i].text = std::move(recognition.front().text);
+    valid[i].recognition_score = recognition.front().recognition_score;
   }
-  return result;
+  return valid;
 }
 
 auto OcrModel::detection_engine_type() const -> engine::EngineType {

@@ -149,10 +149,17 @@ auto draw(cv::Mat& canvas, const postprocess::SegmentResultMap& result) -> void 
       if (cls < 0)
         continue;
       const auto& m = object.mask;
+      if (m.rect.empty() ||
+          m.data.size() < static_cast<std::size_t>(m.rect.width) * static_cast<std::size_t>(m.rect.height))
+        continue;
       const cv::Rect region(m.rect.x, m.rect.y, m.rect.width, m.rect.height);
+      const cv::Rect clipped = region & cv::Rect(0, 0, canvas.cols, canvas.rows);
+      if (clipped.empty())
+        continue;
       const cv::Mat bits(m.rect.height, m.rect.width, CV_8U, const_cast<std::uint8_t*>(m.data.data()));
-      cv::Mat roi = canvas(region);
-      blend_mask(roi, bits, static_cast<std::size_t>(cls));
+      cv::Mat roi = canvas(clipped);
+      blend_mask(roi, bits(cv::Rect(clipped.x - region.x, clipped.y - region.y, clipped.width, clipped.height)),
+                 static_cast<std::size_t>(cls));
     }
   }
   for (const auto& [cls, objects] : result) {

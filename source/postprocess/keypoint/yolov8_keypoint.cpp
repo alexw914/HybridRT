@@ -43,11 +43,13 @@ public:
       return false;
     param_ = config.get<YoloV8KeypointParam>();
     KZ_CHECK_RETURN(param_.keypoint_num > 0, false, "yolov8_keypoint: keypoint_num must be positive");
+    KZ_CHECK_RETURN(param_.reg_max > 0, false, "yolov8_keypoint: reg_max must be positive");
     YoloV8Param heads{param_.class_num, param_.strides, param_.reg_max, param_.confidence_threshold,
                       param_.iou_threshold};
     if (!check_yolov8_heads(heads, engine, param_.keypoint_num * kKeypointValues))
       return false;
     param_.strides = std::move(heads.strides);
+    param_.reg_max = heads.reg_max;
     param_.confidence_threshold = heads.confidence_threshold;
     param_.iou_threshold = heads.iou_threshold;
     // Scores are compared as logits so most cells skip the sigmoid.

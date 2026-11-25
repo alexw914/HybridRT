@@ -152,20 +152,35 @@ auto CannEngine::make_dataset(const core::Buffers& buffers, const Vector<core::B
     }
     const auto& bound = stage != nullptr ? *stage : *buffer;
     auto* data = aclCreateDataBuffer(reinterpret_cast<void*>(bound.memory()->device()), bound.memory()->bytes());
-    KZ_CHECK_RETURN(data != nullptr && aclmdlAddDatasetBuffer(dataset, data) == ACL_SUCCESS, false,
-                    "cann: cannot add a dataset buffer: {}", aclGetRecentErrMsg());
+    if (data == nullptr || aclmdlAddDatasetBuffer(dataset, data) != ACL_SUCCESS) {
+      KZ_LOG_ERROR("cann: cannot add a dataset buffer: {}", aclGetRecentErrMsg());
+      if (data != nullptr)
+        static_cast<void>(aclDestroyDataBuffer(data));
+      destroy_dataset(dataset);
+      return false;
+    }
   }
   return true;
 }
 
 auto CannEngine::set_inputs(const core::Buffers& inputs) -> bool {
-  return Engine::set_inputs(inputs) &&
-         make_dataset(inputs_, input_protos_, input_indexes_, input_staging_, input_dataset_);
+  if (!Engine::set_inputs(inputs))
+    return false;
+  if (!make_dataset(inputs_, input_protos_, input_indexes_, input_staging_, input_dataset_)) {
+    inputs_.clear();
+    return false;
+  }
+  return true;
 }
 
 auto CannEngine::set_outputs(const core::Buffers& outputs) -> bool {
-  return Engine::set_outputs(outputs) &&
-         make_dataset(outputs_, output_protos_, output_indexes_, output_staging_, output_dataset_);
+  if (!Engine::set_outputs(outputs))
+    return false;
+  if (!make_dataset(outputs_, output_protos_, output_indexes_, output_staging_, output_dataset_)) {
+    outputs_.clear();
+    return false;
+  }
+  return true;
 }
 
 auto CannEngine::inference(core::Stream* stream) -> bool {

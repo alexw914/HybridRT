@@ -47,6 +47,9 @@ public:
   KZ_NODISCARD auto supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool override;
 
 private:
+  KZ_NODISCARD auto supports_fused(const core::Image& dst, const core::Image& src,
+                                   const ImagePreprocessorParam& param) const -> bool override;
+
   int channel_ = -1;
 };
 

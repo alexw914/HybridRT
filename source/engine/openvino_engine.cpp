@@ -173,6 +173,7 @@ auto OpenVinoEngine::set_inputs(const core::Buffers& inputs) -> bool {
     if (data == nullptr || !inputs[i]->is_contiguous()) {
       KZ_LOG_ERROR("openvino: input {} needs contiguous host memory", i);
       release_tensors(input_tensors_);
+      inputs_.clear();
       return false;
     }
     const auto& proto = input_protos_[i];
@@ -182,6 +183,7 @@ auto OpenVinoEngine::set_inputs(const core::Buffers& inputs) -> bool {
         !check_status(ov_infer_request_set_input_tensor_by_index(request_, input_indexes_[i], input_tensors_[i]),
                       "bind input tensor")) {
       release_tensors(input_tensors_);
+      inputs_.clear();
       return false;
     }
   }
@@ -198,6 +200,7 @@ auto OpenVinoEngine::set_outputs(const core::Buffers& outputs) -> bool {
     if (data == nullptr || !outputs[i]->is_contiguous()) {
       KZ_LOG_ERROR("openvino: output {} needs contiguous host memory", i);
       release_tensors(output_tensors_);
+      outputs_.clear();
       return false;
     }
     const auto& proto = output_protos_[i];
@@ -207,6 +210,7 @@ auto OpenVinoEngine::set_outputs(const core::Buffers& outputs) -> bool {
         !check_status(ov_infer_request_set_output_tensor_by_index(request_, output_indexes_[i], output_tensors_[i]),
                       "bind output tensor")) {
       release_tensors(output_tensors_);
+      outputs_.clear();
       return false;
     }
   }

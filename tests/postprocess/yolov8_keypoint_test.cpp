@@ -95,6 +95,11 @@ TEST(YoloV8KeypointTest, DefaultsToSeventeenVisibleKeypointsAndSixteenBins) {
   EXPECT_NE(
       hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("YoloV8Keypoint", options, engine),
       nullptr);
+  auto zero_reg = options;
+  zero_reg["reg_max"] = 0;
+  EXPECT_EQ(
+      hrt::postprocess::create_postprocessor<hrt::postprocess::KeypointResultMap>("YoloV8Keypoint", zero_reg, engine),
+      nullptr);
 }
 
 TEST(YoloV8KeypointTest, DecodesBinsAndKeypointOffsets) {
