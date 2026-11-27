@@ -16,10 +16,6 @@
 #include "include/core/batch_scheduler.hpp"
 #include "include/core/config.hpp"
 
-#ifdef HRT_USE_DMA_BUFFER
-#include "include/memory/dma_buffer_memory.hpp"
-#endif
-
 namespace hrt::model {
 
 namespace {
@@ -148,8 +144,7 @@ auto is_yuv(core::ImageFormat format) -> bool {
          format == core::ImageFormat::Yv12;
 }
 
-// With `host_engine`, buffers are written on the host: they use its fast host memory when it offers one, and
-// dma-bufs come from any heap, as no device with 32-bit DMA (RGA2) touches them.
+// With `host_engine`, buffers are written on the host and use its fast host memory when it offers one.
 auto make_buffers(const Vector<core::BufferProto>& protos, const engine::Engine* host_engine)
     -> std::optional<core::Buffers> {
   core::Buffers buffers;
@@ -162,14 +157,6 @@ auto make_buffers(const Vector<core::BufferProto>& protos, const engine::Engine*
         buffer.reset();
       }
     }
-#ifdef HRT_USE_DMA_BUFFER
-    if (buffer == nullptr && host_engine != nullptr && proto.memory_type == core::MemoryType::DmaBuffer) {
-      buffer = std::make_shared<core::Buffer>(
-          std::make_shared<memory::DmaBufferMemory>(core::Shape{}, core::Stride{}, /*device32=*/false), proto);
-      if (!buffer->valid())
-        buffer.reset();
-    }
-#endif
     if (buffer == nullptr)
       buffer = std::make_shared<core::Buffer>(proto);
     if (!buffer->valid()) {
@@ -336,17 +323,14 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
     auto buffers = make_buffers(engine.input_protos(), host_input_engine);
     KZ_CHECK_RETURN(buffers && !buffers->empty(), false, "ImageModel: cannot allocate the inputs of algo {}",
                     algo.name);
-    Vector<core::Image> images;
-    images.reserve(batch_);
-    for (std::size_t sample = 0; sample < batch_; ++sample) {
-      auto image = input_image(*buffers, sample);
-      KZ_CHECK_RETURN(image.has_value(), false,
+    if (i == 0) {
+      const auto probe = input_image(*buffers, 0);
+      KZ_CHECK_RETURN(probe.has_value(), false,
                       "ImageModel: the engine input of algo {} does not fit the preprocess config", algo.name);
-      images.push_back(std::move(*image));
+      input_size_ = probe->size();
+      input_memory = buffers->front()->memory_type();
     }
-    input_size_ = images.front().size();
-    input_memory = buffers->front()->memory_type();
-    input_pool_.add(std::make_unique<InputSlot>(InputSlot{std::move(*buffers), std::move(images)}));
+    input_pool_.add(std::make_unique<core::Buffers>(std::move(*buffers)));
   }
   // VPC addresses whole DVPP buffers; samples at an offset are not verified.
   KZ_CHECK_RETURN(batch_ == 1 || (input_memory != core::MemoryType::Dvpp &&
@@ -462,11 +446,17 @@ auto ImageModel<Result>::run_batch(std::span<const core::Image> srcs, std::span<
   decltype(output_pool_.acquire()) output;
   {
     const auto input = input_pool_.acquire();
+    Vector<core::Image> images;
+    images.reserve(srcs.size());
+    for (std::size_t i = 0; i < srcs.size(); ++i) {
+      auto image = input_image(*input, i);
+      if (!image)
+        return false;
+      images.push_back(std::move(*image));
+    }
     {
       auto preprocessor = preprocessor_pool_.acquire();
-      auto done =
-          (*preprocessor)
-              ->process(std::span(input->images).first(srcs.size()), srcs, src_rects, preprocessor_param_, stream);
+      auto done = (*preprocessor)->process(images, srcs, src_rects, preprocessor_param_, stream);
       // Scratch buffers may be reused on another stream only after this completes.
       stream->synchronize();
       if (!done)
@@ -476,8 +466,7 @@ auto ImageModel<Result>::run_batch(std::span<const core::Image> srcs, std::span<
 
     output = output_pool_.acquire();
     auto engine = engine_pool_.acquire();
-    const auto ran =
-        (*engine)->set_inputs(input->buffers) && (*engine)->set_outputs(*output) && (*engine)->inference(stream);
+    const auto ran = (*engine)->set_inputs(*input) && (*engine)->set_outputs(*output) && (*engine)->inference(stream);
     // TensorRT and CANN already synchronize `stream` after copying host outputs;
     // synchronize on failure or for backends that leave work on `stream`.
     if (!ran || (engine_type_ != engine::EngineType::TensorRt && engine_type_ != engine::EngineType::Cann))

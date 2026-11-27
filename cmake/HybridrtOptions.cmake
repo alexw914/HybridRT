@@ -15,7 +15,6 @@ option(HYBRIDRT_BUILD_RUST "Build the C API for the Rust crates and register the
 option(HYBRIDRT_BUILD_FLATC "Build flatc and the hrtc_schema regeneration target" OFF)
 option(HYBRIDRT_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" ON)
 option(HYBRIDRT_WITH_CUDA "Enable CUDA memory and image operators without TensorRT" OFF)
-option(HYBRIDRT_RGA3_ONLY "Schedule RGA work on RGA3 cores only" OFF)
 
 if(HYBRIDRT_BUILD_PYTHON OR HYBRIDRT_BUILD_RUST)
     set(HYBRIDRT_BUILD_C_API ON)

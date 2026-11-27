@@ -13,10 +13,9 @@
 
 namespace hrt::preprocess {
 
-// Fill and resize interleaved RGB/BGR uint8 dma-bufs on the RGA: rows must be
-// a multiple of 16 pixels and pages below 4 GB (RGA2 has 32-bit DMA). Other
-// images, conversion and normalization stay on the CPU; host images are staged
-// into dma-bufs first.
+// Resize interleaved RGB/BGR uint8 dma-bufs on RGA3: rows must be a multiple
+// of 16 pixels. Fill, other images, conversion and normalization stay on the
+// CPU; host images are staged into dma-bufs first.
 class RgaImagePreprocessor final : public ImagePreprocessor {
 public:
   KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Rga; }
@@ -32,10 +31,7 @@ protected:
   auto adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& dst, const core::Image& src) const
       -> void override;
 
-  auto fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color, core::Stream* stream)
-      -> bool override;
-
-  // Scales outside RGA's 1/16..16 range run on the CPU.
+  // Scales outside RGA3's 1/8..8 range or sizes outside 128..8128 run on the CPU.
   auto resize(core::Image& dst, const core::Rect& dst_roi, const core::Image& src, const core::Rect& src_roi,
               InterpolationMode mode, core::Stream* stream) -> bool override;
 };

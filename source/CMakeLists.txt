@@ -161,7 +161,7 @@ if(HRT_USE_RKNN)
         preprocess/rga_image_preprocessor.cpp
         engine/rknn_engine.cpp)
     target_link_libraries(hybridrt PRIVATE rknn rga ${CMAKE_DL_LIBS})
-    target_compile_definitions(hybridrt PRIVATE HRT_USE_RKNN $<$<BOOL:${HYBRIDRT_RGA3_ONLY}>:HRT_RGA3_ONLY>)
+    target_compile_definitions(hybridrt PRIVATE HRT_USE_RKNN)
 endif()
 
 if(HRT_USE_CANN)

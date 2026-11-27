@@ -9,7 +9,6 @@
 #include <kitzoo/log/logger.hpp>
 
 #include <algorithm>
-#include <atomic>
 #include <cerrno>
 #include <climits>
 #include <cstdlib>
@@ -44,17 +43,8 @@ constexpr __u64 kSyncReadWrite = 3;
 constexpr __u64 kSyncStart = 0;
 constexpr __u64 kSyncEnd = 4;
 
-struct Heap {
-  const char* path;
-  bool below_4gb;
-};
-
-// Vendor kernels may link system-dma32 to cma; both are tried once.
-constexpr Heap kSystemDma32{"/dev/dma_heap/system-dma32", true};
-constexpr Heap kCma{"/dev/dma_heap/cma", true};
-constexpr Heap kSystem{"/dev/dma_heap/system", false};
-constexpr Array<Heap, 3> kDevice32Order{kSystemDma32, kCma, kSystem};
-constexpr Array<Heap, 3> kAnyOrder{kSystem, kSystemDma32, kCma};
+// Prefer the system heap (full RAM behind IOMMU for RK3588 NPU and RGA3); fall back to 32-bit heaps if absent.
+constexpr Array<const char*, 3> kHeaps{"/dev/dma_heap/system", "/dev/dma_heap/system-dma32", "/dev/dma_heap/cma"};
 
 auto align(std::size_t value, std::size_t alignment) -> std::size_t {
   return (value + alignment - 1) / alignment * alignment;
@@ -117,8 +107,8 @@ auto DmaBufferMemory::aligned_stride(const core::Shape& shape) const -> core::St
   return core::contiguous_stride(aligned);
 }
 
-DmaBufferMemory::DmaBufferMemory(const core::Shape& shape, const core::Stride& stride, bool device32)
-    : core::Memory(core::MemoryType::DmaBuffer), device32_(device32) {
+DmaBufferMemory::DmaBufferMemory(const core::Shape& shape, const core::Stride& stride)
+    : core::Memory(core::MemoryType::DmaBuffer) {
   pointer_->owned_ = true;
   pointer_->release_ = dma_release;
   resize(shape, stride);
@@ -126,12 +116,11 @@ DmaBufferMemory::DmaBufferMemory(const core::Shape& shape, const core::Stride& s
 
 DmaBufferMemory::DmaBufferMemory(int fd, void* host, std::size_t size, const core::Shape& shape,
                                  const core::Stride& stride)
-    : core::Memory(core::MemoryType::DmaBuffer), device32_(true) {
+    : core::Memory(core::MemoryType::DmaBuffer) {
   shape_ = shape;
   stride_ = stride;
   pointer_->device_ = static_cast<std::uintptr_t>(fd);
   pointer_->capacity_ = size;
-  pointer_->below_4gb_ = true;
   if (host != nullptr) {
     pointer_->cpu_ = host;
     return;
@@ -153,17 +142,16 @@ auto DmaBufferMemory::reallocate(std::size_t size) -> bool {
   dma_release(*pointer_);
   if (size == 0)
     return true;
-  const auto& order = device32_ ? kDevice32Order : kAnyOrder;
   Vector<String> tried;
   int error = ENOENT;
-  for (const auto& heap : order) {
+  for (const auto* path : kHeaps) {
     char resolved[PATH_MAX];
-    if (realpath(heap.path, resolved) == nullptr)
+    if (realpath(path, resolved) == nullptr)
       continue;
     if (std::find(tried.begin(), tried.end(), resolved) != tried.end())
       continue;
     tried.emplace_back(resolved);
-    const int fd = allocate_from(heap.path, size);
+    const int fd = allocate_from(path, size);
     if (fd < 0) {
       error = errno;
       continue;
@@ -174,25 +162,13 @@ auto DmaBufferMemory::reallocate(std::size_t size) -> bool {
       close(fd);
       continue;
     }
-    if (device32_ && !heap.below_4gb) {
-      static std::atomic<bool> warned{false};
-      if (!warned.exchange(true))
-        KZ_LOG_WARN("dma-buf: 32-bit DMA heaps are exhausted; using {}, where devices with 32-bit DMA (RGA2) "
-                    "leave the work to the CPU",
-                    heap.path);
-    }
     pointer_->cpu_ = mapped;
     pointer_->device_ = static_cast<std::uintptr_t>(fd);
     pointer_->capacity_ = size;
-    pointer_->below_4gb_ = heap.below_4gb;
     return true;
   }
   KZ_LOG_ERROR("dma-buf: allocation of {} bytes failed in every dma-heap: {}", size, std::strerror(error));
   return false;
-}
-
-auto DmaBufferMemory::below_4gb() const -> bool {
-  return pointer_->below_4gb_;
 }
 
 // CPU access starts a dma-buf access window; device access ends it.
@@ -206,8 +182,8 @@ auto DmaBufferMemory::cpu_to_device(core::Stream* /*stream*/) -> bool {
 
 auto dma_heap_available() -> bool {
   static const bool available = []() -> bool {
-    for (const auto& heap : kDevice32Order) {
-      const int fd = open(heap.path, O_RDWR | O_CLOEXEC);
+    for (const auto* path : kHeaps) {
+      const int fd = open(path, O_RDWR | O_CLOEXEC);
       if (fd >= 0) {
         close(fd);
         return true;

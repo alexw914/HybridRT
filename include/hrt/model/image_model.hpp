@@ -129,12 +129,6 @@ public:
   KZ_NODISCARD auto output_protos() const -> const Vector<core::BufferProto>& { return output_protos_; }
 
 private:
-  // Engine input buffers paired with prebuilt per-sample image views for all `batch_` slots.
-  struct InputSlot {
-    core::Buffers buffers;
-    Vector<core::Image> images;
-  };
-
   ImageModel(SharedPtr<core::Context> context, const ImageModelOptions& options);
 
   auto build(const hrtc::AlgoParam& algo, const kitzoo::json::Json& config, const PostprocessorFactory& factory,
@@ -168,7 +162,7 @@ private:
   preprocess::ImagePreprocessorParam preprocessor_param_;
   kitzoo::thread::ObjectPool<UniquePtr<preprocess::ImagePreprocessor>> preprocessor_pool_;
   kitzoo::thread::ObjectPool<UniquePtr<engine::Engine>> engine_pool_;
-  kitzoo::thread::ObjectPool<InputSlot> input_pool_;
+  kitzoo::thread::ObjectPool<core::Buffers> input_pool_;
   kitzoo::thread::ObjectPool<core::Buffers> output_pool_;
   kitzoo::thread::ObjectPool<UniquePtr<core::Stream>> stream_pool_;
   kitzoo::thread::ObjectPool<UniquePtr<postprocess::Postprocessor<Result>>> postprocessor_pool_;

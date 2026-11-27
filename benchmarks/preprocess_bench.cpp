@@ -421,8 +421,7 @@ auto BM_RgaResolution(benchmark::State& state) -> void {
     state.SkipWithError("Cannot prepare RGA dma-buffers");
     return;
   }
-  if (!processor->supports(ImageOperation::Fill, target, target) ||
-      !processor->supports(ImageOperation::Resize, target, device)) {
+  if (!processor->supports(ImageOperation::Resize, target, device)) {
     state.SkipWithError("RGA buffers do not satisfy hardware format, stride or address limits");
     return;
   }

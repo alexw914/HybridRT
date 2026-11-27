@@ -16,18 +16,11 @@ namespace hrt::memory {
 // are aligned to 16 elements as media devices need.
 class DmaBufferMemory final : public core::Memory {
 public:
-  // `device32` takes pages below 4 GB first (system-dma32, cma) for devices with 32-bit DMA such as RGA2; when those
-  // are exhausted the system heap is used and below_4gb() turns false. Otherwise any pages are taken (system heap
-  // first), for devices behind an IOMMU such as the RK3588 NPU.
-  explicit DmaBufferMemory(const core::Shape& shape = {}, const core::Stride& stride = {}, bool device32 = true);
-  // Views a caller's dma-buf (decoder, camera, display) without owning `fd`, mapping it when `host` is null. Its
-  // pages are taken to be reachable by 32-bit DMA, as media allocators provide.
+  explicit DmaBufferMemory(const core::Shape& shape = {}, const core::Stride& stride = {});
+  // Views a caller's dma-buf (decoder, camera, display) without owning `fd`, mapping it when `host` is null.
   DmaBufferMemory(int fd, void* host, std::size_t size, const core::Shape& shape, const core::Stride& stride);
 
   auto ref() -> SharedPtr<core::Memory> override;
-
-  // Whether every page lies below 4 GB, so devices with 32-bit DMA can address the buffer.
-  KZ_NODISCARD auto below_4gb() const -> bool;
 
   KZ_NODISCARD auto aligned_stride(const core::Shape& shape) const -> core::Stride override;
 
@@ -37,9 +30,6 @@ protected:
   auto device_to_cpu(core::Stream* stream) -> bool override;
 
   auto cpu_to_device(core::Stream* stream) -> bool override;
-
-private:
-  bool device32_;
 };
 
 // Whether this process can allocate from a dma-heap; probed once.

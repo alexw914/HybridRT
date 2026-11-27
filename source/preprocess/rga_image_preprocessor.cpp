@@ -8,10 +8,7 @@
 
 #include <kitzoo/log/logger.hpp>
 
-#include <algorithm>
 #include <im2d.hpp>
-
-#include "include/memory/dma_buffer_memory.hpp"
 
 namespace hrt::preprocess {
 
@@ -24,15 +21,14 @@ auto rga_ok(IM_STATUS status, const char* what) -> bool {
   return false;
 }
 
-// RGA addresses RGB888 rows only at a pixel stride that is a multiple of 16, and RGA2 only pages below 4 GB.
+// RGA3 addresses RGB888 rows only at a pixel stride that is a multiple of 16.
 auto is_inter_u8(const core::Image& image) -> bool {
   constexpr std::size_t kStrideAlignment = 16;
   const auto& stride = image.stride();
-  const auto* dma_buffer = dynamic_cast<const memory::DmaBufferMemory*>(image.memory().get());
   return image.data_type() == core::DataType::Uint8 &&
          (image.format() == core::ImageFormat::InterRgb || image.format() == core::ImageFormat::InterBgr) &&
          stride[2] != 0 && stride[1] % stride[2] == 0 && (stride[1] / stride[2]) % kStrideAlignment == 0 &&
-         dma_buffer != nullptr && dma_buffer->below_4gb();
+         image.memory()->memory_type() == core::MemoryType::DmaBuffer;
 }
 
 auto rga_format(core::ImageFormat format) -> int {
@@ -54,29 +50,17 @@ auto rga_rect(const core::Rect& rect) -> im_rect {
 }
 
 auto select_cores() -> bool {
-#ifdef HRT_RGA3_ONLY
   return rga_ok(imconfig(IM_CONFIG_SCHEDULER_CORE, IM_SCHEDULER_RGA3_CORE0 | IM_SCHEDULER_RGA3_CORE1), "imconfig");
-#else
-  return true;
-#endif
 }
 
 } // namespace
 
 auto RgaImagePreprocessor::accepts(core::MemoryType type) const -> bool {
-  // Host memory is staged into a dma-buf: RGA2 cannot map pages above 4 GB and librga crashes on their addresses.
   return type == core::MemoryType::DmaBuffer;
 }
 
 auto RgaImagePreprocessor::supports(ImageOperation op, const core::Image& dst, const core::Image& src) const -> bool {
-  switch (op) {
-  case ImageOperation::Fill:
-    return is_inter_u8(dst);
-  case ImageOperation::Resize:
-    return is_inter_u8(dst) && is_inter_u8(src);
-  default:
-    return false;
-  }
+  return op == ImageOperation::Resize && is_inter_u8(dst) && is_inter_u8(src);
 }
 
 auto RgaImagePreprocessor::adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, const core::Image& /*dst*/,
@@ -87,22 +71,19 @@ auto RgaImagePreprocessor::adjust_roi(core::Rect& dst_roi, core::Rect& src_roi, 
   }
 }
 
-auto RgaImagePreprocessor::fill(core::Image& image, const core::Rect& roi, const Array<float, 3>& color,
-                                core::Stream* stream) -> bool {
-  // Packed as 0xAABBGGRR in memory order of the destination format.
-  const auto clamp_u8 = [](float value) -> int { return std::clamp(static_cast<int>(value), 0, 255); };
-  const auto r = clamp_u8(image.format() == core::ImageFormat::InterRgb ? color[0] : color[2]);
-  const auto g = clamp_u8(color[1]);
-  const auto b = clamp_u8(image.format() == core::ImageFormat::InterRgb ? color[2] : color[0]);
-  return select_cores() &&
-         rga_ok(imfill(rga_buffer(image, stream, true), rga_rect(roi), (b << 16) | (g << 8) | r), "imfill");
-}
-
 auto RgaImagePreprocessor::resize(core::Image& dst, const core::Rect& dst_roi, const core::Image& src,
                                   const core::Rect& src_roi, InterpolationMode mode, core::Stream* stream) -> bool {
+  constexpr int kMinSize = 128;
+  constexpr int kMaxSrcSize = 8176;
+  constexpr int kMaxDstSize = 8128;
   const auto scale_x = static_cast<double>(dst_roi.width) / src_roi.width;
   const auto scale_y = static_cast<double>(dst_roi.height) / src_roi.height;
-  if (mode != InterpolationMode::Linear || scale_x > 16 || scale_y > 16 || scale_x < 0.0625 || scale_y < 0.0625)
+  const bool unsupported = mode != InterpolationMode::Linear || scale_x > 8 || scale_y > 8 || scale_x < 0.125 ||
+                           scale_y < 0.125 || src_roi.width < kMinSize || src_roi.height < kMinSize ||
+                           dst_roi.width < kMinSize || dst_roi.height < kMinSize || src.size().width > kMaxSrcSize ||
+                           src.size().height > kMaxSrcSize || dst.size().width > kMaxDstSize ||
+                           dst.size().height > kMaxDstSize;
+  if (unsupported)
     return cpu_resize(dst, dst_roi, src, src_roi, mode, stream);
   return select_cores() && rga_ok(improcess(rga_buffer(src, stream, false), rga_buffer(dst, stream, true), {},
                                             rga_rect(src_roi), rga_rect(dst_roi), {}, IM_SYNC),

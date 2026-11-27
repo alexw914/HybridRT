@@ -671,7 +671,7 @@ TEST(ImagePreprocessorTest, CudaFusedKernelMatchesCpu) {
   EXPECT_GT(static_cast<double>(exact), 0.98 * static_cast<double>(checked)) << exact << " of " << checked;
 }
 
-// A batch on the RGA runs as one job and must match single calls; a crop scaled beyond 16 times sends the batch through
+// A batch on the RGA runs as one job and must match single calls; a crop scaled beyond 8 times sends the batch through
 // the steps, with that resize on the CPU.
 TEST(ImagePreprocessorTest, RgaBatchMatchesSingleCalls) {
   using namespace hrt::core;
@@ -701,8 +701,8 @@ TEST(ImagePreprocessorTest, RgaBatchMatchesSingleCalls) {
       hrt::Vector<Image> outputs;
       hrt::Vector<Image> expected;
       for (std::size_t i = 0; i < srcs.size(); ++i) {
-        outputs.emplace_back(memory, ImageFormat::InterRgb, DataType::Uint8, Size{160, 128});
-        expected.emplace_back(memory, ImageFormat::InterRgb, DataType::Uint8, Size{160, 128});
+        outputs.emplace_back(memory, ImageFormat::InterRgb, DataType::Uint8, Size{320, 256});
+        expected.emplace_back(memory, ImageFormat::InterRgb, DataType::Uint8, Size{320, 256});
       }
       const auto transforms = batched->process(outputs, srcs, rects, param);
       ASSERT_TRUE(transforms);
@@ -713,7 +713,7 @@ TEST(ImagePreprocessorTest, RgaBatchMatchesSingleCalls) {
         EXPECT_EQ((*transforms)[i].dst_roi, transform->dst_roi);
         const auto* got = static_cast<const std::uint8_t*>(outputs[i].memory()->cpu());
         const auto* want = static_cast<const std::uint8_t*>(expected[i].memory()->cpu());
-        EXPECT_EQ(std::memcmp(got, want, 160 * 128 * 3), 0);
+        EXPECT_EQ(std::memcmp(got, want, 320 * 256 * 3), 0);
         // Padding takes the default color in input (RGB) order.
         EXPECT_EQ(got[0], 114);
         EXPECT_EQ(got[1], 20);
@@ -747,8 +747,8 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForAlignedAndUnalignedRowStrides) {
     param.resize_type = ResizeType::LetterBox;
     param.dst_image_format = ImageFormat::InterRgb;
     param.pad_value = {114, 114, 114};
-    Image expected(MemoryType::Cpu, ImageFormat::InterRgb, DataType::Uint8, {128, 128});
-    Image actual(MemoryType::DmaBuffer, ImageFormat::InterRgb, DataType::Uint8, {128, 128});
+    Image expected(MemoryType::Cpu, ImageFormat::InterRgb, DataType::Uint8, {256, 256});
+    Image actual(MemoryType::DmaBuffer, ImageFormat::InterRgb, DataType::Uint8, {256, 256});
     ASSERT_TRUE(actual.valid());
     const auto reference = cpu->process(expected, src.image, {}, param);
     const auto result = rga->process(actual, src.image, {}, param);
@@ -757,7 +757,7 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForAlignedAndUnalignedRowStrides) {
     EXPECT_EQ(result->dst_roi, reference->dst_roi);
     const auto* want = static_cast<const std::uint8_t*>(expected.memory()->cpu());
     const auto* got = static_cast<const std::uint8_t*>(actual.memory()->cpu());
-    for (std::size_t i = 0; i < 128 * 128 * 3; ++i)
+    for (std::size_t i = 0; i < 256 * 256 * 3; ++i)
       ASSERT_NEAR(got[i], want[i], 2) << "width " << width << " byte " << i;
   }
 }
@@ -795,9 +795,9 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForCroppedSources) {
                            DataType::Uint8, device.stride()[1]);
   ASSERT_TRUE(frame);
   const hrt::Array<const Image*, 4> sources{&host.image, &device, &packed, &*frame};
-  // Interior, offset 1 (RGA shifts it to 0), right and bottom edges, a 7x9 box upscaled past RGA's 16x,
-  // a box thinner than the input aspect, and the whole image.
-  const Rect crops[] = {{301, 157, 333, 219}, {1, 1, 200, 100},   {1001, 517, 269, 200},
+  // Interior, offset 1 (RGA shifts it to 0), right and bottom edges, a 7x9 box upscaled past RGA3's 8x,
+  // a box thinner than the input aspect (and below RGA3's 128px minimum), and the whole image.
+  const Rect crops[] = {{301, 157, 333, 219}, {1, 1, 200, 160},   {1001, 517, 269, 200},
                         {640, 300, 7, 9},     {100, 40, 50, 600}, {0, 0, kWidth, kHeight}};
   for (std::size_t s = 0; s < sources.size(); ++s) {
     const auto* source = sources[s];
@@ -814,8 +814,8 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForCroppedSources) {
           param.pad_value = {114, 114, 114};
           param.pad_scale = 1.2F;
           const auto type = format == ImageFormat::InterRgb ? DataType::Uint8 : DataType::Float32;
-          Image expected(MemoryType::Cpu, format, type, {128, 96});
-          Image actual(MemoryType::DmaBuffer, format, type, {128, 96});
+          Image expected(MemoryType::Cpu, format, type, {256, 200});
+          Image actual(MemoryType::DmaBuffer, format, type, {256, 200});
           const auto reference = cpu->process(expected, host.image, crop, param);
           const auto result = rga->process(actual, *source, crop, param);
           ASSERT_TRUE(reference);
@@ -827,8 +827,8 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForCroppedSources) {
           };
           float worst = 0.0F;
           for (int c = 0; c < 3; ++c) {
-            for (int y = 0; y < 96; ++y) {
-              for (int x = 0; x < 128; ++x) {
+            for (int y = 0; y < 200; ++y) {
+              for (int x = 0; x < 256; ++x) {
                 float want = 0.0F;
                 float got = 0.0F;
                 if (type == DataType::Uint8) {
