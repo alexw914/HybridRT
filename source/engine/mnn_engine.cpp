@@ -136,6 +136,8 @@ auto MnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::json
 }
 
 auto MnnEngine::set_inputs(const core::Buffers& inputs) -> bool {
+  if (same_inputs(inputs))
+    return true;
   if (!Engine::set_inputs(inputs))
     return false;
   host_inputs_.clear();
@@ -154,6 +156,8 @@ auto MnnEngine::set_inputs(const core::Buffers& inputs) -> bool {
 }
 
 auto MnnEngine::set_outputs(const core::Buffers& outputs) -> bool {
+  if (same_outputs(outputs))
+    return true;
   if (!Engine::set_outputs(outputs))
     return false;
   host_outputs_.clear();

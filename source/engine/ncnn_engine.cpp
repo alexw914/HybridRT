@@ -152,6 +152,8 @@ auto NcnnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
 }
 
 auto NcnnEngine::set_inputs(const core::Buffers& inputs) -> bool {
+  if (same_inputs(inputs))
+    return true;
   if (!Engine::set_inputs(inputs))
     return false;
   input_mats_.clear();

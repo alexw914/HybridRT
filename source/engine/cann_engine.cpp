@@ -146,7 +146,9 @@ auto CannEngine::make_dataset(const core::Buffers& buffers, const Vector<core::B
     if (is_ascend(*buffer) && buffer->is_contiguous()) {
       stage.reset();
     } else {
-      stage = std::make_shared<core::Buffer>(core::MemoryType::Acl, protos[position].data_type, protos[position].shape);
+      if (stage == nullptr || !stage->valid())
+        stage =
+            std::make_shared<core::Buffer>(core::MemoryType::Acl, protos[position].data_type, protos[position].shape);
       if (!stage->valid())
         return false;
     }
@@ -164,6 +166,8 @@ auto CannEngine::make_dataset(const core::Buffers& buffers, const Vector<core::B
 }
 
 auto CannEngine::set_inputs(const core::Buffers& inputs) -> bool {
+  if (same_inputs(inputs))
+    return true;
   if (!Engine::set_inputs(inputs))
     return false;
   if (!make_dataset(inputs_, input_protos_, input_indexes_, input_staging_, input_dataset_)) {
@@ -174,6 +178,8 @@ auto CannEngine::set_inputs(const core::Buffers& inputs) -> bool {
 }
 
 auto CannEngine::set_outputs(const core::Buffers& outputs) -> bool {
+  if (same_outputs(outputs))
+    return true;
   if (!Engine::set_outputs(outputs))
     return false;
   if (!make_dataset(outputs_, output_protos_, output_indexes_, output_staging_, output_dataset_)) {

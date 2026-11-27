@@ -353,6 +353,19 @@ auto ImagePreprocessor::process_fused(std::span<core::Image> dsts, std::span<con
     inputs.push_back(staged->input);
     outputs.push_back(staged->output);
   }
+  for (std::size_t i = 0; i < srcs.size(); ++i) {
+    if (!supports_fused(*outputs[i], *inputs[i], param)) {
+      // One staged sample fell outside the fused path; run each staged sample through run().
+      for (std::size_t j = 0; j < srcs.size(); ++j) {
+        if (!run(*outputs[j], *inputs[j], locals[j], param, stream))
+          return std::nullopt;
+        if (outputs[j] != &dsts[j] &&
+            !core::Buffer::copy(*dsts[j].buffer(), *outputs[j]->buffer(), core::CopyPolicy::DirectCopy, stream))
+          return std::nullopt;
+      }
+      return transforms;
+    }
+  }
   if (!fused_batch(outputs, locals, inputs, param, stream))
     return std::nullopt;
   for (std::size_t i = 0; i < srcs.size(); ++i) {

@@ -336,12 +336,17 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
     auto buffers = make_buffers(engine.input_protos(), host_input_engine);
     KZ_CHECK_RETURN(buffers && !buffers->empty(), false, "ImageModel: cannot allocate the inputs of algo {}",
                     algo.name);
-    auto image = input_image(*buffers, 0);
-    KZ_CHECK_RETURN(image.has_value(), false,
-                    "ImageModel: the engine input of algo {} does not fit the preprocess config", algo.name);
-    input_size_ = image->size();
+    Vector<core::Image> images;
+    images.reserve(batch_);
+    for (std::size_t sample = 0; sample < batch_; ++sample) {
+      auto image = input_image(*buffers, sample);
+      KZ_CHECK_RETURN(image.has_value(), false,
+                      "ImageModel: the engine input of algo {} does not fit the preprocess config", algo.name);
+      images.push_back(std::move(*image));
+    }
+    input_size_ = images.front().size();
     input_memory = buffers->front()->memory_type();
-    input_pool_.add(std::make_unique<core::Buffers>(std::move(*buffers)));
+    input_pool_.add(std::make_unique<InputSlot>(InputSlot{std::move(*buffers), std::move(images)}));
   }
   // VPC addresses whole DVPP buffers; samples at an offset are not verified.
   KZ_CHECK_RETURN(batch_ == 1 || (input_memory != core::MemoryType::Dvpp &&
@@ -458,17 +463,10 @@ auto ImageModel<Result>::run_batch(std::span<const core::Image> srcs, std::span<
   {
     const auto input = input_pool_.acquire();
     {
-      // Rebuilt per call: preprocess settings may change between frames of a stream.
-      Vector<core::Image> images;
-      images.reserve(srcs.size());
-      for (std::size_t i = 0; i < srcs.size(); ++i) {
-        auto image = input_image(*input, i);
-        if (!image)
-          return false;
-        images.push_back(std::move(*image));
-      }
       auto preprocessor = preprocessor_pool_.acquire();
-      auto done = (*preprocessor)->process(images, srcs, src_rects, preprocessor_param_, stream);
+      auto done =
+          (*preprocessor)
+              ->process(std::span(input->images).first(srcs.size()), srcs, src_rects, preprocessor_param_, stream);
       // Scratch buffers may be reused on another stream only after this completes.
       stream->synchronize();
       if (!done)
@@ -478,9 +476,12 @@ auto ImageModel<Result>::run_batch(std::span<const core::Image> srcs, std::span<
 
     output = output_pool_.acquire();
     auto engine = engine_pool_.acquire();
-    const auto ran = (*engine)->set_inputs(*input) && (*engine)->set_outputs(*output) && (*engine)->inference(stream);
-    // The device must be done with the inputs before they go back to the pool, also after a failure.
-    stream->synchronize();
+    const auto ran =
+        (*engine)->set_inputs(input->buffers) && (*engine)->set_outputs(*output) && (*engine)->inference(stream);
+    // TensorRT and CANN already synchronize `stream` after copying host outputs;
+    // synchronize on failure or for backends that leave work on `stream`.
+    if (!ran || (engine_type_ != engine::EngineType::TensorRt && engine_type_ != engine::EngineType::Cann))
+      stream->synchronize();
     if (!ran)
       return false;
   }

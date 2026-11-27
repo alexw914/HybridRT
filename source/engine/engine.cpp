@@ -194,4 +194,12 @@ auto Engine::set_outputs(const core::Buffers& outputs) -> bool {
   return bind_buffers(outputs_, outputs, output_protos_, "output");
 }
 
+auto Engine::same_inputs(const core::Buffers& inputs) const -> bool {
+  return !inputs_.empty() && inputs_ == inputs;
+}
+
+auto Engine::same_outputs(const core::Buffers& outputs) const -> bool {
+  return !outputs_.empty() && outputs_ == outputs;
+}
+
 } // namespace hrt::engine

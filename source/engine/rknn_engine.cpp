@@ -186,6 +186,8 @@ auto RknnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
 }
 
 auto RknnEngine::set_inputs(const core::Buffers& inputs) -> bool {
+  if (same_inputs(inputs))
+    return true;
   if (!Engine::set_inputs(inputs))
     return false;
   input_mems_.clear();

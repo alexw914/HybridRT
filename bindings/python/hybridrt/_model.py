@@ -10,6 +10,8 @@ import ctypes
 import enum
 import logging
 import os
+import queue
+import threading
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -364,6 +366,22 @@ class Model:
                 source.close()
         self.task = Task(lib.hrt_model_task(self._handle))
         self.algo = lib.hrt_model_algo_name(self._handle).decode()
+        self._result_pool = queue.SimpleQueue()
+        self._result_handles = []
+        self._result_lock = threading.Lock()
+
+    def _acquire_result(self):
+        try:
+            return self._result_pool.get_nowait()
+        except queue.Empty:
+            handle = ctypes.c_void_p()
+            _check(lib.hrt_result_create(ctypes.byref(handle)))
+            with self._result_lock:
+                self._result_handles.append(handle)
+            return handle
+
+    def _release_result(self, handle):
+        self._result_pool.put(handle)
 
     def process(self, image, format="inter_bgr", roi=None):
         """Runs on a uint8 host image laid out as `format` (OpenCV's BGR by
@@ -374,13 +392,12 @@ class Model:
         # `image` keeps a converted copy alive through the call.
         native, image = _image(image, format)
         rect = ctypes.byref(_capi.HrtRect(*roi)) if roi is not None else None
-        result = ctypes.c_void_p()
-        _check(lib.hrt_result_create(ctypes.byref(result)))
+        result = self._acquire_result()
         try:
             _check(lib.hrt_model_process(self._handle, ctypes.byref(native), rect, result))
             return _convert(lib.hrt_result_data(result).contents)
         finally:
-            lib.hrt_result_destroy(result)
+            self._release_result(result)
 
     @property
     def batch(self):
@@ -409,19 +426,23 @@ class Model:
         handles = []
         try:
             for _ in range(count):
-                handle = ctypes.c_void_p()
-                _check(lib.hrt_result_create(ctypes.byref(handle)))
-                handles.append(handle)
+                handles.append(self._acquire_result())
             results = (ctypes.c_void_p * count)(*[handle.value for handle in handles])
             _check(lib.hrt_model_process_batch(self._handle, natives, rects, count, results))
             return [_convert(lib.hrt_result_data(handle).contents) for handle in handles]
         finally:
             for handle in handles:
-                lib.hrt_result_destroy(handle)
+                self._release_result(handle)
 
     __call__ = process
 
     def close(self):
+        with getattr(self, "_result_lock", threading.Lock()):
+            handles = getattr(self, "_result_handles", [])
+            self._result_handles = []
+            self._result_pool = queue.SimpleQueue()
+        for handle in handles:
+            lib.hrt_result_destroy(handle)
         if self._handle:
             lib.hrt_model_destroy(self._handle)
             self._handle = ctypes.c_void_p()

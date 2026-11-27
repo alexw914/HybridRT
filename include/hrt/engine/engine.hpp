@@ -97,10 +97,14 @@ public:
 protected:
   Engine() = default;
 
-  // `config` is `param.config` parsed, an empty object when absent.
   virtual auto do_initialize(const hrtc::EngineParam& param, const kitzoo::json::Json& config) -> bool = 0;
 
   virtual auto do_release() -> void = 0;
+
+  // True when `buffers` is the exact same non-empty binding already active on this engine.
+  KZ_NODISCARD auto same_inputs(const core::Buffers& inputs) const -> bool;
+
+  KZ_NODISCARD auto same_outputs(const core::Buffers& outputs) const -> bool;
 
   EngineProto proto_;
   Vector<String> input_names_;

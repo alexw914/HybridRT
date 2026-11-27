@@ -384,6 +384,8 @@ auto OrtEngine::create_values(const core::Buffers& buffers, bool input) -> bool 
 }
 
 auto OrtEngine::set_inputs(const core::Buffers& inputs) -> bool {
+  if (same_inputs(inputs))
+    return true;
   if (!Engine::set_inputs(inputs))
     return false;
   if (!create_values(inputs_, true)) {
@@ -394,6 +396,8 @@ auto OrtEngine::set_inputs(const core::Buffers& inputs) -> bool {
 }
 
 auto OrtEngine::set_outputs(const core::Buffers& outputs) -> bool {
+  if (same_outputs(outputs))
+    return true;
   if (!Engine::set_outputs(outputs))
     return false;
   if (!create_values(outputs_, false)) {

@@ -164,6 +164,8 @@ auto OpenVinoEngine::do_release() -> void {
 }
 
 auto OpenVinoEngine::set_inputs(const core::Buffers& inputs) -> bool {
+  if (same_inputs(inputs))
+    return true;
   if (!Engine::set_inputs(inputs))
     return false;
   release_tensors(input_tensors_);
@@ -191,6 +193,8 @@ auto OpenVinoEngine::set_inputs(const core::Buffers& inputs) -> bool {
 }
 
 auto OpenVinoEngine::set_outputs(const core::Buffers& outputs) -> bool {
+  if (same_outputs(outputs))
+    return true;
   if (!Engine::set_outputs(outputs))
     return false;
   release_tensors(output_tensors_);
