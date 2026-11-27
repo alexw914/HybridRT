@@ -60,19 +60,18 @@ auto main(int argc, char** argv) -> int {
       return 1;
     }
     for (auto& algo : package->algos) {
-      for (auto& backend : algo.engines) {
-        if (backend.engine_type != "ort")
-          continue;
-        const kitzoo::json::Reader reader(backend.config.empty() ? "{}" : backend.config);
-        auto config = reader.raw();
-        if (!reader.is_parse_success() || !config.is_object())
-          return 1;
-        config["execution_provider"] = provider;
-        config["provider_options"] =
-            provider == "coreml" ? kitzoo::json::Json{{"ModelFormat", "MLProgram"}, {"RequireStaticInputShapes", "1"}}
-                                 : kitzoo::json::Json::object();
-        backend.config = config.dump();
-      }
+      auto& backend = algo.engine;
+      if (backend.engine_type != "ort")
+        continue;
+      const kitzoo::json::Reader reader(backend.config.empty() ? "{}" : backend.config);
+      auto config = reader.raw();
+      if (!reader.is_parse_success() || !config.is_object())
+        return 1;
+      config["execution_provider"] = provider;
+      config["provider_options"] =
+          provider == "coreml" ? kitzoo::json::Json{{"ModelFormat", "MLProgram"}, {"RequireStaticInputShapes", "1"}}
+                               : kitzoo::json::Json::object();
+      backend.config = config.dump();
     }
   }
   const auto bgr = cv::imread(args["image"].as<hrt::String>());

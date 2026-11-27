@@ -135,13 +135,12 @@ TEST(OpenvinoEngineTest, RunsImageModelPipeline) {
   const auto config =
       kitzoo::json::Json{{"preprocess", {{"dst_image_format", "planar_rgb"}, {"std", {255, 255, 255}}}},
                          {"postprocess", {{"type", "GeneralClassify"}, {"classify_postprocess_type", "none"}}}};
-  const hrt::hrtc::AlgoParam algo{
-      .name = "openvino_classify",
-      .engines = {{.engine_type = "openvino",
-                   .config = {},
-                   .proto = std::make_shared<const hrt::hrtc::Bytes>(xml.begin(), xml.end()),
-                   .data = {}}},
-      .config = config.dump()};
+  const hrt::hrtc::AlgoParam algo{.name = "openvino_classify",
+                                  .engine = {.engine_type = "openvino",
+                                             .config = {},
+                                             .proto = std::make_shared<const hrt::hrtc::Bytes>(xml.begin(), xml.end()),
+                                             .data = {}},
+                                  .config = config.dump()};
   hrt::SharedPtr<hrt::core::Context> context = hrt::core::Context::create(hrt::core::DeviceType::Cpu);
   auto model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>::create(algo, context);
   ASSERT_NE(model, nullptr);

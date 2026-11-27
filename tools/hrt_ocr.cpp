@@ -102,16 +102,13 @@ auto main(int argc, char** argv) -> int {
   Json engine = nullptr;
   if (args.count("engine") != 0U) {
     const auto type = hrt::engine::engine_type_from(args["engine"].as<hrt::String>());
-    for (auto& algo : algos) {
-      std::erase_if(algo.engines, [&](const auto& param) -> bool {
-        return hrt::engine::engine_type_from(param.engine_type) != type;
-      });
-      if (algo.engines.empty()) {
+    for (const auto& algo : algos) {
+      if (hrt::engine::engine_type_from(algo.engine.engine_type) != type) {
         KZ_LOG_ERROR("algo {} has no {} engine", algo.name, args["engine"].as<hrt::String>());
         return 1;
       }
     }
-    engine = algos.front().engines.front().engine_type;
+    engine = algos.front().engine.engine_type;
   }
   const auto problems = hrt::model::check_ocr_config(algos[0], algos[1]);
   for (const auto& problem : problems)

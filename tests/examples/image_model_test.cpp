@@ -31,10 +31,10 @@ protected:
       "name": "example",
       "version": "1.0.0",
       "algos": [{"name": "classify", "config": {"preprocess": {"std": [255, 255, 255]},
-                                                "engine": {"backends": [{"engine_type": "ort"}]},
+                                                "engine": {"engine_type": "ort"},
                                                 "postprocess": {"type": "GeneralClassify"}}}]
     })");
-    manifest["algos"][0]["config"]["engine"]["backends"][0]["data"] = (dir_ / "identity.onnx").string();
+    manifest["algos"][0]["config"]["engine"]["data"] = (dir_ / "identity.onnx").string();
     manifest_ = (dir_ / "manifest.json").string();
     kitzoo::os::write_file(manifest_, manifest.dump());
     image_ = (dir_ / "input.png").string();

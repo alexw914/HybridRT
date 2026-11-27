@@ -31,15 +31,15 @@ protected:
       "name": "validate",
       "version": "1.0.0",
       "algos": [{"name": "classify", "config": {"preprocess": {"std": [255, 255, 255]},
-                                                "engine": {"backends": [{"engine_type": "ort"}]},
+                                                "engine": {"engine_type": "ort"},
                                                 "postprocess": {"type": "GeneralClassify",
                                                                 "classify_postprocess_type": "softmax"}}},
                 {"name": "embedding", "config": {"preprocess": {"std": [255, 255, 255]},
-                                                 "engine": {"backends": [{"engine_type": "ort"}]},
+                                                 "engine": {"engine_type": "ort"},
                                                  "postprocess": {"type": "Embedding"}}}]
     })");
     for (auto& algo : manifest["algos"])
-      algo["config"]["engine"]["backends"][0]["data"] = (dir_ / "identity.onnx").string();
+      algo["config"]["engine"]["data"] = (dir_ / "identity.onnx").string();
     manifest_ = (dir_ / "manifest.json").string();
     kitzoo::os::write_file(manifest_, manifest.dump());
     ASSERT_TRUE(cv::imwrite((dir_ / "images" / "a.png").string(), cv::Mat(8, 6, CV_8UC3, cv::Scalar(10, 20, 30))));

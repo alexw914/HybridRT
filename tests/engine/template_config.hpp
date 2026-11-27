@@ -25,7 +25,8 @@ inline auto source_root() -> std::filesystem::path {
 // The backend config of engine_type in hrtc_device_config.json, as JSON text.
 inline auto template_config(std::string_view engine_type) -> String {
   const kitzoo::json::Reader reader(std::filesystem::path(HRT_TEMPLATE_DIR) / "hrtc_device_config.json");
-  for (const auto& backend : reader.raw()["algos"][0]["config"]["engine"]["backends"]) {
+  for (const auto& algo : reader.raw()["algos"]) {
+    const auto& backend = algo["config"]["engine"];
     if (backend["engine_type"].is_string() && backend["engine_type"].get_ref<const String&>() == engine_type)
       return backend.value("config", kitzoo::json::Json::object()).dump();
   }
@@ -39,10 +40,9 @@ inline auto template_algo(std::string_view name) -> kitzoo::json::Json {
   for (auto algo : reader.raw()["algos"]) {
     if (!algo["name"].is_string() || algo["name"].get_ref<const String&>() != name)
       continue;
-    for (auto& backend : algo["config"]["engine"]["backends"]) {
-      if (backend.contains("data") && backend["data"].is_string())
-        backend["data"] = (source_root() / backend["data"].get_ref<const String&>()).string();
-    }
+    auto& backend = algo["config"]["engine"];
+    if (backend.contains("data") && backend["data"].is_string())
+      backend["data"] = (source_root() / backend["data"].get_ref<const String&>()).string();
     auto& post = algo["config"]["postprocess"];
     if (post.contains("dictionary") && post["dictionary"].is_string()) {
       auto& dictionary = post["dictionary"].get_ref<String&>();
@@ -54,9 +54,9 @@ inline auto template_algo(std::string_view name) -> kitzoo::json::Json {
   return {};
 }
 
-// The model file of the first backend of a template_algo() result.
+// The model file of a template_algo() result.
 inline auto template_model(const kitzoo::json::Json& algo) -> std::filesystem::path {
-  return algo["config"]["engine"]["backends"][0]["data"].get<String>();
+  return algo["config"]["engine"]["data"].get<String>();
 }
 
 } // namespace hrt::test

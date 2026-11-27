@@ -41,10 +41,10 @@ auto identity_algo(std::string_view name, const kitzoo::json::Json& config, std:
     -> hrt::hrtc::AlgoParam {
   return {
       .name = hrt::String{name},
-      .engines = {{.engine_type = hrt::String{engine_type},
-                   .config = {},
-                   .proto = {},
-                   .data = std::make_shared<const hrt::hrtc::Bytes>(hrt::test::unary_model("Identity", {1, 3, 2, 2}))}},
+      .engine = {.engine_type = hrt::String{engine_type},
+                 .config = {},
+                 .proto = {},
+                 .data = std::make_shared<const hrt::hrtc::Bytes>(hrt::test::unary_model("Identity", {1, 3, 2, 2}))},
       .config = config.dump()};
 }
 
@@ -382,8 +382,7 @@ TEST(HrtTest, RunsSingleAndPartialBatches) {
   EXPECT_EQ(hrt_model_batch(nullptr), 0U);
   for (const auto batch : {1, 4, 8}) {
     auto algo = identity_algo("batch", classify_config());
-    algo.engines[0].data =
-        std::make_shared<const hrt::hrtc::Bytes>(hrt::test::unary_model("Identity", {batch, 3, 2, 2}));
+    algo.engine.data = std::make_shared<const hrt::hrtc::Bytes>(hrt::test::unary_model("Identity", {batch, 3, 2, 2}));
     auto* package = load_package({algo});
     HrtModel* model = nullptr;
     ASSERT_EQ(hrt_model_create(package, nullptr, nullptr, &model), HRT_STATUS_OK) << hrt_last_error();

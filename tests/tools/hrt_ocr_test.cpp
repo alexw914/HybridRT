@@ -44,9 +44,9 @@ TEST_F(HrtOcrTest, ChecksArguments) {
   kitzoo::os::write_file(dir_ / "identity.onnx",
                          std::string_view(reinterpret_cast<const char*>(model.data()), model.size()));
   auto classify = Json::parse(R"({"name": "classify", "config": {
-    "engine": {"backends": [{"engine_type": "ort"}]},
+    "engine": {"engine_type": "ort"},
     "postprocess": {"type": "GeneralClassify"}}})");
-  classify["config"]["engine"]["backends"][0]["data"] = (dir_ / "identity.onnx").string();
+  classify["config"]["engine"]["data"] = (dir_ / "identity.onnx").string();
   const auto manifest = write_manifest(Json::array({classify}));
   const auto images = (dir_ / "images").string();
 

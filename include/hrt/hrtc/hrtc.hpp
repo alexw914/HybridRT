@@ -36,8 +36,8 @@ struct EngineParam {
 
 struct AlgoParam {
   String name;
-  Vector<EngineParam> engines;
-  // JSON text with "preprocess", "engine" and "postprocess" sections.
+  EngineParam engine;
+  // JSON text with "preprocess" and "postprocess" sections.
   String config;
 };
 
@@ -56,8 +56,8 @@ auto load(std::span<const std::uint8_t> bytes) -> std::optional<Package>;
 
 // Builds a package from a JSON manifest (assets/template/hrtc_template.json).
 // Model files and algo configs are a file path (absolute, or relative to the
-// working directory), "string:<text>" or a JSON object; "engine.backends" of
-// each algo config becomes `engines`, each with its own "config" object.
+// working directory), "string:<text>" or a JSON object; "engine" of each algo
+// config becomes `engine`, with its own "config" object.
 auto load_json(const std::filesystem::path& path) -> std::optional<Package>;
 
 // One entry of a manifest's "algos", read as load_json reads it.

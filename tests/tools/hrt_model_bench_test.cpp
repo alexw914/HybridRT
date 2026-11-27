@@ -40,10 +40,10 @@ protected:
     auto manifest = Json::parse(R"({
       "name": "bench",
       "version": "1.0.0",
-      "algos": [{"name": "relu", "config": {"engine": {"backends": [{"engine_type": "ort"}]},
+      "algos": [{"name": "relu", "config": {"engine": {"engine_type": "ort"},
                                             "postprocess": {"type": "GeneralClassify"}}}]
     })");
-    manifest["algos"][0]["config"]["engine"]["backends"][0]["data"] = model.string();
+    manifest["algos"][0]["config"]["engine"]["data"] = model.string();
     const auto path = dir_ / file;
     kitzoo::os::write_file(path, manifest.dump());
     return path.string();

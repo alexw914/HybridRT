@@ -129,8 +129,8 @@ auto read_engine(const Json& json, EngineParam& engine) -> bool {
   return read_bytes(json, "proto", engine.proto) && read_bytes(json, "data", engine.data);
 }
 
-// The engine list lives in config "engine.backends"; it is packed as engines
-// and dropped, with the then empty "engine" section, from the stored config.
+// The engine lives in config "engine"; it is packed as `engine` and dropped
+// from the stored config.
 auto read_algo(const Json& json, AlgoParam& algo) -> bool {
   String config_text;
   if (!json.is_object() || !check_keys(json, {"name", "config"}, "algo") || !read_string(json, "name", algo.name) ||
@@ -138,21 +138,15 @@ auto read_algo(const Json& json, AlgoParam& algo) -> bool {
     return false;
   const kitzoo::json::Reader reader{config_text};
   auto config = reader.raw();
-  auto* engine =
+  const auto* engine =
       reader.is_parse_success() && config.is_object() && config.contains("engine") ? &config["engine"] : nullptr;
-  const auto* backends =
-      engine != nullptr && engine->is_object() && engine->contains("backends") ? &(*engine)["backends"] : nullptr;
-  if (backends == nullptr || !backends->is_array() || backends->empty()) {
-    KZ_LOG_ERROR("hrtc manifest: config of algo {} needs a non-empty \"engine.backends\" array", algo.name);
+  if (engine == nullptr || !engine->is_object()) {
+    KZ_LOG_ERROR("hrtc manifest: config of algo {} needs an \"engine\" object", algo.name);
     return false;
   }
-  for (const auto& item : *backends) {
-    if (!read_engine(item, algo.engines.emplace_back()))
-      return false;
-  }
-  engine->erase("backends");
-  if (engine->empty())
-    config.erase("engine");
+  if (!read_engine(*engine, algo.engine))
+    return false;
+  config.erase("engine");
   // Resolve the character table while packing, so an OCR package is self-contained.
   if (auto post = config.find("postprocess"); post != config.end() && post->is_object() && post->contains("type") &&
                                               (*post)["type"] == "Ocr" && post->contains("dictionary")) {
@@ -219,13 +213,10 @@ auto parse(std::span<const std::uint8_t> bytes) -> std::optional<Package> {
       auto& algo = package.algos.emplace_back();
       algo.name = fb_algo->name()->str();
       algo.config = str(fb_algo->config());
-      if (fb_algo->engines() == nullptr)
-        continue;
-      for (const auto* fb_engine : *fb_algo->engines()) {
-        auto& engine = algo.engines.emplace_back();
-        engine.engine_type = fb_engine->type()->str();
-        engine.config = str(fb_engine->config());
-        if (!blobs.take(fb_engine->proto(), engine.proto) || !blobs.take(fb_engine->data(), engine.data)) {
+      if (const auto* fb_engine = fb_algo->engine(); fb_engine != nullptr) {
+        algo.engine.engine_type = fb_engine->type()->str();
+        algo.engine.config = str(fb_engine->config());
+        if (!blobs.take(fb_engine->proto(), algo.engine.proto) || !blobs.take(fb_engine->data(), algo.engine.data)) {
           KZ_LOG_ERROR("hrtc: truncated engine data in algo {}", algo.name);
           return std::nullopt;
         }
@@ -315,15 +306,13 @@ auto save(const Package& package, const std::filesystem::path& path) -> bool {
 
   Vector<flatbuffers::Offset<fb::Algo>> fb_algos;
   for (const auto& algo : package.algos) {
-    Vector<flatbuffers::Offset<fb::Engine>> fb_engines;
-    for (const auto& engine : algo.engines) {
-      const auto proto = add_blob(engine.proto);
-      const auto data = add_blob(engine.data);
-      fb_engines.push_back(fb::CreateEngineDirect(
-          builder, engine.engine_type.c_str(), engine.config.empty() ? nullptr : engine.config.c_str(), proto, data));
-    }
+    const auto proto = add_blob(algo.engine.proto);
+    const auto data = add_blob(algo.engine.data);
+    const auto fb_engine =
+        fb::CreateEngineDirect(builder, algo.engine.engine_type.c_str(),
+                               algo.engine.config.empty() ? nullptr : algo.engine.config.c_str(), proto, data);
     fb_algos.push_back(fb::CreateAlgoDirect(builder, algo.name.c_str(),
-                                            algo.config.empty() ? nullptr : algo.config.c_str(), &fb_engines));
+                                            algo.config.empty() ? nullptr : algo.config.c_str(), fb_engine));
   }
   auto root = fb::CreatePackageDirect(builder, package.name.c_str(), package.version.c_str(), package.timestamp,
                                       package.description.c_str(), &fb_algos);

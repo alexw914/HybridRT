@@ -84,7 +84,7 @@ pub fn manifest(name: &str, algos: &[(&str, &str, &str)]) -> PathBuf {
         .map(|(algo, config, engine)| {
             format!(
                 r#"{{"name": "{algo}", "config": {{{config},
-  "engine": {{"backends": [{{"engine_type": "{engine}", "data": "{model}"}}]}}}}}}"#
+  "engine": {{"engine_type": "{engine}", "data": "{model}"}}}}}}"#
             )
         })
         .collect();

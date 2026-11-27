@@ -313,16 +313,10 @@ auto main(int argc, char** argv) -> int {
     return 1;
   }
   const auto engine_type = args.count("engine") != 0U ? args["engine"].as<hrt::String>() : hrt::String{};
-  bool ok = true;
-  bool matched = false;
-  for (const auto& param : algo->engines) {
-    if (!engine_type.empty() &&
-        hrt::engine::engine_type_from(param.engine_type) != hrt::engine::engine_type_from(engine_type))
-      continue;
-    matched = true;
-    ok = bench(*algo, param, bench_options) && ok;
-  }
-  if (!matched)
+  if (!engine_type.empty() &&
+      hrt::engine::engine_type_from(algo->engine.engine_type) != hrt::engine::engine_type_from(engine_type)) {
     KZ_LOG_ERROR("algo {} has no engine matching the engine filter", name);
-  return ok && matched ? 0 : 1;
+    return 1;
+  }
+  return bench(*algo, algo->engine, bench_options) ? 0 : 1;
 }

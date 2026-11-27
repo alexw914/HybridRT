@@ -69,7 +69,7 @@ def manifest(tmp_path):
     def write(algos):
         entries = []
         for name, (config, engine_type) in algos.items():
-            config = dict(config, engine={"backends": [{"engine_type": engine_type, "data": str(model)}]})
+            config = dict(config, engine={"engine_type": engine_type, "data": str(model)})
             entries.append({"name": name, "config": config})
         path = tmp_path / "manifest.json"
         path.write_text(json.dumps({"name": "python", "version": "1.0.0", "algos": entries}))
@@ -207,11 +207,11 @@ def template(monkeypatch, tmp_path):
     names = {"yolov8n_detect", "yolo26n_e2e_segment", "yolov8n_pose", "yolov8n_obb", "yolov8n_classify"}
     config["algos"] = [
         algo for algo in config["algos"]
-        if algo["name"] in names and (ROOT / algo["config"]["engine"]["backends"][0]["data"]).is_file()
+        if algo["name"] in names and (ROOT / algo["config"]["engine"]["data"]).is_file()
     ]
     if not config["algos"]:
         pytest.skip("template models are unavailable")
-    models = {algo["name"]: algo["config"]["engine"]["backends"][0]["data"] for algo in config["algos"]}
+    models = {algo["name"]: algo["config"]["engine"]["data"] for algo in config["algos"]}
     # Loading a manifest reads every model file it names, so the test loads it once.
     manifest = tmp_path / "template.json"
     manifest.write_text(json.dumps(config))
@@ -332,16 +332,14 @@ def test_real_model_batches(monkeypatch, tmp_path, task, batch, engine_type):
     if not algos or not BUS.is_file():
         pytest.skip("model or image unavailable")
     algo = algos[0]
-    backends = [b for b in algo["config"]["engine"]["backends"]
-                if b["engine_type"] == "ort" and Path(b["data"]).is_file()]
-    if not backends:
+    backend = algo["config"]["engine"]
+    if backend["engine_type"] != "ort" or not Path(backend["data"]).is_file():
         pytest.skip("ONNX model unavailable")
-    algo["config"]["engine"]["backends"] = backends
     if engine_type == "trt":
-        plan = ROOT / "assets/test/trt" / Path(backends[0]["data"]).with_suffix(".engine").name
+        plan = ROOT / "assets/test/trt" / Path(backend["data"]).with_suffix(".engine").name
         if not plan.is_file():
             pytest.skip("TensorRT plan unavailable")
-        algo["config"]["engine"]["backends"] = [{"engine_type": "trt", "data": str(plan)}]
+        algo["config"]["engine"] = {"engine_type": "trt", "data": str(plan)}
         algo["config"]["preprocess"]["device"] = "cuda"
     config["algos"] = [algo]
     path = tmp_path / "batch.json"

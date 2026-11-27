@@ -46,11 +46,11 @@ auto classify_algo(std::string_view preprocess, std::string_view type = "General
   const auto config = kitzoo::json::Json{{"preprocess", kitzoo::json::Json::parse(preprocess)},
                                          {"postprocess", {{"type", type}, {"classify_postprocess_type", "none"}}}};
   return {.name = "classify",
-          .engines = {{.engine_type = "ort",
-                       .config = {},
-                       .proto = {},
-                       .data = std::make_shared<const hrt::hrtc::Bytes>(
-                           hrt::test::unary_model("Identity", {batch, 3, 2, 2}))}},
+          .engine = {.engine_type = "ort",
+                     .config = {},
+                     .proto = {},
+                     .data = std::make_shared<const hrt::hrtc::Bytes>(
+                         hrt::test::unary_model("Identity", {batch, 3, 2, 2}))},
           .config = config.dump()};
 }
 
@@ -99,9 +99,8 @@ TEST_F(ImageModelTest, RunsPreprocessInferenceAndPostprocess) {
   EXPECT_FLOAT_EQ((*result)[0][11], 10.0F / 255.0F);
 }
 
-TEST_F(ImageModelTest, ReportsFallbackEngineAndStaticBatchMetadata) {
+TEST_F(ImageModelTest, ReportsStaticBatchMetadata) {
   auto algo = classify_algo(R"({"dst_image_format": "planar_rgb", "std": [255, 255, 255]})", "GeneralClassify", 4);
-  algo.engines.insert(algo.engines.begin(), {.engine_type = "unknown", .config = {}, .proto = {}, .data = {}});
   auto model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>::create(algo, cpu_);
   ASSERT_NE(model, nullptr);
   EXPECT_EQ(model->algo_name(), "classify");
@@ -210,11 +209,11 @@ TEST_F(ImageModelTest, CreatesFromAlgoJson) {
     "name": "classify",
     "config": {
       "preprocess": {"std": [255, 255, 255]},
-      "engine": {"backends": [{"engine_type": "ort", "config": {"intra_op_num_threads": 1}}]},
+      "engine": {"engine_type": "ort", "config": {"intra_op_num_threads": 1}},
       "postprocess": {"type": "GeneralClassify"}
     }
   })");
-  algo["config"]["engine"]["backends"][0]["data"] = (dir / "models" / "identity.onnx").string();
+  algo["config"]["engine"]["data"] = (dir / "models" / "identity.onnx").string();
   auto model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>::create(algo, cpu_);
   std::filesystem::remove_all(dir);
   ASSERT_NE(model, nullptr);
@@ -229,7 +228,7 @@ TEST_F(ImageModelTest, CreatesFromAlgoJson) {
   using Model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>;
   EXPECT_EQ(Model::create(kitzoo::json::Json::array(), cpu_), nullptr);
   auto missing = algo;
-  missing["config"]["engine"]["backends"][0]["data"] = (dir / "models" / "missing.onnx").string();
+  missing["config"]["engine"]["data"] = (dir / "models" / "missing.onnx").string();
   EXPECT_EQ(Model::create(missing, cpu_), nullptr);
 }
 
@@ -279,21 +278,6 @@ TEST_F(ImageModelTest, HandlesFrameSizeChangesAndRecoversAfterInvalidInput) {
     for (const auto value : result->front())
       EXPECT_FLOAT_EQ(value, 64.0F / 255.0F);
   }
-}
-
-TEST_F(ImageModelTest, PicksTheFirstUsableEngine) {
-  // TensorRT is not usable here, so the model falls back to the next engine.
-  auto algo = classify_algo(R"({"dst_image_format": "planar_rgb", "std": [255, 255, 255]})");
-  auto trt = algo.engines.front();
-  trt.engine_type = "trt";
-  algo.engines.insert(algo.engines.begin(), trt);
-  auto model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>::create(algo);
-  EXPECT_EQ(model->context()->device_type(), hrt::core::DeviceType::Cpu);
-
-  hrt::Vector<std::uint8_t> pixels;
-  const auto result = model->process_sync(uniform_bgr(pixels, 10, 20, 30));
-  ASSERT_TRUE(result);
-  EXPECT_FLOAT_EQ((*result)[0][0], 30.0F / 255.0F);
 }
 
 TEST_F(ImageModelTest, ChecksConfigWithoutThrowing) {
@@ -347,12 +331,12 @@ TEST_F(ImageModelTest, AbortsOnUnusableConfigurations) {
   EXPECT_EQ(Model::create(classify_algo("{}"), hrt::SharedPtr<hrt::core::Context>{}), nullptr);
 
   auto algo = classify_algo("{}");
-  algo.engines[0].engine_type = "unknown";
+  algo.engine.engine_type = "unknown";
   EXPECT_EQ(Model::create(algo, cpu_), nullptr);
 
   // Engine settings are checked when the engine loads.
   auto bad_config = classify_algo("{}");
-  bad_config.engines[0].config = R"({"intra_op_threads": 2})";
+  bad_config.engine.config = R"({"intra_op_threads": 2})";
   EXPECT_EQ(Model::create(bad_config, cpu_), nullptr);
 
   // An interleaved target cannot feed an NCHW input.
@@ -370,11 +354,11 @@ auto crop_algo(int width, int height, std::string_view resize_type, float pad_sc
                                              {"pad_value", 7}};
   const auto config = kitzoo::json::Json{{"preprocess", preprocess}, {"postprocess", {{"type", "GeneralClassify"}}}};
   return {.name = "crop",
-          .engines = {{.engine_type = "ort",
-                       .config = {},
-                       .proto = {},
-                       .data = std::make_shared<const hrt::hrtc::Bytes>(
-                           hrt::test::unary_model("Identity", {1, 3, height, width}))}},
+          .engine = {.engine_type = "ort",
+                     .config = {},
+                     .proto = {},
+                     .data = std::make_shared<const hrt::hrtc::Bytes>(
+                         hrt::test::unary_model("Identity", {1, 3, height, width}))},
           .config = config.dump()};
 }
 
@@ -756,8 +740,8 @@ auto expect_batch_matches_single(std::string_view name, std::string_view device 
         continue;
       auto path = hrt::test::template_model(*algo);
       path = hrt::test::source_root() / "assets/test/rknn" / path.filename().replace_extension("rknn");
-      (*algo)["config"]["engine"]["backends"] = {
-          {{"engine_type", "rknn"}, {"data", path.string()}, {"config", {{"image_input", true}}}}};
+      (*algo)["config"]["engine"] = {
+          {"engine_type", "rknn"}, {"data", path.string()}, {"config", {{"image_input", true}}}};
       auto& preprocess = (*algo)["config"]["preprocess"];
       preprocess["device"] = "rga";
       preprocess["dst_image_format"] = "inter_rgb";
@@ -804,11 +788,11 @@ auto expect_batch_matches_single(std::string_view name, std::string_view device 
       engine_path = hrt::test::source_root() / "assets/test/trt" / engine_path.filename().replace_extension("engine");
       if (!std::filesystem::is_regular_file(engine_path))
         GTEST_SKIP() << "TensorRT fixture is unavailable: " << engine_path;
-      (*algo)["config"]["engine"]["backends"] = {{{"engine_type", "trt"}, {"data", engine_path.string()}}};
+      (*algo)["config"]["engine"] = {{"engine_type", "trt"}, {"data", engine_path.string()}};
       (*algo)["config"]["preprocess"]["device"] = device == "trt_cpu" ? "cpu" : "cuda";
       const auto param = hrt::hrtc::load_algo(*algo);
       auto probe = hrt::engine::Engine::create(hrt::engine::engine_type_from("trt"));
-      if (!param || !probe || !probe->initialize(param->engines.front()))
+      if (!param || !probe || !probe->initialize(param->engine))
         GTEST_SKIP() << "TensorRT fixture does not load here: " << engine_path;
     }
   }
@@ -1000,7 +984,7 @@ TEST_F(ImageModelTest, KeepsCudaPreprocessorScratchAliveUntilStreamCompletes) {
   builder.reset();
   const hrt::hrtc::AlgoParam algo{
       .name = "relu",
-      .engines = {{.engine_type = "trt", .config = {}, .proto = {}, .data = bytes}},
+      .engine = {.engine_type = "trt", .config = {}, .proto = {}, .data = bytes},
       .config = R"({"preprocess":{"std":[255,255,255]},"postprocess":{"type":"GeneralClassify"}})"};
   using Model = hrt::model::ImageModel<hrt::postprocess::ClassifyResult>;
   auto cpu_preprocess_algo = algo;

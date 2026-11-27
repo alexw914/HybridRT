@@ -328,13 +328,11 @@ auto main(int argc, char** argv) -> int {
   Json engine = nullptr;
   if (args.count("engine") != 0U) {
     const auto type = hrt::engine::engine_type_from(args["engine"].as<hrt::String>());
-    std::erase_if(algo.engines,
-                  [&](const auto& param) -> bool { return hrt::engine::engine_type_from(param.engine_type) != type; });
-    if (algo.engines.empty()) {
+    if (hrt::engine::engine_type_from(algo.engine.engine_type) != type) {
       KZ_LOG_ERROR("algo {} has no {} engine", name, args["engine"].as<hrt::String>());
       return 1;
     }
-    engine = algo.engines.front().engine_type;
+    engine = algo.engine.engine_type;
   }
   const auto task = hrt::model::task_type(algo);
   if (!task) {

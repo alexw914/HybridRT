@@ -132,7 +132,7 @@ private:
   ImageModel(SharedPtr<core::Context> context, const ImageModelOptions& options);
 
   auto build(const hrtc::AlgoParam& algo, const kitzoo::json::Json& config, const PostprocessorFactory& factory,
-             UniquePtr<engine::Engine> first, const hrtc::EngineParam& chosen) -> bool;
+             UniquePtr<engine::Engine> first) -> bool;
 
   template <bool Single>
   auto run(std::span<const core::Image> srcs, std::span<const core::Rect> src_rects)

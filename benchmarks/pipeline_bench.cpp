@@ -108,8 +108,8 @@ auto BM_Ocr(benchmark::State& state) -> void {
   // As in hrtc_device_config.json; the default NeuralNetwork format runs these models several times slower.
   for (auto* entry : {&det, &rec}) {
     if (provider == hrt::bench::Provider::CoreMl && entry->is_object())
-      (*entry)["config"]["engine"]["backends"][0]["config"]["provider_options"] = {{"ModelFormat", "MLProgram"},
-                                                                                   {"RequireStaticInputShapes", "1"}};
+      (*entry)["config"]["engine"]["config"]["provider_options"] = {{"ModelFormat", "MLProgram"},
+                                                                    {"RequireStaticInputShapes", "1"}};
   }
   const auto bgr = hrt::bench::read_image(hrt::bench::kOcrImage);
   const auto image = hrt::bench::wrap_bgr(bgr);
@@ -170,7 +170,7 @@ auto batch_entry(std::size_t task, std::int64_t pipeline, std::int64_t batch) ->
   if (!entry.is_object())
     return {};
   auto& preprocess = entry["config"]["preprocess"];
-  auto path = std::filesystem::path(entry["config"]["engine"]["backends"][0]["data"].get<hrt::String>());
+  auto path = std::filesystem::path(entry["config"]["engine"]["data"].get<hrt::String>());
   if (pipeline == 1) {
     preprocess["device"] = "metal";
     if (!hrt::preprocess::ImagePreprocessor::create(hrt::preprocess::ImagePreprocessorType::Metal))
@@ -178,17 +178,16 @@ auto batch_entry(std::size_t task, std::int64_t pipeline, std::int64_t batch) ->
   } else if (pipeline == 2) {
     preprocess["device"] = "cuda";
     path = std::filesystem::path("assets/test/trt") / path.filename().replace_extension("engine");
-    entry["config"]["engine"]["backends"] = {{{"engine_type", "trt"}, {"data", path.string()}}};
+    entry["config"]["engine"] = {{"engine_type", "trt"}, {"data", path.string()}};
   } else if (pipeline == 3) {
     preprocess["device"] = "rga";
     preprocess["dst_image_format"] = "inter_rgb";
     preprocess["std"] = {1, 1, 1};
     path = std::filesystem::path("assets/test/rknn") / path.filename().replace_extension("rknn");
-    entry["config"]["engine"]["backends"] = {
-        {{"engine_type", "rknn"}, {"data", path.string()}, {"config", {{"image_input", true}}}}};
+    entry["config"]["engine"] = {{"engine_type", "rknn"}, {"data", path.string()}, {"config", {{"image_input", true}}}};
   } else if (pipeline == 4) {
     preprocess["device"] = "cuda";
-    auto& backend = entry["config"]["engine"]["backends"][0];
+    auto& backend = entry["config"]["engine"];
     backend["config"]["execution_provider"] = "cuda";
     backend["config"]["provider_options"]["device_id"] = "0";
   }
@@ -202,7 +201,7 @@ auto batch_entry(std::size_t task, std::int64_t pipeline, std::int64_t batch) ->
     const auto param = hrt::hrtc::load_algo(entry);
     auto probe =
         hrt::engine::Engine::create(pipeline == 2 ? hrt::engine::EngineType::TensorRt : hrt::engine::EngineType::Rknn);
-    if (!param || !probe || !std::filesystem::is_regular_file(path) || !probe->initialize(param->engines.front()))
+    if (!param || !probe || !std::filesystem::is_regular_file(path) || !probe->initialize(param->engine))
       return {};
   }
   return entry;

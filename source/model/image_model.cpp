@@ -47,7 +47,6 @@ auto load_engine(const hrtc::EngineParam& param) -> UniquePtr<engine::Engine> {
 struct LoadedEngine {
   SharedPtr<core::Context> context;
   UniquePtr<engine::Engine> engine;
-  const hrtc::EngineParam* param = nullptr;
 };
 
 // Device a preprocessor needs as the current context; CPU-side ones (RGA
@@ -70,39 +69,38 @@ auto preprocess_device(const hrtc::AlgoParam& algo) -> core::DeviceType {
   return device_type(section.get<preprocess::ImagePreprocessorParam>().device);
 }
 
-// First engine of `algo`, in package order, that loads on `context`, or on a
-// new context when `context` is null. The context serves both the engine and
-// the preprocessor: a device engine fixes it, a CPU engine takes the
-// preprocessor's device, and both on the CPU get a CPU context.
-auto load_first(const hrtc::AlgoParam& algo, core::DeviceType preprocess_device,
-                const SharedPtr<core::Context>& context) -> std::optional<LoadedEngine> {
-  for (const auto& param : algo.engines) {
-    const auto type = engine::engine_type_from(param.engine_type);
-    if (type == engine::EngineType::Unknown)
-      continue;
-    const auto engine_device = engine::device_type_of(type);
-    if (engine_device != core::DeviceType::Cpu && preprocess_device != core::DeviceType::Cpu &&
-        engine_device != preprocess_device) {
-      KZ_LOG_WARN("ImageModel: skipping {} of algo {}: it and the preprocessor need different devices",
-                  param.engine_type, algo.name);
-      continue;
-    }
-    const auto device = engine_device != core::DeviceType::Cpu ? engine_device : preprocess_device;
-    SharedPtr<core::Context> target = context;
-    if (target == nullptr) {
-      target = core::Context::create(device);
-      if (target == nullptr) {
-        KZ_LOG_WARN("ImageModel: skipping {} of algo {}: its device is not available", param.engine_type, algo.name);
-        continue;
-      }
-    } else if (device != core::DeviceType::Cpu && device != target->device_type()) {
-      continue;
-    }
-    target->set_current();
-    if (auto engine = load_engine(param))
-      return LoadedEngine{std::move(target), std::move(engine), &param};
+// Loads `algo.engine` on `context`, or on a new context when `context` is null.
+// The context serves both the engine and the preprocessor: a device engine fixes
+// it, a CPU engine takes the preprocessor's device, and both on the CPU get a
+// CPU context.
+auto load_for_algo(const hrtc::AlgoParam& algo, core::DeviceType preprocess_device,
+                   const SharedPtr<core::Context>& context) -> std::optional<LoadedEngine> {
+  const auto& param = algo.engine;
+  const auto type = engine::engine_type_from(param.engine_type);
+  if (type == engine::EngineType::Unknown)
+    return std::nullopt;
+  const auto engine_device = engine::device_type_of(type);
+  if (engine_device != core::DeviceType::Cpu && preprocess_device != core::DeviceType::Cpu &&
+      engine_device != preprocess_device) {
+    KZ_LOG_ERROR("ImageModel: {} of algo {} and the preprocessor need different devices", param.engine_type, algo.name);
+    return std::nullopt;
   }
-  return std::nullopt;
+  const auto device = engine_device != core::DeviceType::Cpu ? engine_device : preprocess_device;
+  SharedPtr<core::Context> target = context;
+  if (target == nullptr) {
+    target = core::Context::create(device);
+    if (target == nullptr) {
+      KZ_LOG_ERROR("ImageModel: device of {} in algo {} is not available", param.engine_type, algo.name);
+      return std::nullopt;
+    }
+  } else if (device != core::DeviceType::Cpu && device != target->device_type()) {
+    return std::nullopt;
+  }
+  target->set_current();
+  auto engine = load_engine(param);
+  if (engine == nullptr)
+    return std::nullopt;
+  return LoadedEngine{std::move(target), std::move(engine)};
 }
 
 // Problems in the config of `algo`; the "postprocess" keys besides type are
@@ -223,11 +221,11 @@ auto ImageModel<Result>::create(const hrtc::AlgoParam& algo, SharedPtr<core::Con
   const auto problems = check(algo, !factory);
   KZ_CHECK_RETURN(problems.empty(), nullptr, "ImageModel: invalid config of algo {}: {}", algo.name,
                   core::join(problems));
-  auto loaded = load_first(algo, preprocess_device(algo), context);
-  KZ_CHECK_RETURN(loaded.has_value(), nullptr, "ImageModel: no engine of algo {} runs on this context in this build",
-                  algo.name);
+  auto loaded = load_for_algo(algo, preprocess_device(algo), context);
+  KZ_CHECK_RETURN(loaded.has_value(), nullptr,
+                  "ImageModel: engine of algo {} does not run on this context in this build", algo.name);
   UniquePtr<ImageModel> model(new ImageModel(std::move(loaded->context), options));
-  if (!model->build(algo, kitzoo::json::Reader{algo.config}.raw(), factory, std::move(loaded->engine), *loaded->param))
+  if (!model->build(algo, kitzoo::json::Reader{algo.config}.raw(), factory, std::move(loaded->engine)))
     return nullptr;
   return model;
 }
@@ -240,11 +238,11 @@ auto ImageModel<Result>::create(const hrtc::AlgoParam& algo, const ImageModelOpt
   const auto problems = check(algo, !factory);
   KZ_CHECK_RETURN(problems.empty(), nullptr, "ImageModel: invalid config of algo {}: {}", algo.name,
                   core::join(problems));
-  auto loaded = load_first(algo, preprocess_device(algo), nullptr);
-  KZ_CHECK_RETURN(loaded.has_value(), nullptr, "ImageModel: no engine of algo {} runs on this machine in this build",
-                  algo.name);
+  auto loaded = load_for_algo(algo, preprocess_device(algo), nullptr);
+  KZ_CHECK_RETURN(loaded.has_value(), nullptr,
+                  "ImageModel: engine of algo {} does not run on this machine in this build", algo.name);
   UniquePtr<ImageModel> model(new ImageModel(std::move(loaded->context), options));
-  if (!model->build(algo, kitzoo::json::Reader{algo.config}.raw(), factory, std::move(loaded->engine), *loaded->param))
+  if (!model->build(algo, kitzoo::json::Reader{algo.config}.raw(), factory, std::move(loaded->engine)))
     return nullptr;
   return model;
 }
@@ -266,8 +264,7 @@ auto ImageModel<Result>::create(const kitzoo::json::Json& algo, const ImageModel
 
 template <typename Result>
 auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::Json& config,
-                               const PostprocessorFactory& factory, UniquePtr<engine::Engine> first,
-                               const hrtc::EngineParam& chosen) -> bool {
+                               const PostprocessorFactory& factory, UniquePtr<engine::Engine> first) -> bool {
   context_->set_current();
   preprocessor_param_ = preprocess_config(config.value("preprocess", kitzoo::json::Json::object()))
                             .get<preprocess::ImagePreprocessorParam>();
@@ -277,7 +274,7 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
 
   const auto& engine = *first;
   algo_name_ = algo.name;
-  engine_type_ = engine::engine_type_from(chosen.engine_type);
+  engine_type_ = engine::engine_type_from(algo.engine.engine_type);
   input_layout_ = engine.proto().input_layout;
   input_names_ = engine.input_names();
   output_names_ = engine.output_names();
@@ -352,7 +349,7 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
 
   engine_pool_.add(std::make_unique<UniquePtr<engine::Engine>>(std::move(first)));
   for (std::size_t i = 1; i < engine_num; ++i) {
-    auto extra = load_engine(chosen);
+    auto extra = load_engine(algo.engine);
     KZ_CHECK_RETURN(extra != nullptr, false, "ImageModel: cannot load engine {} of algo {}", i, algo.name);
     engine_pool_.add(std::make_unique<UniquePtr<engine::Engine>>(std::move(extra)));
   }

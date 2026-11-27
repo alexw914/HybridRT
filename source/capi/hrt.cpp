@@ -160,7 +160,7 @@ auto device_type(hrt::preprocess::ImagePreprocessorType type) -> core::DeviceTyp
   }
 }
 
-// Whether ImageModel::create finds an engine to load: one compiled in whose
+// Whether ImageModel::create can load `algo.engine`: compiled in and whose
 // device, shared with the preprocessor, is usable. `algo` passed check_algo_config.
 auto check_engines(const hrt::hrtc::AlgoParam& algo) -> HrtStatus {
   const kitzoo::json::Reader reader{algo.config};
@@ -169,26 +169,24 @@ auto check_engines(const hrt::hrtc::AlgoParam& algo) -> HrtStatus {
   if (hrt::preprocess::ImagePreprocessor::create(preprocess) == nullptr)
     return fail(HRT_STATUS_UNAVAILABLE, "preprocess device of algo " + algo.name + " is not available in this build");
   const auto preprocess_device = device_type(preprocess);
-  bool runnable = false;
-  for (const auto& param : algo.engines) {
-    if (!param.config.empty()) {
-      const kitzoo::json::Reader config{param.config};
-      if (!config.is_parse_success() || !config.raw().is_object())
-        return fail(HRT_STATUS_INVALID_CONFIG,
-                    "config of engine " + param.engine_type + " of algo " + algo.name + " is not a JSON object");
-    }
-    const auto type = hrt::engine::engine_type_from(param.engine_type);
-    if (runnable || hrt::engine::Engine::create(type) == nullptr)
-      continue;
-    const auto engine_device = hrt::engine::device_type_of(type);
-    if (engine_device != core::DeviceType::Cpu && preprocess_device != core::DeviceType::Cpu &&
-        engine_device != preprocess_device)
-      continue;
-    const auto device = engine_device != core::DeviceType::Cpu ? engine_device : preprocess_device;
-    runnable = device == core::DeviceType::Cpu || core::Context::create(device) != nullptr;
+  const auto& param = algo.engine;
+  if (!param.config.empty()) {
+    const kitzoo::json::Reader config{param.config};
+    if (!config.is_parse_success() || !config.raw().is_object())
+      return fail(HRT_STATUS_INVALID_CONFIG,
+                  "config of engine " + param.engine_type + " of algo " + algo.name + " is not a JSON object");
   }
-  if (!runnable)
-    return fail(HRT_STATUS_UNAVAILABLE, "no engine of algo " + algo.name + " runs on this machine in this build");
+  const auto type = hrt::engine::engine_type_from(param.engine_type);
+  if (hrt::engine::Engine::create(type) == nullptr)
+    return fail(HRT_STATUS_UNAVAILABLE, "engine of algo " + algo.name + " is not available in this build");
+  const auto engine_device = hrt::engine::device_type_of(type);
+  if (engine_device != core::DeviceType::Cpu && preprocess_device != core::DeviceType::Cpu &&
+      engine_device != preprocess_device)
+    return fail(HRT_STATUS_UNAVAILABLE,
+                "engine and preprocess device of algo " + algo.name + " need different devices");
+  const auto device = engine_device != core::DeviceType::Cpu ? engine_device : preprocess_device;
+  if (device != core::DeviceType::Cpu && core::Context::create(device) == nullptr)
+    return fail(HRT_STATUS_UNAVAILABLE, "device of algo " + algo.name + " is not available on this machine");
   return HRT_STATUS_OK;
 }
 

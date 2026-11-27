@@ -33,11 +33,9 @@ auto print(const hrt::hrtc::Package& package) -> void {
   KZ_LOG_INFO("Description: {}", package.description);
   for (const auto& algo : package.algos) {
     KZ_LOG_INFO("Algo {}  config={}B", algo.name, algo.config.size());
-    for (std::size_t i = 0; i < algo.engines.size(); ++i) {
-      const auto& engine = algo.engines[i];
-      KZ_LOG_INFO("  [{}] {}  config={}B proto={}B data={}B", i, engine.engine_type, engine.config.size(),
-                  blob_size(engine.proto), blob_size(engine.data));
-    }
+    const auto& engine = algo.engine;
+    KZ_LOG_INFO("  {}  config={}B proto={}B data={}B", engine.engine_type, engine.config.size(),
+                blob_size(engine.proto), blob_size(engine.data));
   }
 }
 
@@ -73,14 +71,12 @@ auto extract(const hrt::hrtc::Package& package, const std::filesystem::path& dir
   for (const auto& algo : package.algos) {
     if (!write_blob(dir / (algo.name + ".config"), algo.config))
       return false;
-    for (std::size_t i = 0; i < algo.engines.size(); ++i) {
-      const auto& engine = algo.engines[i];
-      const auto prefix = algo.name + ".engine." + std::to_string(i);
-      if (!write_blob(dir / (prefix + ".config"), engine.config) ||
-          !write_blob(dir / (prefix + ".proto"), blob_text(engine.proto)) ||
-          !write_blob(dir / (prefix + ".data"), blob_text(engine.data)))
-        return false;
-    }
+    const auto& engine = algo.engine;
+    const auto prefix = algo.name + ".engine";
+    if (!write_blob(dir / (prefix + ".config"), engine.config) ||
+        !write_blob(dir / (prefix + ".proto"), blob_text(engine.proto)) ||
+        !write_blob(dir / (prefix + ".data"), blob_text(engine.data)))
+      return false;
   }
   return true;
 }

@@ -123,16 +123,12 @@ auto OcrModel::create(const hrtc::AlgoParam& detection, const hrtc::AlgoParam& r
   if (model->impl_->detection == nullptr)
     return nullptr;
   // Recognition shares the detection context, so both stages read the same source without staging it per line.
-  // CPU engines run under any context, so engines of other devices are dropped first.
+  // CPU engines run under any context; a device engine must match the detection context.
   const auto& context = model->impl_->detection->context();
-  auto same_device = recognition;
-  std::erase_if(same_device.engines, [&](const auto& param) -> bool {
-    const auto device = engine::device_type_of(engine::engine_type_from(param.engine_type));
-    return device != core::DeviceType::Cpu && device != context->device_type();
-  });
-  KZ_CHECK_RETURN(!same_device.engines.empty(), nullptr, "OcrModel: algo {} has no engine on the device of algo {}",
-                  recognition.name, detection.name);
-  model->impl_->recognition = ImageModel<postprocess::OcrResult>::create(same_device, context);
+  const auto device = engine::device_type_of(engine::engine_type_from(recognition.engine.engine_type));
+  KZ_CHECK_RETURN(device == core::DeviceType::Cpu || device == context->device_type(), nullptr,
+                  "OcrModel: algo {} engine does not run on the device of algo {}", recognition.name, detection.name);
+  model->impl_->recognition = ImageModel<postprocess::OcrResult>::create(recognition, context);
   if (model->impl_->recognition == nullptr)
     return nullptr;
   return model;

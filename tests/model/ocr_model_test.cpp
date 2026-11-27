@@ -139,7 +139,7 @@ TEST(OcrModelTest, RejectsStagesOnDifferentDevices) {
       !std::filesystem::exists(hrt::test::template_model(rec)) ||
       !std::filesystem::exists(rec["config"]["postprocess"]["dictionary"].get<hrt::String>()))
     GTEST_SKIP() << "OCR models unavailable";
-  rec["config"]["engine"]["backends"][0]["engine_type"] = "trt";
+  rec["config"]["engine"]["engine_type"] = "trt";
   const auto det_algo = hrt::hrtc::load_algo(det);
   const auto rec_algo = hrt::hrtc::load_algo(rec);
   ASSERT_TRUE(det_algo && rec_algo);

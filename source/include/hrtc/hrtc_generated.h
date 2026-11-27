@@ -121,7 +121,7 @@ struct Algo FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_NAME = 4,
     VT_CONFIG = 6,
-    VT_ENGINES = 8
+    VT_ENGINE = 8
   };
   const ::flatbuffers::String *name() const {
     return GetPointer<const ::flatbuffers::String *>(VT_NAME);
@@ -129,8 +129,8 @@ struct Algo FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   const ::flatbuffers::String *config() const {
     return GetPointer<const ::flatbuffers::String *>(VT_CONFIG);
   }
-  const ::flatbuffers::Vector<::flatbuffers::Offset<hrt::hrtc::fb::Engine>> *engines() const {
-    return GetPointer<const ::flatbuffers::Vector<::flatbuffers::Offset<hrt::hrtc::fb::Engine>> *>(VT_ENGINES);
+  const hrt::hrtc::fb::Engine *engine() const {
+    return GetPointer<const hrt::hrtc::fb::Engine *>(VT_ENGINE);
   }
   bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
@@ -138,9 +138,8 @@ struct Algo FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
            verifier.VerifyString(name()) &&
            VerifyOffset(verifier, VT_CONFIG) &&
            verifier.VerifyString(config()) &&
-           VerifyOffset(verifier, VT_ENGINES) &&
-           verifier.VerifyVector(engines()) &&
-           verifier.VerifyVectorOfTables(engines()) &&
+           VerifyOffset(verifier, VT_ENGINE) &&
+           verifier.VerifyTable(engine()) &&
            verifier.EndTable();
   }
 };
@@ -155,8 +154,8 @@ struct AlgoBuilder {
   void add_config(::flatbuffers::Offset<::flatbuffers::String> config) {
     fbb_.AddOffset(Algo::VT_CONFIG, config);
   }
-  void add_engines(::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<hrt::hrtc::fb::Engine>>> engines) {
-    fbb_.AddOffset(Algo::VT_ENGINES, engines);
+  void add_engine(::flatbuffers::Offset<hrt::hrtc::fb::Engine> engine) {
+    fbb_.AddOffset(Algo::VT_ENGINE, engine);
   }
   explicit AlgoBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
@@ -174,9 +173,9 @@ inline ::flatbuffers::Offset<Algo> CreateAlgo(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     ::flatbuffers::Offset<::flatbuffers::String> name = 0,
     ::flatbuffers::Offset<::flatbuffers::String> config = 0,
-    ::flatbuffers::Offset<::flatbuffers::Vector<::flatbuffers::Offset<hrt::hrtc::fb::Engine>>> engines = 0) {
+    ::flatbuffers::Offset<hrt::hrtc::fb::Engine> engine = 0) {
   AlgoBuilder builder_(_fbb);
-  builder_.add_engines(engines);
+  builder_.add_engine(engine);
   builder_.add_config(config);
   builder_.add_name(name);
   return builder_.Finish();
@@ -186,15 +185,14 @@ inline ::flatbuffers::Offset<Algo> CreateAlgoDirect(
     ::flatbuffers::FlatBufferBuilder &_fbb,
     const char *name = nullptr,
     const char *config = nullptr,
-    const std::vector<::flatbuffers::Offset<hrt::hrtc::fb::Engine>> *engines = nullptr) {
+    ::flatbuffers::Offset<hrt::hrtc::fb::Engine> engine = 0) {
   auto name__ = name ? _fbb.CreateString(name) : 0;
   auto config__ = config ? _fbb.CreateString(config) : 0;
-  auto engines__ = engines ? _fbb.CreateVector<::flatbuffers::Offset<hrt::hrtc::fb::Engine>>(*engines) : 0;
   return hrt::hrtc::fb::CreateAlgo(
       _fbb,
       name__,
       config__,
-      engines__);
+      engine);
 }
 
 struct Package FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
@@ -314,7 +312,7 @@ inline const hrt::hrtc::fb::Package *GetSizePrefixedPackage(const void *buf) {
 }
 
 inline const char *PackageIdentifier() {
-  return "HRT2";
+  return "HRT3";
 }
 
 inline bool PackageBufferHasIdentifier(const void *buf) {

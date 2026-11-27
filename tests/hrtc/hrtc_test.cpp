@@ -25,12 +25,15 @@ protected:
       "version": "1.2.3",
       "description": "test package",
       "algos": [{
-        "name": "detect",
+        "name": "detect_ncnn",
         "config": {
-          "engine": {"backends": [
-            {"engine_type": "ncnn", "proto": "models/net.param", "data": "models/net.bin"},
-            {"engine_type": "ort", "data": "models/net.bin"}
-          ]},
+          "engine": {"engine_type": "ncnn", "proto": "models/net.param", "data": "models/net.bin"},
+          "postprocess": {"type": "YoloV8Detect"}
+        }
+      }, {
+        "name": "detect_ort",
+        "config": {
+          "engine": {"engine_type": "ort", "data": "models/net.bin"},
           "postprocess": {"type": "YoloV8Detect"}
         }
       }]
@@ -65,22 +68,25 @@ TEST_F(HrtcTest, ManifestRoundTrip) {
   EXPECT_EQ(loaded->description, "test package");
   EXPECT_EQ(loaded->timestamp, package->timestamp);
 
-  const auto* algo = loaded->find("detect");
-  ASSERT_NE(algo, nullptr);
-  // The backends become `engines`; the emptied "engine" section is dropped.
-  EXPECT_EQ(algo->config, R"({"postprocess":{"type":"YoloV8Detect"}})");
-  ASSERT_EQ(algo->engines.size(), 2U);
-  EXPECT_EQ(algo->engines[0].engine_type, "ncnn");
-  EXPECT_EQ(text(algo->engines[0].proto), "param-bytes");
-  ASSERT_NE(algo->engines[0].data, nullptr);
-  EXPECT_EQ(*algo->engines[0].data, (hrt::hrtc::Bytes{0, 1, 2, 3}));
-  EXPECT_EQ(algo->engines[1].proto, nullptr);
-  ASSERT_NE(algo->engines[1].data, nullptr);
-  EXPECT_EQ(*algo->engines[1].data, (hrt::hrtc::Bytes{0, 1, 2, 3}));
+  const auto* ncnn = loaded->find("detect_ncnn");
+  ASSERT_NE(ncnn, nullptr);
+  // The "engine" section is packed into `engine` and dropped from the stored config.
+  EXPECT_EQ(ncnn->config, R"({"postprocess":{"type":"YoloV8Detect"}})");
+  EXPECT_EQ(ncnn->engine.engine_type, "ncnn");
+  EXPECT_EQ(text(ncnn->engine.proto), "param-bytes");
+  ASSERT_NE(ncnn->engine.data, nullptr);
+  EXPECT_EQ(*ncnn->engine.data, (hrt::hrtc::Bytes{0, 1, 2, 3}));
+
+  const auto* ort = loaded->find("detect_ort");
+  ASSERT_NE(ort, nullptr);
+  EXPECT_EQ(ort->engine.engine_type, "ort");
+  EXPECT_EQ(ort->engine.proto, nullptr);
+  ASSERT_NE(ort->engine.data, nullptr);
+  EXPECT_EQ(*ort->engine.data, (hrt::hrtc::Bytes{0, 1, 2, 3}));
   EXPECT_EQ(loaded->find("missing"), nullptr);
 
   // Model files outlive the package that loaded them.
-  const auto weights = algo->engines[1].data;
+  const auto weights = ort->engine.data;
   loaded.reset();
   EXPECT_EQ(*weights, (hrt::hrtc::Bytes{0, 1, 2, 3}));
 }
@@ -109,7 +115,7 @@ TEST_F(HrtcTest, LoadsUnalignedBytes) {
   std::copy(content.begin(), content.end(), shifted.begin() + 1);
   const auto loaded = hrt::hrtc::load(std::span(shifted).subspan(1));
   ASSERT_TRUE(loaded);
-  EXPECT_EQ(loaded->find("detect")->engines.size(), 2U);
+  EXPECT_EQ(loaded->find("detect_ncnn")->engine.engine_type, "ncnn");
 }
 
 TEST_F(HrtcTest, RejectsOtherFormatVersions) {
@@ -120,7 +126,7 @@ TEST_F(HrtcTest, RejectsOtherFormatVersions) {
   const auto* bytes = reinterpret_cast<const std::uint8_t*>(content.data());
   ASSERT_TRUE(hrt::hrtc::load(std::span(bytes, content.size())));
   // The identifier follows the size prefix and the root offset.
-  ASSERT_EQ(content.compare(8, 4, "HRT2"), 0);
+  ASSERT_EQ(content.compare(8, 4, "HRT3"), 0);
   content.replace(8, 4, "HRTC");
   EXPECT_FALSE(hrt::hrtc::load(std::span(bytes, content.size())));
 }
@@ -136,24 +142,24 @@ TEST_F(HrtcTest, ResolvesPathsAgainstWorkingDirectory) {
 
 TEST_F(HrtcTest, RejectsInvalidManifests) {
   kitzoo::os::write_file(dir_ / "bad.json", R"({"name": "x", "version": "1", "algos": [
-    {"name": "a", "config": {"engine": {"backends": [{"engine_type": "ort", "data": "models/missing.onnx"}]}}}]})");
+    {"name": "a", "config": {"engine": {"engine_type": "ort", "data": "models/missing.onnx"}}}]})");
   EXPECT_FALSE(hrt::hrtc::load_json(dir_ / "bad.json"));
 
-  kitzoo::os::write_file(dir_ / "empty.json", R"({"name": "x", "version": "1", "algos": [
-    {"name": "a", "config": {"engine": {"backends": []}}}]})");
-  EXPECT_FALSE(hrt::hrtc::load_json(dir_ / "empty.json"));
+  kitzoo::os::write_file(dir_ / "missing_engine.json", R"({"name": "x", "version": "1", "algos": [
+    {"name": "a", "config": {}}]})");
+  EXPECT_FALSE(hrt::hrtc::load_json(dir_ / "missing_engine.json"));
 
   kitzoo::os::write_file(dir_ / "dup.json", R"({"name": "x", "version": "1", "algos": [
-    {"name": "a", "config": {"engine": {"backends": [{"engine_type": "ort"}]}}},
-    {"name": "a", "config": {"engine": {"backends": [{"engine_type": "ort"}]}}}]})");
+    {"name": "a", "config": {"engine": {"engine_type": "ort"}}},
+    {"name": "a", "config": {"engine": {"engine_type": "ort"}}}]})");
   EXPECT_FALSE(hrt::hrtc::load_json(dir_ / "dup.json"));
 
   kitzoo::os::write_file(dir_ / "unknown.json", R"({"name": "x", "version": "1", "extra": true, "algos": [
-    {"name": "a", "config": {"engine": {"backends": [{"engine_type": "ort"}]}}}]})");
+    {"name": "a", "config": {"engine": {"engine_type": "ort"}}}]})");
   EXPECT_FALSE(hrt::hrtc::load_json(dir_ / "unknown.json"));
 
   kitzoo::os::write_file(dir_ / "empty_engine.json", R"({"name": "x", "version": "1", "algos": [
-    {"name": "a", "config": {"engine": {"backends": [{"engine_type": ""}]}}}]})");
+    {"name": "a", "config": {"engine": {"engine_type": ""}}}]})");
   EXPECT_FALSE(hrt::hrtc::load_json(dir_ / "empty_engine.json"));
 }
 
@@ -164,7 +170,7 @@ TEST_F(HrtcTest, EmbedsOcrDictionaryBeforePacking) {
   const kitzoo::json::Json entry{
       {"name", "recognition"},
       {"config",
-       {{"engine", {{"backends", {{{"engine_type", "ort"}, {"data", "string:weights"}}}}}},
+       {{"engine", {{"engine_type", "ort"}, {"data", "string:weights"}}},
         {"postprocess", {{"type", "Ocr"}, {"stage", "recognition"}, {"dictionary", "characters.txt"}}}}}};
   auto algo = hrt::hrtc::load_algo(entry);
   ASSERT_TRUE(algo);

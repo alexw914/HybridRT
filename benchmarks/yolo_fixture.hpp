@@ -47,7 +47,7 @@ inline auto template_entry(std::string_view name, Provider provider = Provider::
   for (auto algo : *algos) {
     if (algo.value("name", String{}) != name)
       continue;
-    auto& backend = algo["config"]["engine"]["backends"][0];
+    auto& backend = algo["config"]["engine"];
     if (need_model && !std::filesystem::is_regular_file(backend.value("data", String{})))
       return {};
     if (provider == Provider::CoreMl)

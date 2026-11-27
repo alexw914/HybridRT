@@ -33,7 +33,7 @@ fn runs_template_models_when_available() {
             algo["name"].as_str().unwrap(),
             "yolov8n_detect" | "yolo26n_e2e_segment" | "yolov8n_pose" | "yolov8n_obb" | "yolov8n_classify"
         ) && root
-            .join(algo["config"]["engine"]["backends"][0]["data"].as_str().unwrap())
+            .join(algo["config"]["engine"]["data"].as_str().unwrap())
             .is_file()
     });
     if config["algos"].as_array().unwrap().is_empty() {

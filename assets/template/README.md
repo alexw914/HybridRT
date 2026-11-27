@@ -18,10 +18,10 @@ manifest with `hrt-compress -c -j assets/template/hrtc_template.json`.
 | `description` | Optional string. |
 | `algos[].name` | Unique, non-empty. |
 | `algos[].config` | Object with `preprocess`, `engine` and `postprocess`, a path to such a JSON file (absolute or relative to the working directory), or `"string:<json>"`. |
-| `engine.backends[]` | Engines of the algo, tried in order: the first whose device is available and whose model loads is used. |
-| `backends[].engine_type` | `ort`, `openvino`, `ncnn`, `mnn`, `trt`, `rknn`, `cann`. |
-| `backends[].config` | Optional object of that engine's settings, below. |
-| `backends[].proto`, `.data` | Model files: an absolute path or one relative to the working directory, `"string:<text>"` or a JSON object stored as text. ncnn uses `proto` for the `.param` text and `data` for the `.bin`; OpenVINO uses `proto` for IR XML and `data` for the weights BIN; the other engines use `data` only. |
+| `engine` | Engine of the algo; to package multiple backends for one model, add separate `algos[]` entries with distinct `name`s. |
+| `engine.engine_type` | `ort`, `openvino`, `ncnn`, `mnn`, `trt`, `rknn`, `cann`. |
+| `engine.config` | Optional object of that engine's settings, below. |
+| `engine.proto`, `.data` | Model files: an absolute path or one relative to the working directory, `"string:<text>"` or a JSON object stored as text. ncnn uses `proto` for the `.param` text and `data` for the `.bin`; OpenVINO uses `proto` for IR XML and `data` for the weights BIN; the other engines use `data` only. |
 
 The algo config only describes the model. How many calls each stage serves at once is not
 part of the manifest: pass `ImageModelOptions{preprocess, engine, postprocess}` (default 1, at

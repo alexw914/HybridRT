@@ -97,7 +97,7 @@ TEST(OnnxruntimeEngineTest, RunsNhwcClassifierWithMetalPreprocessing) {
   if (!metal)
     GTEST_SKIP() << "Metal GPU unavailable";
   auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
-  algo["config"]["engine"]["backends"][0]["data"] = path.string();
+  algo["config"]["engine"]["data"] = path.string();
   const auto source =
       Image::wrap(MemoryType::Cpu, bgr.data, ImageFormat::InterBgr, {bgr.cols, bgr.rows}, DataType::Uint8, bgr.step);
   ASSERT_TRUE(source);
@@ -106,11 +106,11 @@ TEST(OnnxruntimeEngineTest, RunsNhwcClassifierWithMetalPreprocessing) {
   param.interpolation_mode = InterpolationMode::Nearest;
   for (const auto provider : {"cpu", "coreml"}) {
     SCOPED_TRACE(provider);
-    algo["config"]["engine"]["backends"][0]["config"]["execution_provider"] = provider;
+    algo["config"]["engine"]["config"]["execution_provider"] = provider;
     const auto loaded = hrt::hrtc::load_algo(algo);
     ASSERT_TRUE(loaded);
     auto engine = hrt::engine::Engine::create("ort");
-    ASSERT_TRUE(engine->initialize(loaded->engines.front()));
+    ASSERT_TRUE(engine->initialize(loaded->engine));
     ASSERT_EQ(engine->input_protos().front().shape, (Shape{1, 640, 640, 3}));
     ASSERT_EQ(engine->output_protos().front().shape, (Shape{1, 1000}));
     auto input = std::make_shared<Buffer>(engine->input_protos().front());

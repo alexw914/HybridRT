@@ -23,7 +23,7 @@ def ocr_package(tmp_path, monkeypatch):
     config = json.loads((ROOT / "assets/template/hrtc_template.json").read_text())
     config["algos"] = [a for a in config["algos"] if a["name"].startswith("ppocrv6_")]
     for algo in config["algos"]:
-        model = ROOT / algo["config"]["engine"]["backends"][0]["data"]
+        model = ROOT / algo["config"]["engine"]["data"]
         dictionary = algo["config"]["postprocess"].get("dictionary")
         if not model.is_file() or (dictionary and not (ROOT / dictionary).is_file()):
             pytest.skip("OCR fixtures unavailable")
@@ -31,7 +31,7 @@ def ocr_package(tmp_path, monkeypatch):
 
     def load(provider):
         for algo in config["algos"]:
-            algo["config"]["engine"]["backends"][0]["config"] = {
+            algo["config"]["engine"]["config"] = {
                 "execution_provider": provider,
                 "provider_options": {"ModelFormat": "MLProgram", "RequireStaticInputShapes": "1"}
                 if provider == "coreml" else {},

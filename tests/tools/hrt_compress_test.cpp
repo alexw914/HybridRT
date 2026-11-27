@@ -39,7 +39,7 @@ protected:
       "version": "1.0.0",
       "algos": [{
         "config": {
-          "engine": {"backends": [{"engine_type": "ncnn", "config": {"num_threads": 2}, "proto": "string:param-text"}]},
+          "engine": {"engine_type": "ncnn", "config": {"num_threads": 2}, "proto": "string:param-text"},
           "postprocess": {"type": "GeneralDetect", "class_num": 1, "confidence_threshold": [0.5], "iou_threshold": [0.5]}
         }
       }]
@@ -47,7 +47,7 @@ protected:
     auto& algo = manifest["algos"][0];
     algo["name"] = name;
     algo["config"]["preprocess"] = preprocess;
-    algo["config"]["engine"]["backends"][0]["data"] = (dir_ / "net.bin").string();
+    algo["config"]["engine"]["data"] = (dir_ / "net.bin").string();
     const auto path = dir_ / file;
     kitzoo::os::write_file(path, manifest.dump());
     return path.string();
@@ -78,9 +78,9 @@ TEST_F(HrtCompressTest, PacksInspectsAndExtracts) {
             Json::parse(R"({"preprocess": {"std": [255, 255, 255]},
                             "postprocess": {"type": "GeneralDetect", "class_num": 1,
                                             "confidence_threshold": [0.5], "iou_threshold": [0.5]}})"));
-  EXPECT_EQ(Json::parse(kitzoo::os::read_file(out / "detect.engine.0.config")), Json::parse(R"({"num_threads": 2})"));
-  EXPECT_EQ(kitzoo::os::read_file(out / "detect.engine.0.proto"), "param-text");
-  EXPECT_EQ(kitzoo::os::read_file(out / "detect.engine.0.data"), hrt::String("\x00\x01\x02\x03", 4));
+  EXPECT_EQ(Json::parse(kitzoo::os::read_file(out / "detect.engine.config")), Json::parse(R"({"num_threads": 2})"));
+  EXPECT_EQ(kitzoo::os::read_file(out / "detect.engine.proto"), "param-text");
+  EXPECT_EQ(kitzoo::os::read_file(out / "detect.engine.data"), hrt::String("\x00\x01\x02\x03", 4));
 }
 
 TEST_F(HrtCompressTest, ChecksConfigs) {

@@ -5,7 +5,7 @@
 
 namespace hrt.hrtc.fb;
 
-file_identifier "HRT2";
+file_identifier "HRT3";
 file_extension "hrtc";
 
 table Engine {
@@ -18,9 +18,9 @@ table Engine {
 
 table Algo {
   name: string (required);
-  // JSON with "preprocess", "engine" and "postprocess" sections.
+  // JSON with "preprocess" and "postprocess" sections.
   config: string;
-  engines: [Engine];
+  engine: Engine;
 }
 
 table Package {

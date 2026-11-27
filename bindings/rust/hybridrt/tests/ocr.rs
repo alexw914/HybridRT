@@ -22,7 +22,7 @@ fn runs_ocr_models_when_available() {
     let algos = config["algos"].as_array_mut().unwrap();
     algos.retain(|algo| algo["name"].as_str().unwrap().starts_with("ppocrv6_"));
     for algo in algos.iter_mut() {
-        let backend = &mut algo["config"]["engine"]["backends"][0];
+        let backend = &mut algo["config"]["engine"];
         let model = root.join(backend["data"].as_str().unwrap());
         if !model.is_file() {
             return;

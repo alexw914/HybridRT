@@ -32,9 +32,9 @@ auto prepare(benchmark::State& state, const kitzoo::json::Json& entry, const std
     return std::nullopt;
   }
   Prepared prepared{
-      hrt::engine::Engine::create(algo->engines.front().engine_type), {}, {}, kitzoo::json::Json::parse(algo->config)};
+      hrt::engine::Engine::create(algo->engine.engine_type), {}, {}, kitzoo::json::Json::parse(algo->config)};
   auto& engine = prepared.engine;
-  if (engine == nullptr || !engine->initialize(algo->engines.front())) {
+  if (engine == nullptr || !engine->initialize(algo->engine)) {
     state.SkipWithError("The engine is not available or the model did not load");
     return std::nullopt;
   }
@@ -155,7 +155,7 @@ auto BM_Type(benchmark::State& state) -> void {
 #ifdef HRT_USE_RKNN
   const auto quantized = state.range(1) != 0;
   const auto batch = state.range(2);
-  auto path = std::filesystem::path(entry["config"]["engine"]["backends"][0]["data"].get<hrt::String>());
+  auto path = std::filesystem::path(entry["config"]["engine"]["data"].get<hrt::String>());
   const auto suffix = batch > 1 ? "Batch" + std::to_string(batch) : hrt::String{};
   path = std::filesystem::path(HRT_SOURCE_DIR) / "assets/test/rknn" /
          (path.stem().string() + suffix + (quantized ? "Int8.rknn" : ".rknn"));
@@ -165,11 +165,10 @@ auto BM_Type(benchmark::State& state) -> void {
     state.SkipWithMessage("RKNN model variant is unavailable");
     return;
   }
-  entry["config"]["engine"]["backends"] = {
-      {{"engine_type", "rknn"}, {"data", path.string()}, {"config", {{"image_input", true}}}}};
+  entry["config"]["engine"] = {{"engine_type", "rknn"}, {"data", path.string()}, {"config", {{"image_input", true}}}};
 #else
   const auto batch = state.range(1);
-  auto& backend = entry["config"]["engine"]["backends"][0];
+  auto& backend = entry["config"]["engine"];
   auto path = std::filesystem::path(backend["data"].get<hrt::String>());
   if (batch > 1) {
     path = path.parent_path() / (path.stem().string() + "Batch" + std::to_string(batch) + ".onnx");
