@@ -23,18 +23,31 @@ namespace hrt::postprocess {
 
 namespace {
 
-auto to_cv(const core::RotatedRect& rect) -> cv::RotatedRect {
-  return {{rect.center.x, rect.center.y}, {rect.size.width, rect.size.height}, rect.angle};
-}
-
 auto rotated_iou(const core::RotatedRect& a, const core::RotatedRect& b) -> float {
   Vector<cv::Point2f> polygon;
-  const auto kind = cv::rotatedRectangleIntersection(to_cv(a), to_cv(b), polygon);
+  const cv::RotatedRect lhs({a.center.x, a.center.y}, {a.size.width, a.size.height}, a.angle);
+  const cv::RotatedRect rhs({b.center.x, b.center.y}, {b.size.width, b.size.height}, b.angle);
+  const auto kind = cv::rotatedRectangleIntersection(lhs, rhs, polygon);
   if (kind == cv::INTERSECT_NONE || polygon.empty())
     return 0.0F;
   const auto inter = kind == cv::INTERSECT_FULL ? std::min(a.size.area(), b.size.area())
                                                 : static_cast<float>(cv::contourArea(polygon));
   return inter / (a.size.area() + b.size.area() - inter);
+}
+
+auto nms(DetectResult& boxes, float iou_threshold) -> void {
+  if (boxes.size() <= 1)
+    return;
+  Vector<core::Rect2f> rects;
+  Vector<float> scores;
+  for (const auto& box : boxes) {
+    rects.push_back(box.rect);
+    scores.push_back(box.score);
+  }
+  DetectResult kept;
+  for (auto index : nms_indices(rects, scores, iou_threshold))
+    kept.push_back(boxes[index]);
+  boxes = std::move(kept);
 }
 
 } // namespace
@@ -54,21 +67,6 @@ auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores,
       kept.push_back(index);
   }
   return kept;
-}
-
-auto nms(DetectResult& boxes, float iou_threshold) -> void {
-  if (boxes.size() <= 1)
-    return;
-  Vector<core::Rect2f> rects;
-  Vector<float> scores;
-  for (const auto& box : boxes) {
-    rects.push_back(box.rect);
-    scores.push_back(box.score);
-  }
-  DetectResult kept;
-  for (auto index : nms_indices(rects, scores, iou_threshold))
-    kept.push_back(boxes[index]);
-  boxes = std::move(kept);
 }
 
 auto nms_rotated(RotatedResult& boxes, float iou_threshold) -> void {

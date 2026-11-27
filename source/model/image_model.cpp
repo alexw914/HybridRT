@@ -29,10 +29,6 @@ auto check_options(const ImageModelOptions& options, std::string_view algo) -> b
   return true;
 }
 
-auto read_config(const hrtc::AlgoParam& algo) -> kitzoo::json::Reader {
-  return kitzoo::json::Reader{algo.config};
-}
-
 auto preprocess_config(kitzoo::json::Json section) -> kitzoo::json::Json {
   const auto value = section.find("pad_value");
   if (value != section.end() && value->is_number())
@@ -69,7 +65,7 @@ auto device_type(preprocess::ImagePreprocessorType type) -> core::DeviceType {
 
 // Device the configured preprocessor needs; `algo` passed check().
 auto preprocess_device(const hrtc::AlgoParam& algo) -> core::DeviceType {
-  const auto reader = read_config(algo);
+  const kitzoo::json::Reader reader{algo.config};
   const auto section = preprocess_config(reader.raw().value("preprocess", kitzoo::json::Json::object()));
   return device_type(section.get<preprocess::ImagePreprocessorParam>().device);
 }
@@ -112,7 +108,7 @@ auto load_first(const hrtc::AlgoParam& algo, core::DeviceType preprocess_device,
 // Problems in the config of `algo`; the "postprocess" keys besides type are
 // left to a custom factory unless `builtin_postprocess`.
 auto check(const hrtc::AlgoParam& algo, bool builtin_postprocess) -> core::Problems {
-  const auto reader = read_config(algo);
+  const kitzoo::json::Reader reader{algo.config};
   if (!reader.is_parse_success())
     return {"config: invalid JSON: " + reader.error_info()};
   const auto& config = reader.raw();
@@ -192,7 +188,7 @@ auto task_type(std::string_view postprocess_type) -> std::optional<Task> {
   return std::nullopt;
 }
 auto task_type(const hrtc::AlgoParam& algo) -> std::optional<Task> {
-  const auto reader = read_config(algo);
+  const kitzoo::json::Reader reader{algo.config};
   if (!reader.is_parse_success() || !reader.raw().is_object())
     return std::nullopt;
   const auto& config = reader.raw();
@@ -231,7 +227,7 @@ auto ImageModel<Result>::create(const hrtc::AlgoParam& algo, SharedPtr<core::Con
   KZ_CHECK_RETURN(loaded.has_value(), nullptr, "ImageModel: no engine of algo {} runs on this context in this build",
                   algo.name);
   UniquePtr<ImageModel> model(new ImageModel(std::move(loaded->context), options));
-  if (!model->build(algo, read_config(algo).raw(), factory, std::move(loaded->engine), *loaded->param))
+  if (!model->build(algo, kitzoo::json::Reader{algo.config}.raw(), factory, std::move(loaded->engine), *loaded->param))
     return nullptr;
   return model;
 }
@@ -248,7 +244,7 @@ auto ImageModel<Result>::create(const hrtc::AlgoParam& algo, const ImageModelOpt
   KZ_CHECK_RETURN(loaded.has_value(), nullptr, "ImageModel: no engine of algo {} runs on this machine in this build",
                   algo.name);
   UniquePtr<ImageModel> model(new ImageModel(std::move(loaded->context), options));
-  if (!model->build(algo, read_config(algo).raw(), factory, std::move(loaded->engine), *loaded->param))
+  if (!model->build(algo, kitzoo::json::Reader{algo.config}.raw(), factory, std::move(loaded->engine), *loaded->param))
     return nullptr;
   return model;
 }

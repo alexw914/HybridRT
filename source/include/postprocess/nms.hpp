@@ -19,9 +19,6 @@ namespace hrt::postprocess {
 auto nms_indices(const Vector<core::Rect2f>& rects, const Vector<float>& scores, float iou_threshold)
     -> Vector<std::size_t>;
 
-// Greedy NMS within one class, highest score first.
-auto nms(DetectResult& boxes, float iou_threshold) -> void;
-
 // Greedy NMS within one class using polygon IoU.
 auto nms_rotated(RotatedResult& boxes, float iou_threshold) -> void;
 

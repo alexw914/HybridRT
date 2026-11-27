@@ -126,10 +126,6 @@ auto DvppImagePreprocessor::adjust_roi(core::Rect& dst_roi, core::Rect& src_roi,
 
 auto DvppImagePreprocessor::fused(core::Image& dst, const ImageTransform& transform, const core::Image& src,
                                   const ImagePreprocessorParam& param, core::Stream* stream) -> bool {
-  if (param.interpolation_mode == InterpolationMode::Cubic) {
-    KZ_LOG_ERROR("dvpp: cubic interpolation is not supported");
-    return false;
-  }
   const auto& from = transform.src_roi;
   const auto& to = transform.dst_roi;
   auto source = picture(src, stream, false);
