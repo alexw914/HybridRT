@@ -52,7 +52,7 @@ auto prepare(benchmark::State& state, const kitzoo::json::Json& entry, const std
   const auto& input = *inputs.front();
   const auto& shape = input.shape();
   auto* base = static_cast<std::byte*>(input.memory()->mutable_cpu());
-#ifdef HRT_BENCH_RKNN
+#ifdef HRT_USE_RKNN
   const auto path = std::filesystem::path(HRT_SOURCE_DIR) / "assets/test/calib/rknn_int8" /
                     entry["name"].get<hrt::String>() / "input_nhwc.bin";
   std::error_code error;
@@ -152,7 +152,7 @@ auto BM_Type(benchmark::State& state) -> void {
     state.SkipWithError("Template model is missing");
     return;
   }
-#ifdef HRT_BENCH_RKNN
+#ifdef HRT_USE_RKNN
   const auto quantized = state.range(1) != 0;
   const auto batch = state.range(2);
   auto path = std::filesystem::path(entry["config"]["engine"]["backends"][0]["data"].get<hrt::String>());
@@ -196,7 +196,7 @@ auto BM_Type(benchmark::State& state) -> void {
   if (!prepared)
     return;
   auto label = type + ":" + entry["name"].get<hrt::String>();
-#ifdef HRT_BENCH_RKNN
+#ifdef HRT_USE_RKNN
   label += quantized ? "/int8_model" : "/fp16_model";
 #else
   label += "/onnx_fp32";
@@ -211,7 +211,7 @@ auto BM_Type(benchmark::State& state) -> void {
   }
   state.counters["int8_outputs"] = static_cast<double>(int8_outputs);
   state.counters["fp32_outputs"] = static_cast<double>(fp32_outputs);
-#ifndef HRT_BENCH_RKNN
+#ifndef HRT_USE_RKNN
   if (fp32_outputs != prepared->outputs.size() || prepared->transforms.size() != static_cast<std::size_t>(batch)) {
     state.SkipWithError("ONNX outputs must be FP32 with the requested static batch");
     return;
@@ -241,7 +241,7 @@ auto type_cases(benchmark::Benchmark* bench) -> void {
     const auto& name = algos[i]["name"].get_ref<const hrt::String&>();
     if (name.ends_with("_batch4") || name.ends_with("_batch8"))
       continue;
-#ifdef HRT_BENCH_RKNN
+#ifdef HRT_USE_RKNN
     bench->Args({static_cast<std::int64_t>(i), 0, 1});
     for (const auto batch : {1, 4, 8})
       bench->Args({static_cast<std::int64_t>(i), 1, batch});

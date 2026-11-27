@@ -85,7 +85,7 @@ TEST(HrtTest, ReportsVersionAndEngines) {
   EXPECT_NE(std::string_view(hrt_version()), "");
   EXPECT_EQ(hrt_engine_available("unknown"), 0);
   EXPECT_EQ(hrt_engine_available(nullptr), 0);
-#ifdef HRT_TEST_ORT
+#ifdef HRT_USE_ORT
   EXPECT_EQ(hrt_engine_available("ort"), 1);
 #endif
   const auto options = hrt_model_options_default();
@@ -129,7 +129,7 @@ TEST(HrtTest, ReportsModelErrorsWithoutAborting) {
   const HrtModelOptions large{1, 65, 1};
   EXPECT_EQ(hrt_model_create(package, "classify", &large, &model), HRT_STATUS_INVALID_ARGUMENT);
   EXPECT_EQ(hrt_model_create(package, "absent", nullptr, &model), HRT_STATUS_UNAVAILABLE);
-#ifdef HRT_TEST_ORT
+#ifdef HRT_USE_ORT
   EXPECT_EQ(hrt_model_create(package, "mismatch", nullptr, &model), HRT_STATUS_INVALID_CONFIG);
   EXPECT_NE(std::string_view(hrt_last_error()), "");
 #endif
@@ -170,7 +170,7 @@ TEST(HrtTest, LogsFromThreadsWhileTheCallbackChanges) {
   EXPECT_GT(received.load(), 0);
 }
 
-#ifdef HRT_TEST_ORT
+#ifdef HRT_USE_ORT
 TEST(HrtTest, RunsModelAndReusesResult) {
   auto* package = load_package({identity_algo("classify", classify_config())});
   ASSERT_NE(package, nullptr);

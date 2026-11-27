@@ -15,7 +15,7 @@
 
 #include "include/preprocess/cpu_image_preprocessor.hpp"
 
-#ifdef HRT_USE_METAL
+#ifdef __APPLE__
 #include "include/preprocess/metal_image_preprocessor.hpp"
 #endif
 
@@ -190,7 +190,7 @@ auto ImagePreprocessor::create(ImagePreprocessorType type, core::MemoryType targ
   switch (type) {
   case ImagePreprocessorType::Cpu:
     return std::make_unique<CpuImagePreprocessor>();
-#ifdef HRT_USE_METAL
+#ifdef __APPLE__
   case ImagePreprocessorType::Metal:
     return MetalImagePreprocessor::create();
 #endif

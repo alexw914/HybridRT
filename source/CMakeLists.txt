@@ -112,7 +112,6 @@ auto metal_image_kernel() -> const char* {
     target_sources(hybridrt PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated/metal_image_kernel.cpp)
     set_target_properties(hybridrt PROPERTIES OBJCXX_STANDARD 20 OBJCXX_STANDARD_REQUIRED ON)
     target_link_libraries(hybridrt PRIVATE "-framework Metal" "-framework Foundation")
-    target_compile_definitions(hybridrt PRIVATE HRT_USE_METAL)
 endif()
 
 if(HRT_USE_ORT)
@@ -153,7 +152,7 @@ endif()
 if(HRT_USE_TENSORRT)
     target_sources(hybridrt PRIVATE engine/tensorrt_engine.cpp)
     target_link_libraries(hybridrt PRIVATE TensorRT::nvinfer TensorRT::nvinfer_plugin ${CMAKE_DL_LIBS})
-    target_compile_definitions(hybridrt PRIVATE HRT_USE_TENSORRT HRT_TENSORRT_VERSION=${HRT_TENSORRT_VERSION})
+    target_compile_definitions(hybridrt PRIVATE HRT_USE_TENSORRT)
 endif()
 
 if(HRT_USE_RKNN)

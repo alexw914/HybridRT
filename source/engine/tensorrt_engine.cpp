@@ -83,7 +83,7 @@ auto load_plugins(const Vector<String>& libraries) -> void {
       continue;
     }
 #endif
-#if HRT_TENSORRT_VERSION >= 80600
+#if NV_TENSORRT_MAJOR > 8 || (NV_TENSORRT_MAJOR == 8 && NV_TENSORRT_MINOR >= 6)
 #ifdef _WIN32
     const bool has_creators =
         GetProcAddress(handle, "getPluginCreators") != nullptr || GetProcAddress(handle, "getCreators") != nullptr;
@@ -114,7 +114,7 @@ auto data_type(nvinfer1::DataType type) -> std::optional<core::DataType> {
     return core::DataType::Int8;
   case nvinfer1::DataType::kINT32:
     return core::DataType::Int32;
-#if HRT_TENSORRT_VERSION >= 100000
+#if NV_TENSORRT_MAJOR >= 10
   case nvinfer1::DataType::kINT64:
     return core::DataType::Int64;
 #endif

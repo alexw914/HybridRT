@@ -14,7 +14,7 @@
 #include <rknn_api.h>
 #endif
 
-#ifdef HRT_TEST_TENSORRT
+#ifdef HRT_USE_TENSORRT
 #include <NvInfer.h>
 #endif
 #include <algorithm>
@@ -29,14 +29,14 @@
 #include <opencv2/imgproc.hpp>
 #endif
 
-#ifdef HRT_TEST_ORT
+#ifdef HRT_USE_ORT
 #include "../engine/onnx_model.hpp"
 #endif
 #if defined(HRT_ORT_MODEL_TEST) || defined(HRT_RKNN_MODEL_TEST)
 #include "../engine/template_config.hpp"
 #endif
 
-#ifdef HRT_TEST_ORT
+#ifdef HRT_USE_ORT
 
 namespace {
 
@@ -675,7 +675,7 @@ TEST_F(ImageModelTest, RunsTheBatchOverloadOnABatchOfOne) {
 
 #if defined(HRT_ORT_MODEL_TEST) || defined(HRT_RKNN_MODEL_TEST)
 namespace {
-#ifndef HRT_TEST_ORT
+#ifndef HRT_USE_ORT
 class ImageModelTest : public ::testing::Test {};
 #endif
 
@@ -871,7 +871,7 @@ TEST_F(ImageModelTest, MatchesBatchOneOnStaticBatchModels) {
   }
 }
 
-#ifdef HRT_TEST_TENSORRT
+#ifdef HRT_USE_TENSORRT
 TEST_F(ImageModelTest, MatchesBatchOneOnTensorRtStaticBatchModels) {
   for (const auto device : {"trt_cpu", "trt_cuda"}) {
     SCOPED_TRACE(device);
@@ -951,7 +951,7 @@ TEST_F(ImageModelTest, MatchesBatchOneOnRknnStaticBatchModels) {
 } // namespace
 #endif
 
-#ifdef HRT_TEST_TENSORRT
+#ifdef HRT_USE_TENSORRT
 namespace {
 
 class TestLogger final : public nvinfer1::ILogger {
@@ -962,7 +962,7 @@ public:
   }
 };
 
-#if !defined(HRT_TEST_ORT) && !defined(HRT_RKNN_MODEL_TEST)
+#if !defined(HRT_USE_ORT) && !defined(HRT_RKNN_MODEL_TEST)
 class ImageModelTest : public ::testing::Test {};
 #endif
 
@@ -975,7 +975,7 @@ TEST_F(ImageModelTest, KeepsCudaPreprocessorScratchAliveUntilStreamCompletes) {
   TestLogger logger;
   hrt::UniquePtr<nvinfer1::IBuilder> builder(nvinfer1::createInferBuilder(logger));
   ASSERT_NE(builder, nullptr);
-#if HRT_TENSORRT_VERSION < 100000
+#if NV_TENSORRT_MAJOR < 10
   constexpr auto kNetworkFlags =
       1U << static_cast<unsigned int>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
 #else

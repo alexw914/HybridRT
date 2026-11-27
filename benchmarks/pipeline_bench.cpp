@@ -22,7 +22,7 @@ auto configure_opencv() -> void {
   std::call_once(once, []() -> void { cv::setNumThreads(1); });
 }
 
-#ifdef HRT_BENCH_ORT
+#ifdef HRT_USE_ORT
 constexpr hrt::Array<const char*, 2> kProviders{"cpu", "coreml"};
 
 // ORT CPU, plus CoreML on Apple platforms, the only ones that have it.
@@ -141,13 +141,13 @@ auto BM_Ocr(benchmark::State& state) -> void {
 
 // Batch pipelines: 0 CPU preprocessing with ORT CoreML, 1 Metal with ORT CoreML, 2 CUDA with TensorRT,
 // 3 RGA with RKNN, 4 CUDA preprocessing with ORT CUDA; each build registers its platform paths.
-#ifdef HRT_BENCH_RKNN
+#ifdef HRT_USE_RKNN
 const hrt::Vector<std::int64_t> kBatchTasks{0, 1, 2, 4};
 const hrt::Vector<std::int64_t> kBatchPipelines{3};
 #elif defined(__APPLE__)
 const hrt::Vector<std::int64_t> kBatchTasks{0, 1, 2, 4};
 const hrt::Vector<std::int64_t> kBatchPipelines{0, 1};
-#elif defined(HRT_BENCH_ORT) && defined(HRT_BENCH_CUDA) && !defined(HRT_BENCH_TENSORRT)
+#elif defined(HRT_USE_ORT) && defined(HRT_USE_CUDA) && !defined(HRT_USE_TENSORRT)
 const hrt::Vector<std::int64_t> kBatchTasks{0, 1, 2, 4};
 const hrt::Vector<std::int64_t> kBatchPipelines{4};
 #else
@@ -292,7 +292,7 @@ auto BM_Batch(benchmark::State& state) -> void {
 
 } // namespace
 
-#ifdef HRT_BENCH_ORT
+#ifdef HRT_USE_ORT
 BENCHMARK(BM_Task)
     ->ArgNames({"task", "provider"})
     ->ArgsProduct({{0, 1, 2, 3, 4}, kProviderArgs})
