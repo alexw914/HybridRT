@@ -323,7 +323,7 @@ TEST(DetectGeneralTest, SkipsNanCentersAndNonpositiveSizes) {
 }
 
 // 37 anchors cover two 16-value blocks the score scan may skip and a tail;
-// hits sit at block edges, and a score equal to the threshold is rejected.
+// hits sit at block edges, and a score equal to the threshold passes.
 TEST(DetectGeneralTest, ScansScoreRowsAcrossBlocksAndTail) {
   constexpr std::size_t kAnchors = 37;
   const hrt::Vector<std::size_t> hits{0, 15, 16, 31, 33, 36};
@@ -361,7 +361,7 @@ TEST(DetectGeneralTest, ScansScoreRowsAcrossBlocksAndTail) {
     // box(i): center 2i + 0.5, size 1; box(0) and box(-1) give cy 0.5 and size 1.
     const auto box = [](std::int64_t i) -> float { return i < 0 ? 1.0F : static_cast<float>(2 * i) + 0.5F; };
     hrt::postprocess::DetectResultMap result;
-    ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, rows(box, 0.5F, 0.9F))},
+    ASSERT_TRUE(postprocessor->process(result, {hrt::test::create_buffer(output, rows(box, 0.49F, 0.5F))},
                                        hrt::test::identity(80, 80)));
     expect_hits(result, 0.0F, 2.0F);
   }
@@ -371,10 +371,10 @@ TEST(DetectGeneralTest, ScansScoreRowsAcrossBlocksAndTail) {
     auto postprocessor =
         hrt::postprocess::create_postprocessor<hrt::postprocess::DetectResultMap>("GeneralDetect", config, engine);
     ASSERT_NE(postprocessor, nullptr);
-    // real = 0.5 * q: centers i + 0.5 and size 0.5; score q = 1 is exactly the
-    // threshold and q = 2 passes.
+    // real = 0.5 * q: centers i + 0.5 and size 0.5; score q = 0 is below the
+    // threshold and q = 1 equals the threshold and passes.
     const auto box = [](std::int64_t i) -> std::int8_t { return static_cast<std::int8_t>(i < 0 ? 1 : 2 * i + 1); };
-    auto buffer = hrt::test::create_buffer<std::int8_t>(output, rows(box, std::int8_t{1}, std::int8_t{2}));
+    auto buffer = hrt::test::create_buffer<std::int8_t>(output, rows(box, std::int8_t{0}, std::int8_t{1}));
     buffer->set_quantization(0.5F, 0);
     hrt::postprocess::DetectResultMap result;
     ASSERT_TRUE(postprocessor->process(result, {buffer}, hrt::test::identity(80, 80)));
@@ -401,10 +401,10 @@ TEST(DetectGeneralTest, KeepsTightInt8BoundsAtFloatRoundingEdges) {
           int bound = 128;
           for (int value = -128; value <= 127; ++value) {
             const auto real = scale * static_cast<float>(value - zero_point);
-            if (real >= threshold)
+            if (real >= threshold) {
               bound = std::min(bound, value);
-            if (real > threshold)
               expected.push_back(static_cast<std::uint32_t>(value + 128));
+            }
           }
           EXPECT_EQ(grid.raw_bound(threshold), static_cast<float>(bound));
           EXPECT_EQ(scanner.scan_channel(grid, 4, threshold), expected);

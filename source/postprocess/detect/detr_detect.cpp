@@ -75,7 +75,7 @@ protected:
       const auto* logits = logits_.data();
       float max_logit = std::numeric_limits<float>::lowest();
       float denominator = 0.0F;
-      if (param_.score_activation == DetrScoreActivation::Softmax) {
+      if (param_.score_activation == ScoreActivation::Softmax) {
         if (!std::all_of(logits, logits + score_channels_, [](float value) -> bool { return std::isfinite(value); }))
           continue;
         max_logit = *std::max_element(logits, logits + score_channels_);
@@ -90,16 +90,16 @@ protected:
         auto value = logits[c];
         if (!std::isfinite(value))
           continue;
-        if (param_.score_activation == DetrScoreActivation::Sigmoid)
+        if (param_.score_activation == ScoreActivation::Sigmoid)
           value = core::sigmoid(value);
-        else if (param_.score_activation == DetrScoreActivation::Softmax)
+        else if (param_.score_activation == ScoreActivation::Softmax)
           value = std::exp(value - max_logit) / denominator;
         if (value > score) {
           cls = c - (param_.background_class >= 0 && c > static_cast<std::size_t>(param_.background_class) ? 1U : 0U);
           score = value;
         }
       }
-      if (!(score > param_.confidence_threshold[cls]))
+      if (!(score >= param_.confidence_threshold[cls]))
         continue;
       const auto rect = transform.clip_reverse(core::center_box(
           box[0] * static_cast<float>(input_size_.width), box[1] * static_cast<float>(input_size_.height),

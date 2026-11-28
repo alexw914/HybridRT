@@ -115,7 +115,7 @@ auto MaskDecoder::decode(const HeadGridView& prototypes, std::span<const float> 
     const auto* bottom = across_.data() + static_cast<std::size_t>(tap.second) * static_cast<std::size_t>(width);
     auto* bits = mask.data.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(width);
     for (int x = 0; x < width; ++x)
-      bits[x] = top[x] + (bottom[x] - top[x]) * tap.weight > mask_logit ? 1 : 0;
+      bits[x] = top[x] + (bottom[x] - top[x]) * tap.weight >= mask_logit ? 1 : 0;
   }
   return mask;
 }

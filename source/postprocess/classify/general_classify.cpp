@@ -11,25 +11,14 @@
 
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/postprocessor_creators.hpp"
+#include "include/postprocess/postprocessor_params.hpp"
 
 namespace hrt::postprocess {
 
 namespace {
 
-enum class ClassifyActivation {
-  None,
-  Sigmoid,
-  Softmax,
-};
-
-NLOHMANN_JSON_SERIALIZE_ENUM(ClassifyActivation, {
-                                                     {ClassifyActivation::None, "none"},
-                                                     {ClassifyActivation::Sigmoid, "sigmoid"},
-                                                     {ClassifyActivation::Softmax, "softmax"},
-                                                 })
-
 struct GeneralClassifyParam {
-  ClassifyActivation classify_postprocess_type = ClassifyActivation::None;
+  ScoreActivation classify_postprocess_type = ScoreActivation::None;
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(GeneralClassifyParam, classify_postprocess_type)
@@ -56,9 +45,9 @@ protected:
     for (std::size_t i = 0; i < outputs.size(); ++i) {
       const auto* data = sample_floats(*outputs[i], index, scratch_[i]);
       auto& scores = result.emplace_back(data, data + sample_volume(*outputs[i]));
-      if (activation_ == ClassifyActivation::Sigmoid) {
+      if (activation_ == ScoreActivation::Sigmoid) {
         std::transform(scores.begin(), scores.end(), scores.begin(), core::sigmoid);
-      } else if (activation_ == ClassifyActivation::Softmax && !scores.empty()) {
+      } else if (activation_ == ScoreActivation::Softmax && !scores.empty()) {
         const auto max = *std::max_element(scores.begin(), scores.end());
         float sum = 0.0F;
         for (auto& score : scores) {
@@ -73,7 +62,7 @@ protected:
   }
 
 private:
-  ClassifyActivation activation_ = ClassifyActivation::None;
+  ScoreActivation activation_ = ScoreActivation::None;
   Vector<core::Buffer> scratch_;
 };
 

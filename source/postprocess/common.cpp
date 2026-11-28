@@ -339,16 +339,7 @@ auto scan_channel_cells(const HeadGridView& grid, std::size_t channel, float thr
     -> void {
   const auto* values = grid.row<T>(0, channel);
   const auto step = grid.col_step();
-  const auto raw = grid.raw_bound(threshold);
-  const auto bound = typed_bound<T>(raw);
-  // The largest stored value not above the threshold, so values are compared
-  // as stored: int8 values above it dequantize above the threshold.
-  auto above = bound;
-  if constexpr (!std::is_same_v<T, float>) {
-    if (raw >= -128.0F && raw <= 127.0F &&
-        !(core::dequantize(static_cast<std::int8_t>(bound), grid.scale(), grid.zero_point()) <= threshold))
-      --above;
-  }
+  const auto bound = typed_bound<T>(grid.raw_bound(threshold));
   const auto exact = std::is_same_v<T, float> || grid.scale() > 0.0F;
   const auto cols = static_cast<std::size_t>(grid.cols());
   cells.clear();
@@ -356,7 +347,7 @@ auto scan_channel_cells(const HeadGridView& grid, std::size_t channel, float thr
   const auto check = [&](std::size_t end) -> void {
     for (; x < end; ++x) {
       const auto value = values[x * step];
-      if (exact ? value > above : grid.at(0, static_cast<std::int64_t>(x), channel) > threshold)
+      if (exact ? value >= bound : grid.at(0, static_cast<std::int64_t>(x), channel) >= threshold)
         cells.push_back(static_cast<std::uint32_t>(x));
     }
   };

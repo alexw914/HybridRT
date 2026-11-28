@@ -64,6 +64,10 @@ TEST(OcrTest, ExpandsScoresAndMapsDbRegions) {
   EXPECT_GE(rect.y, 30);
   EXPECT_LE(rect.x + rect.width, 147);
   EXPECT_LE(rect.y + rect.height, 93);
+  EXPECT_NEAR(result[0].points[0].x, rect.x, 1e-4F);
+  EXPECT_NEAR(result[0].points[0].y, rect.y, 1e-4F);
+  EXPECT_NEAR(result[0].points[2].x, rect.x + rect.width, 1e-4F);
+  EXPECT_NEAR(result[0].points[2].y, rect.y + rect.height, 1e-4F);
   std::fill(scores.begin(), scores.end(), 0.0F);
   ASSERT_TRUE(decoder->process(result, {hrt::test::create_buffer<float>(output, scores)}, transform));
   EXPECT_TRUE(result.empty());

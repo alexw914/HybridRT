@@ -15,6 +15,7 @@
 
 #include "include/postprocess/common.hpp"
 #include "include/postprocess/postprocessor_creators.hpp"
+#include "include/postprocess/postprocessor_params.hpp"
 
 namespace hrt::postprocess {
 
@@ -48,22 +49,12 @@ NLOHMANN_JSON_SERIALIZE_ENUM(HeatmapRefine, {
                                                 {HeatmapRefine::Dark, "dark"},
                                             })
 
-enum class KeypointScoreActivation {
-  None,
-  Sigmoid,
-};
-
-NLOHMANN_JSON_SERIALIZE_ENUM(KeypointScoreActivation, {
-                                                          {KeypointScoreActivation::None, "none"},
-                                                          {KeypointScoreActivation::Sigmoid, "sigmoid"},
-                                                      })
-
 // heatmap_refine applies to heatmaps; score_activation and keypoint_threshold
-// to heatmap and simcc scores, whose keypoints are visible above the threshold.
+// to heatmap and simcc scores, whose keypoints are visible at or above the threshold.
 struct GeneralKeypointParam {
   KeypointOutput general_keypoint_type = KeypointOutput::Heatmap;
   HeatmapRefine heatmap_refine = HeatmapRefine::Dark;
-  KeypointScoreActivation score_activation = KeypointScoreActivation::None;
+  ScoreActivation score_activation = ScoreActivation::None;
   float keypoint_threshold = 0.0F;
 };
 
@@ -168,6 +159,8 @@ public:
   KZ_NODISCARD auto check_config(const kitzoo::json::Json& config) const -> Vector<String> override {
     core::Problems problems;
     core::check_param<GeneralKeypointParam>(config, "postprocess", {"type"}, problems);
+    if (problems.empty() && config.get<GeneralKeypointParam>().score_activation == ScoreActivation::Softmax)
+      problems.emplace_back("postprocess.score_activation: softmax is not supported for keypoints");
     return problems;
   }
 
@@ -227,10 +220,10 @@ protected:
         keypoint.point = transform.reverse(core::Point2f{keypoint.point.x * width, keypoint.point.y * height});
         if (!scored)
           continue;
-        if (param_.score_activation == KeypointScoreActivation::Sigmoid)
+        if (param_.score_activation == ScoreActivation::Sigmoid)
           keypoint.score = core::sigmoid(keypoint.score);
         keypoint.visible =
-            keypoint.score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible;
+            keypoint.score >= param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible;
       }
     }
     return true;

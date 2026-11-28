@@ -67,7 +67,7 @@ protected:
         continue;
       const auto cls = static_cast<std::size_t>(label);
       const auto score = output.at(i, 4);
-      if (!(score > param_.confidence_threshold[cls]))
+      if (!(score >= param_.confidence_threshold[cls]))
         continue;
       const core::Point2f tl{output.at(i, 0), output.at(i, 1)};
       const core::Point2f br{output.at(i, 2), output.at(i, 3)};
@@ -83,7 +83,7 @@ protected:
         const auto visibility = output.at(i, c + 2);
         object.keypoints.push_back(
             {transform.reverse(core::Point2f{output.at(i, c), output.at(i, c + 1)}),
-             visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
+             visibility >= param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
              visibility});
       }
     }

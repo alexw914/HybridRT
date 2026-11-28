@@ -73,7 +73,7 @@ protected:
     for (std::size_t i = 0; i < count; ++i) {
       const auto score = boxes.at(i, 4);
       // Also skips NaN boxes and scores.
-      if (!(score > param_.confidence_threshold[0]))
+      if (!(score >= param_.confidence_threshold[0]))
         continue;
       const core::Point2f tl{boxes.at(i, 0), boxes.at(i, 1)};
       const core::Point2f br{boxes.at(i, 2), boxes.at(i, 3)};
@@ -96,7 +96,7 @@ protected:
         const auto score = points.at(row, j, 2);
         object.keypoints.push_back(
             {transform.reverse(core::Point2f{points.at(row, j, 0), points.at(row, j, 1)}),
-             score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
+             score >= param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
       }
     }
     return true;

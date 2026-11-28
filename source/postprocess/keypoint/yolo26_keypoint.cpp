@@ -121,7 +121,7 @@ private:
                                     (grid.at(y, x, channel + 1) + cy) * stride.y};
           const auto visibility = sigmoid_at(grid, tables, y, x, channel + 2);
           object.keypoints.push_back(
-              {point, visibility > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
+              {point, visibility >= param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible,
                visibility});
         }
       }

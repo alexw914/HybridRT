@@ -64,7 +64,7 @@ protected:
         continue;
       const auto cls = static_cast<std::size_t>(label);
       const auto score = output.at(i, 4);
-      if (!(score > param_.confidence_threshold[cls]))
+      if (!(score >= param_.confidence_threshold[cls]))
         continue;
       const auto width = output.at(i, 2);
       const auto height = output.at(i, 3);

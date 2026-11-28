@@ -83,8 +83,9 @@ using SegmentResult = Vector<SegmentObject>;
 using SegmentResultMap = Map<std::int64_t, SegmentResult>;
 
 struct OcrText {
-  core::Rect2f rect; // Axis-aligned text box in source pixels.
-  String text;       // UTF-8; empty for detection-only results.
+  core::Rect2f rect;              // Axis-aligned text box in source pixels.
+  Array<core::Point2f, 4> points; // Clockwise quad corners (TL, TR, BR, BL) in source pixels.
+  String text;                    // UTF-8; empty for detection-only results.
   float detection_score = 0.0F;
   float recognition_score = 0.0F;
 };

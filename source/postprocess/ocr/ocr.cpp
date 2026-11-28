@@ -69,11 +69,11 @@ struct MapValues {
 };
 
 // Stored-value bounds of an int8 map: [low, high] holds the values in [0, 1]
-// and values above `above` exceed `threshold`.
+// and values >= `at_least` reach `threshold`.
 struct Int8Bounds {
   std::int32_t low = 128;
   std::int32_t high = -129;
-  std::int32_t above = 127;
+  std::int32_t at_least = 128;
 };
 
 auto int8_bounds(const MapValues& map, float threshold) -> Int8Bounds {
@@ -84,24 +84,23 @@ auto int8_bounds(const MapValues& map, float threshold) -> Int8Bounds {
       bounds.low = std::min(bounds.low, q);
       bounds.high = q;
     }
-    if (value <= threshold)
-      bounds.above = q;
+    if (value >= threshold)
+      bounds.at_least = std::min(bounds.at_least, q);
   }
-  if (map.value(std::int8_t{-128}) > threshold)
-    bounds.above = -129;
   return bounds;
 }
 
-// 255 where data > above or `all` is set, else 0; false when a value is
+// 255 where data >= at_least and `mask` is set, else 0; false when a value is
 // outside [low, high] (or NaN). Branch-free, with & rather than &&, and int8
 // bounds for int8 maps keep the loop vectorized at full lane width.
 template <typename T>
-auto binarize(const T* data, std::size_t count, T low, T high, T above, std::uint8_t all, std::uint8_t* out) -> bool {
+auto binarize(const T* data, std::size_t count, T low, T high, T at_least, std::uint8_t mask, std::uint8_t* out)
+    -> bool {
   unsigned invalid = 0;
   for (std::size_t i = 0; i < count; ++i) {
     const auto value = data[i];
     invalid |= static_cast<unsigned>(!((value >= low) & (value <= high)));
-    out[i] = static_cast<std::uint8_t>((value > above ? 255 : 0) | all);
+    out[i] = static_cast<std::uint8_t>((value >= at_least ? 255 : 0) & mask);
   }
   return invalid == 0;
 }
@@ -227,14 +226,14 @@ private:
     bitmap_.create(height, width, CV_8U);
     bool valid = false;
     if constexpr (std::is_same_v<T, float>) {
-      valid = binarize(data, pixels, 0.0F, 1.0F, det_.threshold, std::uint8_t{0}, bitmap_.ptr<std::uint8_t>());
+      valid = binarize(data, pixels, 0.0F, 1.0F, det_.threshold, std::uint8_t{255}, bitmap_.ptr<std::uint8_t>());
     } else {
       const auto bounds = int8_bounds(map, det_.threshold);
-      // An empty [low, high] rejects any map; an `above` below -128 sets every pixel.
+      // An empty [low, high] rejects any map; an `at_least` above 127 clears every pixel.
       valid = bounds.low <= bounds.high &&
               binarize(data, pixels, static_cast<std::int8_t>(bounds.low), static_cast<std::int8_t>(bounds.high),
-                       static_cast<std::int8_t>(std::max(bounds.above, -128)),
-                       static_cast<std::uint8_t>(bounds.above < -128 ? 255 : 0), bitmap_.ptr<std::uint8_t>());
+                       static_cast<std::int8_t>(std::min(bounds.at_least, 127)),
+                       static_cast<std::uint8_t>(bounds.at_least > 127 ? 0 : 255), bitmap_.ptr<std::uint8_t>());
     }
     KZ_CHECK_RETURN(valid, false, "Ocr DB: expected finite probabilities in [0, 1]");
     contours_.clear();
@@ -289,6 +288,8 @@ private:
       const auto [top, bottom] = std::minmax({points[0].y, points[1].y, points[2].y, points[3].y});
       auto& text = result.emplace_back();
       text.rect = {left, top, right - left, bottom - top};
+      for (std::size_t j = 0; j < 4; ++j)
+        text.points[j] = {points[j].x, points[j].y};
       text.detection_score = score;
     }
     // PP-OCR reading order: sort by top then left, then reorder boxes within 10 pixels vertically by left edge.

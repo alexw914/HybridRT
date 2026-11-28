@@ -70,7 +70,7 @@ private:
           if (objectness < threshold)
             continue;
           const auto score = sigmoid_at(grid, tables, y, x, base + 6 + cls) * objectness;
-          if (score <= threshold)
+          if (score < threshold)
             continue;
           if (!decoded) {
             rect.center = {(sigmoid_at(grid, tables, y, x, base) * 2.0F - 0.5F + static_cast<float>(x)) * stride.x,

@@ -39,8 +39,10 @@ TEST(DetrDetectTest, SelectsOneClassAndKeepsOverlappingQueries) {
   const hrt::preprocess::ImageTransform transform{{0, 10, 40, 20}, {100, 200, 80, 40}, {40, 40}};
   hrt::postprocess::DetectResultMap result;
   ASSERT_TRUE(decoder->process(result, {hrt::test::create_buffer(output, values)}, transform));
-  ASSERT_EQ(result.size(), 1U);
+  ASSERT_EQ(result.size(), 2U);
   ASSERT_EQ(result.at(0).size(), 2U);
+  ASSERT_EQ(result.at(1).size(), 1U);
+  EXPECT_FLOAT_EQ(result.at(1)[0].score, 0.7F);
   const auto& box = result.at(0)[0];
   EXPECT_FLOAT_EQ(box.rect.x, 120.0F);
   EXPECT_FLOAT_EQ(box.rect.y, 210.0F);

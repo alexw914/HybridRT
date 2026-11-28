@@ -28,8 +28,9 @@ public:
   OcrModel(const OcrModel&) = delete;
   auto operator=(const OcrModel&) -> OcrModel& = delete;
 
-  // Host or device image, results in source pixels. Empty detection is a successful empty result.
+  // Host or device images, results in source pixels. Empty detection is a successful empty result.
   auto process_sync(const core::Image& src) -> std::optional<postprocess::OcrResult>;
+  auto process_sync(const Vector<core::Image>& srcs) -> std::optional<Vector<postprocess::OcrResult>>;
 
   KZ_NODISCARD auto detection_engine_type() const -> engine::EngineType;
 

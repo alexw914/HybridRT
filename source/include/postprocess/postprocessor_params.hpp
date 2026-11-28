@@ -66,23 +66,23 @@ NLOHMANN_JSON_SERIALIZE_ENUM(DetrOutputFormat, {
                                                    {DetrOutputFormat::Separate, "separate"},
                                                })
 
-enum class DetrScoreActivation {
+enum class ScoreActivation {
   None,
   Sigmoid,
   Softmax,
 };
 
-NLOHMANN_JSON_SERIALIZE_ENUM(DetrScoreActivation, {
-                                                      {DetrScoreActivation::None, "none"},
-                                                      {DetrScoreActivation::Sigmoid, "sigmoid"},
-                                                      {DetrScoreActivation::Softmax, "softmax"},
-                                                  })
+NLOHMANN_JSON_SERIALIZE_ENUM(ScoreActivation, {
+                                                  {ScoreActivation::None, "none"},
+                                                  {ScoreActivation::Sigmoid, "sigmoid"},
+                                                  {ScoreActivation::Softmax, "softmax"},
+                                              })
 
 struct DetrParam {
   unsigned int class_num = 0;
   Vector<float> confidence_threshold;
   DetrOutputFormat output_format = DetrOutputFormat::Combined;
-  DetrScoreActivation score_activation = DetrScoreActivation::None;
+  ScoreActivation score_activation = ScoreActivation::None;
   int background_class = -1;
 };
 

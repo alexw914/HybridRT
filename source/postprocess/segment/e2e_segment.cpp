@@ -71,7 +71,7 @@ protected:
         continue;
       const auto cls = static_cast<std::size_t>(label);
       const auto score = det.at(i, 4);
-      if (!(score > param_.confidence_threshold[cls]))
+      if (!(score >= param_.confidence_threshold[cls]))
         continue;
       const core::Point2f tl{det.at(i, 0), det.at(i, 1)};
       const core::Point2f br{det.at(i, 2), det.at(i, 3)};

@@ -106,7 +106,7 @@ private:
           const auto score = at(row + 2, anchor);
           object.keypoints.push_back(
               {transform.reverse(point),
-               score > param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
+               score >= param_.keypoint_threshold ? KeypointVisible::Visible : KeypointVisible::Invisible, score});
         }
       }
     }
