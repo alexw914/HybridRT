@@ -10,12 +10,13 @@ use std::path::Path;
 use hybridrt::{Image, ImageFormat, Model, ModelOptions, OcrModel, Package, Results, Task};
 
 /// (algo, image): one per task.
-const CASES: [(&str, &str); 5] = [
+const CASES: [(&str, &str); 6] = [
     ("yolov8n_detect", "bus.jpg"),
     ("yolov8n_obb", "airport.jpg"),
     ("yolov8n_pose", "bus.jpg"),
     ("yolov8n_segment", "bus.jpg"),
     ("yolov8n_classify", "bus.jpg"),
+    ("yolov8n_classify_embedding", "bus.jpg"),
 ];
 const OCR: (&str, &str, &str) = ("ppocrv6_tiny_det", "ppocrv6_tiny_rec", "ocr_document.jpg");
 
@@ -40,6 +41,11 @@ fn print_results(task: Task, results: &Results) {
                 .map(|&i| format!("class {i} {:.3}", scores[i]))
                 .collect();
             println!("  top-5: {}", top.join(", "));
+        }
+        Task::Embedding => {
+            let vector = results.scores(0).unwrap_or_default();
+            let preview: Vec<String> = vector.iter().take(5).map(|v| format!("{v:.3}")).collect();
+            println!("  embedding: {} dims, first 5: [{}]", vector.len(), preview.join(", "));
         }
         Task::Rotated => {
             for b in results.rotated_boxes() {

@@ -47,7 +47,7 @@ fn reports_load_and_create_errors() {
         ("missing", ModelOptions::default(), Status::NotFound, "missing"),
         ("bad", ModelOptions::default(), Status::InvalidConfig, "unknown_key"),
         ("classify", zero, Status::InvalidArgument, "stage counts"),
-        ("absent", ModelOptions::default(), Status::Unavailable, "no engine"),
+        ("absent", ModelOptions::default(), Status::Unavailable, "not available"),
     ] {
         let error = Model::new(&package, Some(algo), options).err().unwrap();
         assert_eq!(error.status(), status, "{error}");

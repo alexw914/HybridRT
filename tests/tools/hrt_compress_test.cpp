@@ -91,7 +91,10 @@ TEST_F(HrtCompressTest, ChecksConfigs) {
   const auto checked = run({"-c", "-j", invalid});
   EXPECT_EQ(checked.exit_code, 1);
   EXPECT_NE(checked.output.find("resize_type"), hrt::String::npos);
-  // Packing reports the same problem but still writes the package.
+  // Packing reports the same problem but still writes the package; adding -c fails without writing.
+  const auto rejected = dir_ / "rejected.hrtc";
+  EXPECT_EQ(run({"-c", "-j", invalid, "-o", rejected.string()}).exit_code, 1);
+  EXPECT_FALSE(std::filesystem::exists(rejected));
   const auto package = dir_ / "invalid.hrtc";
   EXPECT_EQ(run({"-j", invalid, "-o", package.string()}).exit_code, 0);
   EXPECT_TRUE(std::filesystem::exists(package));

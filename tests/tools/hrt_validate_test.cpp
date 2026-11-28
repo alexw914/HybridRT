@@ -146,7 +146,7 @@ TEST_F(HrtValidateTest, RecordsUnreadableImages) {
   EXPECT_NE(result.output.find("1/2 images inferred"), hrt::String::npos) << result.output;
   output_ = (dir_ / "images_classify.json").string();
   const auto json = read_output();
-  EXPECT_TRUE(json["engine"].is_null());
+  EXPECT_EQ(json["engine"], "ort");
   ASSERT_EQ(json["images"].size(), 2U);
   EXPECT_TRUE(json["images"][0]["error"].is_null());
   EXPECT_EQ(json["images"][1]["file"], "b.png");

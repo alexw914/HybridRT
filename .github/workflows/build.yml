@@ -6,6 +6,7 @@ on:
   push:
     paths:
       - "include/**/*.hpp"
+      - "include/capi/*.h"
       - "source/**/*.cpp"
       - "source/**/*.hpp"
       - "source/**/*.h"
@@ -26,6 +27,7 @@ on:
   pull_request:
     paths:
       - "include/**/*.hpp"
+      - "include/capi/*.h"
       - "source/**/*.cpp"
       - "source/**/*.hpp"
       - "source/**/*.h"
@@ -105,7 +107,7 @@ jobs:
 
       - name: Configure
         if: runner.os != 'Windows'
-        run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DHYBRIDRT_BUILD_TESTS=ON -DORT_ROOT="$ORT_ROOT"
+        run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DHYBRIDRT_BUILD_TESTS=ON -DHYBRIDRT_BUILD_C_API=ON -DORT_ROOT="$ORT_ROOT"
 
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
@@ -134,7 +136,7 @@ jobs:
 
       - name: Configure
         if: runner.os == 'Windows'
-        run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DHYBRIDRT_BUILD_TESTS=ON -DORT_ROOT="$env:ORT_ROOT" -DOpenCV_DIR="$env:OpenCV_DIR"
+        run: cmake -S . -B build/debug -G Ninja -DCMAKE_BUILD_TYPE=Debug -DHYBRIDRT_BUILD_TESTS=ON -DHYBRIDRT_BUILD_C_API=ON -DORT_ROOT="$env:ORT_ROOT" -DOpenCV_DIR="$env:OpenCV_DIR"
 
       - name: Build
         run: cmake --build build/debug --parallel 4
@@ -161,7 +163,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'ONNX export failed' }
           New-Item -ItemType Directory -Force assets/test/images | Out-Null
           Invoke-WebRequest https://github.com/ultralytics/assets/raw/refs/heads/main/im/bus.jpg -OutFile assets/test/images/bus.jpg
-          python -c "import json; from pathlib import Path; m=json.loads(Path('assets/template/hrtc_template.json').read_text()); m['algos']=[a for a in m['algos'] if a['name']=='yolov8n_detect']; m['algos'][0]['name']='detect'; m['algos'][0]['config']['engine']['backends'][0]['data']='external/yolov8n.onnx'; Path('build/yolo.json').write_text(json.dumps(m))"
+          python -c "import json; from pathlib import Path; m=json.loads(Path('assets/template/hrtc_template.json').read_text()); m['algos']=[a for a in m['algos'] if a['name']=='yolov8n_detect']; m['algos'][0]['name']='detect'; m['algos'][0]['config']['engine']['data']='external/yolov8n.onnx'; Path('build/yolo.json').write_text(json.dumps(m))"
 
       - name: Test ONNX model CLI workflow
         if: runner.os == 'Windows'

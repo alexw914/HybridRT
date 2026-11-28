@@ -108,6 +108,7 @@ Set the required backend SDK paths before configuring the parent project.
 | [Python package](bindings/python/README.md) | numpy interface over the C API, built with `pip install ./bindings/python` |
 | [Rust crates](bindings/rust/README.md) | `hybridrt-sys` FFI and the safe `hybridrt` crate over the C API |
 | `hrt-compress` | Package, inspect, extract and validate model manifests |
+| `hrt-model-bench` | Time engine inference latency and throughput |
 | `hrt-validate` | Run image-directory validation and save results and annotated images |
 | `hrt-ocr` | Run OCR on an image directory and save the texts as JSON |
 | Image model example | Run a configured model on an image |
@@ -123,7 +124,7 @@ Enable one or more backends by providing their SDK paths at CMake configuration 
 
 | Backend | Engine name | Model format | CMake settings | Minimum version | Tested version |
 | --- | --- | --- | --- | --- | --- |
-| [ONNX Runtime](https://github.com/microsoft/onnxruntime) | ort | ONNX | `-DORT_ROOT=<sdk>` | 1.20+ | 1.30.1 |
+| [ONNX Runtime](https://github.com/microsoft/onnxruntime) | ort | ONNX | `-DORT_ROOT=<sdk>` | 1.20+ | 1.31.0 |
 | [OpenVINO](https://github.com/openvinotoolkit/openvino) | openvino | IR (XML + BIN) | `-DOpenVINO_ROOT=<sdk>` | 2026.4.1 | 2026.4.1 |
 | [TensorRT](https://github.com/NVIDIA/TensorRT) | trt | TensorRT engine | `-DTensorRT_ROOT=<sdk>`; CUDA Toolkit with nvcc required (`CMAKE_CUDA_ARCHITECTURES` defaults to `all-major`) | 8.5+ | 10.16.1 |
 | [MNN](https://github.com/alibaba/MNN) | mnn | MNN | `-DMNN_ROOT=<sdk>` | Not pinned | 3.0.0 |

@@ -325,15 +325,14 @@ auto main(int argc, char** argv) -> int {
     return 1;
   }
   auto algo = *found;
-  Json engine = nullptr;
   if (args.count("engine") != 0U) {
     const auto type = hrt::engine::engine_type_from(args["engine"].as<hrt::String>());
     if (hrt::engine::engine_type_from(algo.engine.engine_type) != type) {
       KZ_LOG_ERROR("algo {} has no {} engine", name, args["engine"].as<hrt::String>());
       return 1;
     }
-    engine = algo.engine.engine_type;
   }
+  const Json engine = algo.engine.engine_type;
   const auto task = hrt::model::task_type(algo);
   if (!task) {
     KZ_LOG_ERROR("algo {} has no known postprocess type", name);

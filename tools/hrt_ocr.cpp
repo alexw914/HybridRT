@@ -99,7 +99,6 @@ auto main(int argc, char** argv) -> int {
     }
     algos.push_back(*found);
   }
-  Json engine = nullptr;
   if (args.count("engine") != 0U) {
     const auto type = hrt::engine::engine_type_from(args["engine"].as<hrt::String>());
     for (const auto& algo : algos) {
@@ -108,8 +107,8 @@ auto main(int argc, char** argv) -> int {
         return 1;
       }
     }
-    engine = algos.front().engine.engine_type;
   }
+  const Json engine = algos.front().engine.engine_type;
   const auto problems = hrt::model::check_ocr_config(algos[0], algos[1]);
   for (const auto& problem : problems)
     KZ_LOG_ERROR("{}", problem);

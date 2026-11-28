@@ -122,10 +122,16 @@ auto route_log() -> bool {
   logger.add_sink(std::make_shared<kitzoo::log::CallbackSink>([&route](const spdlog::details::log_msg& record) -> void {
     if (record.level >= spdlog::level::err)
       logged_error().assign(record.payload.data(), record.payload.size());
-    const std::lock_guard lock(route.mutex);
-    if (route.callback != nullptr) {
+    HrtLogCallback callback = nullptr;
+    void* user_data = nullptr;
+    {
+      const std::lock_guard lock(route.mutex);
+      callback = route.callback;
+      user_data = route.user_data;
+    }
+    if (callback != nullptr) {
       const hrt::String message(record.payload.data(), record.payload.size());
-      route.callback(static_cast<HrtLogLevel>(record.level), message.c_str(), message.size(), route.user_data);
+      callback(static_cast<HrtLogLevel>(record.level), message.c_str(), message.size(), user_data);
     }
   }));
   return true;
@@ -265,8 +271,8 @@ auto fill(HrtResult& result, const postprocess::SegmentResultMap& value) -> void
   result.data.masks = result.masks.data();
 }
 
-template <typename Result>
-auto assign(HrtResult& result, HrtTask task, Result&& value) -> void {
+auto clear(HrtResult& result) -> void {
+  result.value.emplace<std::monostate>();
   result.boxes.clear();
   result.rotated_boxes.clear();
   result.keypoint_offsets.clear();
@@ -275,6 +281,11 @@ auto assign(HrtResult& result, HrtTask task, Result&& value) -> void {
   result.score_offsets.clear();
   result.scores.clear();
   result.data = {};
+}
+
+template <typename Result>
+auto assign(HrtResult& result, HrtTask task, Result&& value) -> void {
+  clear(result);
   result.data.task = task;
   fill(result, result.value.template emplace<std::decay_t<Result>>(std::forward<Result>(value)));
 }

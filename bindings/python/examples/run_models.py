@@ -18,6 +18,7 @@ CASES = [  # (algo, image): one per task.
     ("yolov8n_pose", "bus.jpg"),
     ("yolov8n_segment", "bus.jpg"),
     ("yolov8n_classify", "bus.jpg"),
+    ("yolov8n_classify_embedding", "bus.jpg"),
 ]
 OCR = ("ppocrv6_tiny_det", "ppocrv6_tiny_rec", "ocr_document.jpg")
 
@@ -27,6 +28,9 @@ def print_result(result):
         scores = result.scores[0]
         top = scores.argsort()[::-1][:5]
         print("  top-5:", ", ".join(f"class {i} {scores[i]:.3f}" for i in top))
+        return
+    if not hasattr(result, "boxes"):
+        print(f"  embedding: {len(result)} dims, first 5: {result[:5].round(3).tolist()}")
         return
     for i, (box, score, class_id) in enumerate(zip(result.boxes, result.scores, result.class_ids)):
         line = f"  class {class_id} score {score:.3f} box {box.round(1).tolist()}"

@@ -118,25 +118,27 @@ auto main(int argc, char** argv) -> int {
     return 0;
   }
 
+  if (args.count("json") != 0U && args.count("output") != 0U) {
+    auto package = hrt::hrtc::load_json(args["json"].as<hrt::String>());
+    if (!package)
+      return 1;
+    // Custom postprocessor types are only known to their factories, so packing
+    // warns unless --check is also given.
+    const bool strict = args.count("check") != 0U;
+    if (!check(*package, strict) && strict)
+      return 1;
+    if (!hrt::hrtc::save(*package, args["output"].as<hrt::String>()))
+      return 1;
+    print(*package);
+    return 0;
+  }
+
   if (args.count("check") != 0U && (args.count("json") != 0U || args.count("input") != 0U)) {
     auto package = args.count("json") != 0U ? hrt::hrtc::load_json(args["json"].as<hrt::String>())
                                             : hrt::hrtc::load(args["input"].as<hrt::String>());
     if (!package || !check(*package, true))
       return 1;
     KZ_LOG_INFO("All {} algo configs are valid", package->algos.size());
-    return 0;
-  }
-
-  if (args.count("json") != 0U && args.count("output") != 0U) {
-    auto package = hrt::hrtc::load_json(args["json"].as<hrt::String>());
-    if (!package)
-      return 1;
-    // Custom postprocessor types are only known to their factories, so packing
-    // warns instead of failing.
-    check(*package, false);
-    if (!hrt::hrtc::save(*package, args["output"].as<hrt::String>()))
-      return 1;
-    print(*package);
     return 0;
   }
 

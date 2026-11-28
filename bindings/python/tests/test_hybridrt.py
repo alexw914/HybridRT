@@ -118,7 +118,7 @@ def test_reports_load_and_create_errors(manifest, tmp_path):
             ("missing", {}, hrt.Status.NOT_FOUND, "missing"),
             ("bad", {}, hrt.Status.INVALID_CONFIG, "unknown_key"),
             ("classify", {"engine": 0}, hrt.Status.INVALID_ARGUMENT, "stage counts"),
-            ("absent", {}, hrt.Status.UNAVAILABLE, "no engine"),
+            ("absent", {}, hrt.Status.UNAVAILABLE, "not available"),
         ]
         for algo, options, status, message in cases:
             with pytest.raises(hrt.HybridRTError) as error:

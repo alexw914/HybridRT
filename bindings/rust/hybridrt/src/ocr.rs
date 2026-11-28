@@ -30,6 +30,10 @@ pub struct OcrModel {
     results: OcrResults,
 }
 
+// SAFETY: OcrModel exclusively owns its C handles and requires `&mut self` for inference,
+// so moving it across threads cannot race.
+unsafe impl Send for OcrModel {}
+
 impl OcrModel {
     /// Both names refer to algos in the same JSON/.hrtc package.
     pub fn new(package: &Package, detection: &str, recognition: &str) -> Result<Self> {
