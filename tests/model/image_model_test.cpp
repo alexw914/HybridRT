@@ -242,6 +242,7 @@ TEST_F(ImageModelTest, ServesConcurrentCallsFromPools) {
         classify_algo(config), cpu_, {.preprocess = 3, .engine = 2, .postprocess = 3});
     ASSERT_NE(model, nullptr);
     EXPECT_EQ(model->options().engine, 2U);
+    EXPECT_TRUE(model->warmup());
 
     hrt::Vector<std::future<bool>> runs;
     for (int t = 0; t < 4; ++t) {

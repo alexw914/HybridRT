@@ -851,6 +851,35 @@ TEST(ImagePreprocessorTest, RgaMatchesCpuForCroppedSources) {
   }
 }
 
+TEST(ImagePreprocessorTest, RgaConvertsYuvInputs) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto rga = ImagePreprocessor::create(ImagePreprocessorType::Rga);
+  if (!rga)
+    GTEST_SKIP() << "RGA preprocessing unavailable";
+  auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  const Size size{256, 256};
+  for (const auto format : {ImageFormat::Nv12, ImageFormat::Nv21}) {
+    hrt::Vector<std::uint8_t> yuv(static_cast<std::size_t>(size.width * size.height * 3 / 2), 128);
+    for (int y = 0; y < size.height; ++y) {
+      for (int x = 0; x < size.width; ++x)
+        yuv[static_cast<std::size_t>(y * size.width + x)] = static_cast<std::uint8_t>(40 + (x + y) * 160 / 512);
+    }
+    auto src = Image::wrap(MemoryType::Cpu, yuv.data(), format, size);
+    ASSERT_TRUE(src);
+    ImagePreprocessorParam param;
+    param.dst_image_format = ImageFormat::InterRgb;
+    Image expected(MemoryType::Cpu, ImageFormat::InterRgb, DataType::Uint8, size);
+    Image actual(MemoryType::DmaBuffer, ImageFormat::InterRgb, DataType::Uint8, size);
+    ASSERT_TRUE(cpu->process(expected, *src, {}, param));
+    ASSERT_TRUE(rga->process(actual, *src, {}, param));
+    const auto* want = static_cast<const std::uint8_t*>(expected.memory()->cpu());
+    const auto* got = static_cast<const std::uint8_t*>(actual.memory()->cpu());
+    for (std::size_t i = 0; i < static_cast<std::size_t>(size.width * size.height * 3); ++i)
+      ASSERT_NEAR(got[i], want[i], 3) << "format " << static_cast<int>(format) << " byte " << i;
+  }
+}
+
 TEST(ImagePreprocessorTest, ConvertsNv12Input) {
   // Mid-gray NV12: Y = U = V = 128.
   hrt::Vector<std::uint8_t> nv12(4 * 4 * 3 / 2, 128);
@@ -936,6 +965,36 @@ TEST(ImagePreprocessorTest, DvppMatchesCpuForCropsAndResizes) {
 }
 
 #ifdef __APPLE__
+TEST(ImagePreprocessorTest, MetalConvertsGrayInputs) {
+  using namespace hrt::core;
+  using namespace hrt::preprocess;
+  auto metal = ImagePreprocessor::create(ImagePreprocessorType::Metal);
+  if (!metal)
+    GTEST_SKIP() << "Metal GPU unavailable";
+  auto cpu = ImagePreprocessor::create(ImagePreprocessorType::Cpu);
+  const Size src_size{64, 48};
+  hrt::Vector<std::uint8_t> pixels(static_cast<std::size_t>(src_size.width * src_size.height));
+  for (int y = 0; y < src_size.height; ++y) {
+    for (int x = 0; x < src_size.width; ++x)
+      pixels[static_cast<std::size_t>(y * src_size.width + x)] = static_cast<std::uint8_t>((x * 3 + y * 5) % 256);
+  }
+  auto src = Image::wrap(MemoryType::Cpu, pixels.data(), ImageFormat::Gray, src_size);
+  ASSERT_TRUE(src);
+  ImagePreprocessorParam param;
+  param.resize_type = ResizeType::LetterBox;
+  param.std = {255, 255, 255};
+  param.pad_value = {114, 114, 114};
+  Image expected(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {32, 32});
+  Image actual(MemoryType::Cpu, ImageFormat::PlanarRgb, DataType::Float32, {32, 32});
+  ASSERT_TRUE(metal->supports(ImageOperation::Fused, actual, *src));
+  ASSERT_TRUE(cpu->process(expected, *src, {}, param));
+  ASSERT_TRUE(metal->process(actual, *src, {}, param));
+  const auto* want = static_cast<const float*>(expected.memory()->cpu());
+  const auto* got = static_cast<const float*>(actual.memory()->cpu());
+  for (std::size_t i = 0; i < 3 * 32 * 32; ++i)
+    EXPECT_NEAR(got[i], want[i], 2.0F / 255.0F) << "index " << i;
+}
+
 TEST(ImagePreprocessorTest, MetalBatchMatchesSingleCalls) {
   using namespace hrt::core;
   using namespace hrt::preprocess;

@@ -17,6 +17,10 @@ float3 fetch(device const uchar* src, constant Params& p, uint x, uint y) {
     uint offset = y * p.src_row + x * 3;
     return float3(src[offset], src[offset + 1], src[offset + 2]);
   }
+  if (p.source == 3) {
+    float g = float(src[y * p.src_row + x]);
+    return float3(g, g, g);
+  }
   uint gx = x + p.origin_x, gy = y + p.origin_y;
   uint uv = p.chroma + (gy / 2) * p.src_row + (gx / 2) * 2;
   int u = int(src[uv + (p.source == 1 ? 0 : 1)]) - 128;

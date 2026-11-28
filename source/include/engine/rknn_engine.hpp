@@ -35,6 +35,8 @@ public:
 
   auto inference(core::Stream* stream) -> bool override;
 
+  KZ_NODISCARD auto clone() const -> UniquePtr<Engine> override;
+
 protected:
   auto do_initialize(const hrtc::EngineParam& param, const kitzoo::json::Json& config) -> bool override;
 
@@ -54,6 +56,7 @@ private:
   auto make_mem(rknn_tensor_mem* mem) -> TensorMem;
 
   rknn_context context_ = 0;
+  rknn_core_mask core_mask_ = RKNN_NPU_CORE_AUTO;
   // Attributes and NPU memory in name order, matching the IO protos.
   Vector<rknn_tensor_attr> input_attrs_;
   Vector<rknn_tensor_attr> output_attrs_;

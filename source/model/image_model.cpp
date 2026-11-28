@@ -347,12 +347,14 @@ auto ImageModel<Result>::build(const hrtc::AlgoParam& algo, const kitzoo::json::
     stream_pool_.add(std::make_unique<UniquePtr<core::Stream>>(std::move(stream)));
   }
 
-  engine_pool_.add(std::make_unique<UniquePtr<engine::Engine>>(std::move(first)));
   for (std::size_t i = 1; i < engine_num; ++i) {
-    auto extra = load_engine(algo.engine);
+    auto extra = first->clone();
+    if (extra == nullptr)
+      extra = load_engine(algo.engine);
     KZ_CHECK_RETURN(extra != nullptr, false, "ImageModel: cannot load engine {} of algo {}", i, algo.name);
     engine_pool_.add(std::make_unique<UniquePtr<engine::Engine>>(std::move(extra)));
   }
+  engine_pool_.add(std::make_unique<UniquePtr<engine::Engine>>(std::move(first)));
   return true;
 }
 
@@ -400,6 +402,33 @@ template <typename Result>
 auto ImageModel<Result>::process_sync(const Vector<core::Image>& srcs, const Vector<core::Rect>& src_rects)
     -> std::optional<Vector<Result>> {
   return run<false>(srcs, src_rects);
+}
+
+template <typename Result>
+auto ImageModel<Result>::warmup(std::size_t runs) -> bool {
+  if (runs == 0)
+    return true;
+  context_->set_current();
+  auto stream_slot = stream_pool_.acquire();
+  auto* stream = stream_slot->get();
+  const auto input = input_pool_.acquire();
+  const auto output = output_pool_.acquire();
+  Vector<decltype(engine_pool_.acquire())> engines;
+  engines.reserve(options_.engine);
+  for (std::size_t i = 0; i < options_.engine; ++i)
+    engines.push_back(engine_pool_.acquire());
+  for (auto& engine : engines) {
+    if (!(*engine)->set_inputs(*input) || !(*engine)->set_outputs(*output))
+      return false;
+    for (std::size_t r = 0; r < runs; ++r) {
+      const auto ok = (*engine)->inference(stream);
+      if (!ok || (engine_type_ != engine::EngineType::TensorRt && engine_type_ != engine::EngineType::Cann))
+        stream->synchronize();
+      if (!ok)
+        return false;
+    }
+  }
+  return true;
 }
 
 template <typename Result>

@@ -92,7 +92,8 @@ auto MetalImagePreprocessor::supports(ImageOperation op, const core::Image& dst,
          accepts(dst.memory()->memory_type()) && src.data_type() == core::DataType::Uint8 &&
          (dst.data_type() == core::DataType::Float32 || dst.data_type() == core::DataType::Uint8) &&
          (src.format() == core::ImageFormat::InterRgb || src.format() == core::ImageFormat::InterBgr ||
-          src.format() == core::ImageFormat::Nv12 || src.format() == core::ImageFormat::Nv21) &&
+          src.format() == core::ImageFormat::Gray || src.format() == core::ImageFormat::Nv12 ||
+          src.format() == core::ImageFormat::Nv21) &&
          (planar || dst.format() == core::ImageFormat::InterRgb || dst.format() == core::ImageFormat::InterBgr) &&
          (planar || dst.stride()[2] == 3 * (dst.data_type() == core::DataType::Float32 ? sizeof(float) : 1)) &&
          (dst.data_type() != core::DataType::Float32 ||
@@ -133,13 +134,16 @@ auto MetalImagePreprocessor::fused_batch(std::span<core::Image* const> dsts, std
       const auto* input = static_cast<const std::byte*>(src.memory()->cpu(stream));
       auto* output = dst.memory()->mutable_cpu(stream);
       KZ_CHECK_RETURN(input != nullptr && output != nullptr, false, "metal: host buffers are unavailable");
-      const auto src_stride = src.stride()[1];
       const bool yuv = src.format() == core::ImageFormat::Nv12 || src.format() == core::ImageFormat::Nv21;
+      const bool gray = src.format() == core::ImageFormat::Gray;
+      const auto src_stride = src.stride()[gray ? 2 : 1];
+      const std::size_t src_pixel = gray ? 1U : 3U;
       const auto* src_origin =
-          yuv ? input : input + static_cast<std::size_t>(from.y) * src_stride + static_cast<std::size_t>(from.x) * 3;
-      const auto src_extent =
-          yuv ? src_stride * static_cast<std::size_t>(src.size().height + src.size().height / 2)
-              : static_cast<std::size_t>(from.height - 1) * src_stride + static_cast<std::size_t>(from.width) * 3;
+          yuv ? input
+              : input + static_cast<std::size_t>(from.y) * src_stride + static_cast<std::size_t>(from.x) * src_pixel;
+      const auto src_extent = yuv ? src_stride * static_cast<std::size_t>(src.size().height + src.size().height / 2)
+                                  : static_cast<std::size_t>(from.height - 1) * src_stride +
+                                        static_cast<std::size_t>(from.width) * src_pixel;
       const auto planar = dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::PlanarBgr;
       const auto dst_row = dst.stride()[planar ? 2 : 1];
       const auto dst_plane = planar ? dst.stride()[1] : 0;
@@ -167,13 +171,14 @@ auto MetalImagePreprocessor::fused_batch(std::span<core::Image* const> dsts, std
       params.rh = static_cast<std::uint32_t>(to.height);
       params.left = static_cast<std::uint32_t>(to.x);
       params.top = static_cast<std::uint32_t>(to.y);
-      params.source = yuv ? (src.format() == core::ImageFormat::Nv12 ? 1U : 2U) : 0U;
+      params.source = yuv ? (src.format() == core::ImageFormat::Nv12 ? 1U : 2U) : (gray ? 3U : 0U);
       params.origin_x = yuv ? static_cast<std::uint32_t>(from.x) : 0;
       params.origin_y = yuv ? static_cast<std::uint32_t>(from.y) : 0;
       params.chroma = yuv ? static_cast<std::uint32_t>(src_stride * static_cast<std::size_t>(src.size().height)) : 0;
       params.float_output = dst.data_type() == core::DataType::Float32;
-      params.swap = (src.format() == core::ImageFormat::InterRgb) !=
-                    (dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::InterRgb);
+      params.swap =
+          !gray && ((src.format() == core::ImageFormat::InterRgb) !=
+                    (dst.format() == core::ImageFormat::PlanarRgb || dst.format() == core::ImageFormat::InterRgb));
       params.interpolation = param.interpolation_mode == InterpolationMode::Nearest ? 1U
                              : param.interpolation_mode == InterpolationMode::Cubic ? 2U
                                                                                     : 0U;

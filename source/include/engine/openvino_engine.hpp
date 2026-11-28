@@ -32,6 +32,8 @@ public:
 
   auto inference(core::Stream* stream) -> bool override;
 
+  KZ_NODISCARD auto clone() const -> UniquePtr<Engine> override;
+
 protected:
   auto do_initialize(const hrtc::EngineParam& param, const kitzoo::json::Json& config) -> bool override;
 
@@ -40,10 +42,10 @@ protected:
 private:
   auto read_io(bool input) -> bool;
 
-  ov_core_t* core_ = nullptr;
-  ov_model_t* model_ = nullptr;
-  ov_tensor_t* weights_ = nullptr;
-  ov_compiled_model_t* compiled_model_ = nullptr;
+  SharedPtr<ov_core_t> core_;
+  SharedPtr<ov_model_t> model_;
+  SharedPtr<ov_tensor_t> weights_;
+  SharedPtr<ov_compiled_model_t> compiled_model_;
   ov_infer_request_t* request_ = nullptr;
   Vector<ov_tensor_t*> input_tensors_;
   Vector<ov_tensor_t*> output_tensors_;

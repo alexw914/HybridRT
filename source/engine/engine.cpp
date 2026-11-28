@@ -186,6 +186,10 @@ auto Engine::create_host_memory() const -> SharedPtr<core::Memory> {
   return nullptr;
 }
 
+auto Engine::clone() const -> UniquePtr<Engine> {
+  return nullptr;
+}
+
 auto Engine::set_inputs(const core::Buffers& inputs) -> bool {
   return bind_buffers(inputs_, inputs, input_protos_, "input");
 }

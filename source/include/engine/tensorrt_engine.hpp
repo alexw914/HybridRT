@@ -38,6 +38,8 @@ public:
 
   KZ_NODISCARD auto create_host_memory() const -> SharedPtr<core::Memory> override;
 
+  KZ_NODISCARD auto clone() const -> UniquePtr<Engine> override;
+
 protected:
   auto do_initialize(const hrtc::EngineParam& param, const kitzoo::json::Json& config) -> bool override;
 
@@ -47,8 +49,8 @@ private:
   // Points TensorRT at `buffer` or, for host buffers, at a device staging copy.
   auto bind(std::size_t index, bool input, const SharedPtr<core::Buffer>& buffer) -> bool;
 
-  UniquePtr<nvinfer1::IRuntime> runtime_;
-  UniquePtr<nvinfer1::ICudaEngine> engine_;
+  SharedPtr<nvinfer1::IRuntime> runtime_;
+  SharedPtr<nvinfer1::ICudaEngine> engine_;
   UniquePtr<nvinfer1::IExecutionContext> context_;
   // Device copies of host-bound buffers; null when bound directly.
   core::Buffers input_staging_;

@@ -94,6 +94,10 @@ public:
   // is as good. Sized by the Buffer built over it.
   KZ_NODISCARD virtual auto create_host_memory() const -> SharedPtr<core::Memory>;
 
+  // Creates an independent engine instance sharing read-only model weights with
+  // this initialized engine when the backend supports it; nullptr otherwise.
+  KZ_NODISCARD virtual auto clone() const -> UniquePtr<Engine>;
+
 protected:
   Engine() = default;
 

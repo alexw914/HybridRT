@@ -174,11 +174,10 @@ auto CpuImagePreprocessor::supports(ImageOperation op, const core::Image& dst, c
     case Layout::Inter3:
     case Layout::Inter4:
     case Layout::Yuv:
+    case Layout::Gray:
       return dst_layout == Layout::Inter3 || dst_layout == Layout::Planar3 || dst_layout == Layout::Gray;
     case Layout::Planar3:
       return dst_layout == Layout::Inter3 || dst_layout == Layout::Planar3;
-    case Layout::Gray:
-      return dst_layout == Layout::Gray;
     case Layout::Unsupported:
       break;
     }
@@ -266,7 +265,16 @@ auto CpuImagePreprocessor::convert(core::Image& dst, const core::Image& src, cor
   const auto src_layout = image_layout(src.format());
 
   if (src_layout == Layout::Gray) {
-    plane(src, src_base, 0).convertTo(plane(dst, dst_base, 0), depth);
+    const auto gray = plane(src, src_base, 0);
+    if (dst_layout == Layout::Gray) {
+      gray.convertTo(plane(dst, dst_base, 0), depth);
+    } else if (dst_layout == Layout::Planar3) {
+      for (int i = 0; i < 3; ++i)
+        gray.convertTo(plane(dst, dst_base, i), depth);
+    } else {
+      cv::cvtColor(gray, bgr_, cv::COLOR_GRAY2BGR);
+      bgr_.convertTo(inter(dst, dst_base), depth);
+    }
     return true;
   }
 

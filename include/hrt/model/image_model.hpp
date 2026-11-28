@@ -46,7 +46,7 @@ auto check_algo_config(const hrtc::AlgoParam& algo) -> Vector<String>;
 // and streams.
 struct ImageModelOptions {
   std::size_t preprocess = 1;
-  std::size_t engine = 1;
+  std::size_t engine = 1; // TensorRT, RKNN and OpenVINO share weights across instances; others load independently.
   std::size_t postprocess = 1;
 };
 
@@ -99,6 +99,10 @@ public:
   // empty (whole images) or one per image.
   auto process_sync(const Vector<core::Image>& srcs, const Vector<core::Rect>& src_rects = {})
       -> std::optional<Vector<Result>>;
+
+  // Runs `runs` dummy inferences on every engine instance in the pool so lazy
+  // backend kernels and caches are initialized before the first real frame.
+  auto warmup(std::size_t runs = 1) -> bool;
 
   KZ_NODISCARD auto algo_name() const -> const String& { return algo_name_; }
 

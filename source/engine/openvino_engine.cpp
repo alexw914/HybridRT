@@ -99,20 +99,27 @@ auto OpenVinoEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo:
   KZ_CHECK_RETURN(problems.empty(), false, "openvino: invalid config: {}", core::join(problems));
   KZ_CHECK_RETURN(num_threads >= 0, false, "openvino: num_threads must be non-negative");
 
-  if (!check_status(ov_core_create(&core_), "create core"))
+  ov_core_t* raw_core = nullptr;
+  if (!check_status(ov_core_create(&raw_core), "create core"))
     return false;
+  core_.reset(raw_core, ov_core_free);
   if (param.data != nullptr && !param.data->empty()) {
     std::int64_t weights_size = static_cast<std::int64_t>(param.data->size());
     const ov_shape_t weights_shape{.rank = 1, .dims = &weights_size};
-    if (!check_status(
-            ov_tensor_create_from_host_ptr(U8, weights_shape, const_cast<std::uint8_t*>(param.data->data()), &weights_),
-            "create IR weights tensor"))
+    ov_tensor_t* raw_weights = nullptr;
+    if (!check_status(ov_tensor_create_from_host_ptr(U8, weights_shape, const_cast<std::uint8_t*>(param.data->data()),
+                                                     &raw_weights),
+                      "create IR weights tensor"))
       return false;
+    weights_.reset(raw_weights, ov_tensor_free);
   }
-  if (!check_status(ov_core_read_model_from_memory_buffer(core_, reinterpret_cast<const char*>(param.proto->data()),
-                                                          param.proto->size(), weights_, &model_),
+  ov_model_t* raw_model = nullptr;
+  if (!check_status(ov_core_read_model_from_memory_buffer(core_.get(),
+                                                          reinterpret_cast<const char*>(param.proto->data()),
+                                                          param.proto->size(), weights_.get(), &raw_model),
                     "read IR model"))
     return false;
+  model_.reset(raw_model, ov_model_free);
 
   if (!read_io(true) || !read_io(false))
     return false;
@@ -131,10 +138,13 @@ auto OpenVinoEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo:
     properties[1] = {ov_property_key_inference_num_threads, thread_value.data()};
     property_count = 2;
   }
-  if (!check_status(ov_core_compile_model_props(core_, model_, "CPU", property_count, properties, &compiled_model_),
-                    "compile model"))
+  ov_compiled_model_t* raw_compiled = nullptr;
+  if (!check_status(
+          ov_core_compile_model_props(core_.get(), model_.get(), "CPU", property_count, properties, &raw_compiled),
+          "compile model"))
     return false;
-  if (!check_status(ov_compiled_model_create_infer_request(compiled_model_, &request_), "create infer request"))
+  compiled_model_.reset(raw_compiled, ov_compiled_model_free);
+  if (!check_status(ov_compiled_model_create_infer_request(compiled_model_.get(), &request_), "create infer request"))
     return false;
 
   proto_ = {DataLayout::Nchw, DataLayout::Nchw};
@@ -148,19 +158,32 @@ auto OpenVinoEngine::do_release() -> void {
   release_tensors(output_tensors_);
   input_indexes_.clear();
   output_indexes_.clear();
-  if (compiled_model_ != nullptr)
-    ov_compiled_model_free(compiled_model_);
-  if (model_ != nullptr)
-    ov_model_free(model_);
-  if (weights_ != nullptr)
-    ov_tensor_free(weights_);
-  if (core_ != nullptr)
-    ov_core_free(core_);
   request_ = nullptr;
-  compiled_model_ = nullptr;
-  model_ = nullptr;
-  weights_ = nullptr;
-  core_ = nullptr;
+  compiled_model_.reset();
+  model_.reset();
+  weights_.reset();
+  core_.reset();
+}
+
+auto OpenVinoEngine::clone() const -> UniquePtr<Engine> {
+  if (compiled_model_ == nullptr)
+    return nullptr;
+  auto cloned = std::make_unique<OpenVinoEngine>();
+  cloned->core_ = core_;
+  cloned->weights_ = weights_;
+  cloned->model_ = model_;
+  cloned->compiled_model_ = compiled_model_;
+  if (!check_status(ov_compiled_model_create_infer_request(compiled_model_.get(), &cloned->request_),
+                    "create cloned infer request"))
+    return nullptr;
+  cloned->proto_ = proto_;
+  cloned->input_names_ = input_names_;
+  cloned->output_names_ = output_names_;
+  cloned->input_protos_ = input_protos_;
+  cloned->output_protos_ = output_protos_;
+  cloned->input_indexes_ = input_indexes_;
+  cloned->output_indexes_ = output_indexes_;
+  return cloned;
 }
 
 auto OpenVinoEngine::set_inputs(const core::Buffers& inputs) -> bool {
@@ -227,7 +250,7 @@ auto OpenVinoEngine::inference(KZ_MAYBE_UNUSED core::Stream* stream) -> bool {
 
 auto OpenVinoEngine::read_io(bool input) -> bool {
   size_t count = 0;
-  const auto status = input ? ov_model_inputs_size(model_, &count) : ov_model_outputs_size(model_, &count);
+  const auto status = input ? ov_model_inputs_size(model_.get(), &count) : ov_model_outputs_size(model_.get(), &count);
   if (!check_status(status, input ? "query input count" : "query output count"))
     return false;
   if (count == 0) {
@@ -241,8 +264,8 @@ auto OpenVinoEngine::read_io(bool input) -> bool {
   auto& indexes = input ? input_indexes_ : output_indexes_;
   for (std::size_t i = 0; i < count; ++i) {
     ov_output_const_port_t* port = nullptr;
-    const auto port_status =
-        input ? ov_model_const_input_by_index(model_, i, &port) : ov_model_const_output_by_index(model_, i, &port);
+    const auto port_status = input ? ov_model_const_input_by_index(model_.get(), i, &port)
+                                   : ov_model_const_output_by_index(model_.get(), i, &port);
     if (!check_status(port_status, input ? "query input port" : "query output port"))
       return false;
 

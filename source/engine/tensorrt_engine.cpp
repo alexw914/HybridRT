@@ -227,6 +227,33 @@ auto TensorRTEngine::create_host_memory() const -> SharedPtr<core::Memory> {
   return backend::create_cuda_host_memory();
 }
 
+auto TensorRTEngine::clone() const -> UniquePtr<Engine> {
+  if (engine_ == nullptr)
+    return nullptr;
+  auto cloned = std::make_unique<TensorRTEngine>();
+  cloned->runtime_ = runtime_;
+  cloned->engine_ = engine_;
+  cloned->context_.reset(engine_->createExecutionContext());
+  KZ_CHECK_RETURN(cloned->context_ != nullptr, nullptr, "tensorrt: failed to create cloned execution context");
+  cloned->proto_ = proto_;
+  cloned->input_names_ = input_names_;
+  cloned->output_names_ = output_names_;
+  cloned->input_protos_ = input_protos_;
+  cloned->output_protos_ = output_protos_;
+  for (std::size_t i = 0; i < input_protos_.size(); ++i) {
+    const auto& shape = input_protos_[i].shape;
+    nvinfer1::Dims dims{};
+    dims.nbDims = static_cast<std::int32_t>(shape.size());
+    for (std::size_t d = 0; d < shape.size(); ++d)
+      dims.d[d] = static_cast<std::remove_reference_t<decltype(dims.d[0])>>(shape[d]);
+    KZ_CHECK_RETURN(cloned->context_->setInputShape(input_names_[i].c_str(), dims), nullptr,
+                    "tensorrt: failed to set input {} shape on cloned context", input_names_[i]);
+  }
+  cloned->input_staging_.resize(input_protos_.size());
+  cloned->output_staging_.resize(output_protos_.size());
+  return cloned;
+}
+
 auto TensorRTEngine::set_inputs(const core::Buffers& inputs) -> bool {
   if (same_inputs(inputs))
     return true;

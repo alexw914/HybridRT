@@ -13,9 +13,10 @@
 
 namespace hrt::preprocess {
 
-// Resize interleaved RGB/BGR uint8 dma-bufs on RGA3: rows must be a multiple
-// of 16 pixels. Fill, other images, conversion and normalization stay on the
-// CPU; host images are staged into dma-bufs first.
+// Resize interleaved RGB/BGR and convert NV12/NV21 to RGB/BGR uint8 dma-bufs on
+// RGA3: rows must be a multiple of 16 pixels. Fill, other images, other
+// conversions and normalization stay on the CPU; host images are staged into
+// dma-bufs first.
 class RgaImagePreprocessor final : public ImagePreprocessor {
 public:
   KZ_NODISCARD auto type() const -> ImagePreprocessorType override { return ImagePreprocessorType::Rga; }
@@ -34,6 +35,9 @@ protected:
   // Scales outside RGA3's 1/8..8 range or sizes outside 128..8128 run on the CPU.
   auto resize(core::Image& dst, const core::Rect& dst_roi, const core::Image& src, const core::Rect& src_roi,
               InterpolationMode mode, core::Stream* stream) -> bool override;
+
+  // Converts NV12/NV21 dma-bufs to interleaved RGB/BGR on RGA3.
+  auto convert(core::Image& dst, const core::Image& src, core::Stream* stream) -> bool override;
 };
 
 } // namespace hrt::preprocess

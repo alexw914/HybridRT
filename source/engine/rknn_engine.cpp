@@ -116,6 +116,7 @@ auto RknnEngine::do_initialize(const hrtc::EngineParam& param, const kitzoo::jso
   register_custom_ops(context_, custom_op_libraries);
   status = rknn_set_core_mask(context_, core_mask);
   KZ_CHECK_RETURN(status == RKNN_SUCC, false, "rknn: rknn_set_core_mask failed: {}", status);
+  core_mask_ = core_mask;
 
   rknn_input_output_num io{};
   status = rknn_query(context_, RKNN_QUERY_IN_OUT_NUM, &io, sizeof(io));
@@ -231,6 +232,33 @@ auto RknnEngine::inference(core::Stream* stream) -> bool {
       output.set_quantization(attr.scale, attr.zp);
   }
   return true;
+}
+
+auto RknnEngine::clone() const -> UniquePtr<Engine> {
+  if (context_ == 0)
+    return nullptr;
+  auto cloned = std::make_unique<RknnEngine>();
+  auto status = rknn_dup_context(const_cast<rknn_context*>(&context_), &cloned->context_);
+  KZ_CHECK_RETURN(status == RKNN_SUCC, nullptr, "rknn: rknn_dup_context failed: {}", status);
+  status = rknn_set_core_mask(cloned->context_, core_mask_);
+  KZ_CHECK_RETURN(status == RKNN_SUCC, nullptr, "rknn: rknn_set_core_mask failed on clone: {}", status);
+  cloned->core_mask_ = core_mask_;
+  cloned->proto_ = proto_;
+  cloned->input_names_ = input_names_;
+  cloned->output_names_ = output_names_;
+  cloned->input_protos_ = input_protos_;
+  cloned->output_protos_ = output_protos_;
+  cloned->input_attrs_ = input_attrs_;
+  cloned->output_attrs_ = output_attrs_;
+  cloned->output_mems_.reserve(output_attrs_.size());
+  for (std::size_t i = 0; i < output_attrs_.size(); ++i) {
+    auto mem = cloned->make_mem(rknn_create_mem(cloned->context_, cloned->output_attrs_[i].size));
+    KZ_CHECK_RETURN(mem != nullptr &&
+                        rknn_set_io_mem(cloned->context_, mem.get(), &cloned->output_attrs_[i]) == RKNN_SUCC,
+                    nullptr, "rknn: cannot prepare cloned output {}", i);
+    cloned->output_mems_.push_back(std::move(mem));
+  }
+  return cloned;
 }
 
 auto RknnEngine::do_release() -> void {
